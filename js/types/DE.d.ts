@@ -3184,17 +3184,12 @@ declare interface DEConversationMessageDialogue {
     __debug_id?: string;
 }
 
-declare type DEConversationMessageDialogueFragment = DEConversationMessageDialogueFragmentText | DEConversationMessageDialogueFragmentSound | DEConversationMessageFragmentIdentifier;
-declare type DEConversationMessageNarrationFragment = DEConversationMessageNarrationFragmentText | DEConversationMessageFragmentIdentifier;
+declare type DEConversationMessageDialogueFragment = DEConversationMessageDialogueFragmentText | DEConversationMessageDialogueFragmentSound;
+declare type DEConversationMessageNarrationFragment = string | DEConversationMessageFragmentIdentifier;
 
 declare interface DEConversationMessageDialogueFragmentText {
     type: "narration" | "dialogue";
-    text: string;
-}
-
-declare interface DEConversationMessageNarrationFragmentText {
-    type: "narration";
-    text: string;
+    fragments: Array<string | DEConversationMessageFragmentIdentifier>;
 }
 
 declare interface DEConversationMessageDialogueFragmentSound {

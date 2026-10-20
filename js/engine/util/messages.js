@@ -76,6 +76,55 @@ export function getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engin
 }
 
 /**
+ * Builds narration fragments for a list of characters, joining them with commas and "and"
+ * in the same style as formatAnd, where each character becomes an identifier fragment that
+ * carries the name the given character knows them as.
+ * @param {import("../index.js").DEngine} engine
+ * @param {DECompleteCharacterReference} character the character whose perspective is used for naming
+ * @param {string[]} participantIds the ids of the characters to list
+ * @returns {Array<DEConversationMessageNarrationFragment>}
+ */
+export function buildCharacterListNarrationFragments(engine, character, participantIds) {
+    /**
+     * @type {Array<DEConversationMessageNarrationFragment>}
+     */
+    const fragments = [];
+    participantIds.forEach((participantId, index) => {
+        if (index > 0) {
+            fragments.push(index === participantIds.length - 1
+                ? (participantIds.length === 2 ? " and " : ", and ")
+                : ", ");
+        }
+        const participantChar = engine.getDEObject().characters[participantId];
+        fragments.push({
+            type: "identifier",
+            text: getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine, character, participantChar),
+            identifier: participantId,
+            foundAs: "character",
+        });
+    });
+    return fragments;
+}
+
+/**
+ * Renders an array of narration-style fragments (plain strings or identifier fragments)
+ * into a single plain-text string, using the known name carried by identifier fragments.
+ * @param {Array<string | DEConversationMessageFragmentIdentifier>} fragments
+ * @returns {string}
+ */
+export function renderNarrationFragmentsToText(fragments) {
+    let text = "";
+    for (const fragment of fragments) {
+        if (typeof fragment === "string") {
+            text += fragment;
+        } else {
+            text += fragment.text;
+        }
+    }
+    return text;
+}
+
+/**
  * @typedef {Object} DEObjectMessageGeneratorResult
  * @property {string} name the name of the character or entity that generated the message as known by the character that was passed in
  * @property {string | null} characterId the id of the character that actually generated the message, if this message belongs to an actual character, otherwise null
@@ -148,9 +197,10 @@ export async function* getHistoryForCharacter(engine, character, options) {
         // because we are looping from newest to oldest, lastConversationStartTime is actually before
         // thisConversationEndTime
         // @ts-ignore typescript is wrong, deObject has been null checked at the beginning of the function
-        let message = `From ${makeTimestamp(engine.deObject, fromTime)} to ${makeTimestamp(engine.deObject, statesAccumulatedFromTime)}, ` + character.name;
+        const prefix = `From ${makeTimestamp(engine.deObject, fromTime)} to ${makeTimestamp(engine.deObject, statesAccumulatedFromTime)}, `;
+        let rest;
         if (statesAccumulated.size > 0) {
-            message += ` finds ${engine.getDEObject().utils.templates.formatReflexive([character])} in the following states: `;
+            rest = ` finds ${engine.getDEObject().utils.templates.formatReflexive([character])} in the following states: `;
             let statesList = "";
             statesAccumulated.forEach(s => {
                 if (statesList.length > 0) {
@@ -158,10 +208,10 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 }
                 statesList += s.toLowerCase();
             });
-            message += statesList;
-            message += ` while at location: "${statesAccumulatedAtLocation || "unknown location"}".`;
+            rest += statesList;
+            rest += ` while at location: "${statesAccumulatedAtLocation || "unknown location"}".`;
         } else {
-            message += ` is at location: "${statesAccumulatedAtLocation || "unknown location"}".`;
+            rest = ` is at location: "${statesAccumulatedAtLocation || "unknown location"}".`;
         }
 
         statesAccumulated = new Set();
@@ -174,10 +224,14 @@ export async function* getHistoryForCharacter(engine, character, options) {
         const narrationMessage = {
             type: "narration",
             fragments: [
+                prefix,
                 {
-                    type: "narration",
-                    text: message,
+                    type: "identifier",
+                    text: character.name,
+                    identifier: character.id,
+                    foundAs: "character",
                 },
+                rest,
             ],
         };
 
@@ -242,7 +296,29 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 }
                 const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.id);
                 const timeMark = makeTimestamp(engine.deObject, conversationStartTime);
-                const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.utils.templates.formatAnd(participantsExcludingCharacter);
+
+                /**
+                 * @type {Array<DEConversationMessageNarrationFragment>}
+                 */
+                const summaryFragments = [
+                    (timeMark === "Now" ? "Right Now" : "At " + timeMark) + ", ",
+                    {
+                        type: "identifier",
+                        text: character.name,
+                        identifier: character.id,
+                        foundAs: "character",
+                    },
+                    " is at " + conversationLocation + " ",
+                ];
+
+                if (participantsExcludingCharacter.length === 0) {
+                    summaryFragments.push("on their own");
+                } else {
+                    summaryFragments.push("with ");
+                    summaryFragments.push(...buildCharacterListNarrationFragments(engine, character, participantsExcludingCharacter));
+                }
+
+                summaryFragments.push(". The interaction happened as follows:\n\n" + currentConversationObject.pseudoConversationSummary);
 
                 const expectedId = `story-master-${state.conversationId}-summary`;
                 const keepgoing = yield {
@@ -250,12 +326,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     content: [
                         {
                             type: "narration",
-                            fragments: [
-                                {
-                                    type: "narration",
-                                    text: (timeMark === "Now" ? "Right Now" : "At " + timeMark) + ", " + character.name + " is at " + conversationLocation + " " + withOrAlone + ". The interaction happened as follows:\n\n" + currentConversationObject.pseudoConversationSummary,
-                                },
-                            ],
+                            fragments: summaryFragments,
                         },
                     ],
                     characterId: null,
@@ -305,16 +376,39 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 }
 
                 if (!firstMessageIsStoryMaster && options.enrichedMode) {
-                    const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
+                    const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.id);
                     const timeMark = makeTimestamp(engine.deObject, conversationStartTime);
                     const timeMarkDetailed = timeMark === "Now" ? "right now" : "at " + timeMark;
-                    const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.utils.templates.formatAnd(participantsExcludingCharacter);
+
+                    /**
+                     * @type {Array<DEConversationMessageNarrationFragment>}
+                     */
+                    const interactionFragments = [
+                        "The following interaction took place " + timeMarkDetailed + ", ",
+                        {
+                            type: "identifier",
+                            text: character.name,
+                            identifier: character.id,
+                            foundAs: "character",
+                        },
+                        " is at " + conversationLocation + " ",
+                    ];
+
+                    if (participantsExcludingCharacter.length === 0) {
+                        interactionFragments.push("on their own");
+                    } else {
+                        interactionFragments.push("with ");
+                        interactionFragments.push(...buildCharacterListNarrationFragments(engine, character, participantsExcludingCharacter));
+                    }
+
+                    interactionFragments.push(".");
+
                     const keepgoing = yield {
                         name: "Story Master",
                         content: [
                             {
                                 type: "narration",
-                                text: "The following interaction took place " + timeMarkDetailed + ", " + character.name + " is at " + conversationLocation + withOrAlone + ".",
+                                fragments: interactionFragments,
                             },
                         ],
                         id: null,
@@ -378,9 +472,18 @@ export function convertContentToSimpleList(content, author, storyMaster) {
     const finalList = [];
     for (const contentPart of content) {
         if (contentPart.type === "narration") {
+            let message = "*";
+            for (const fragment of contentPart.fragments) {
+                if (typeof fragment === "string") {
+                    message += fragment;
+                } else if (fragment.type === "identifier") {
+                    message += "<" + fragment.identifier + ":" + fragment.text + ">";
+                }
+            }
+            message += "*";
             finalList.push({
                 author: storyMaster ? "Story Master" : author,
-                message: "*" + contentPart.text + "*",
+                message,
                 storyMaster: storyMaster,
             });
         } else if (contentPart.type === "dialogue") {
@@ -389,16 +492,30 @@ export function convertContentToSimpleList(content, author, storyMaster) {
             // The stored fragments never contain these markers themselves.
             const pieces = [];
             for (const fragment of contentPart.fragments) {
-                const text = (fragment.text || "").trim();
-                if (!text) {
-                    continue;
-                }
-                if (fragment.type === "narration") {
-                    pieces.push("*" + text + "*");
-                } else if (fragment.type === "dialogue") {
-                    pieces.push(text);
-                } else if (fragment.type === "sound") {
+                if (fragment.type === "sound") {
+                    const text = (fragment.text || "").trim();
+                    if (!text) {
+                        continue;
+                    }
                     pieces.push("[" + text + "]");
+                } else {
+                    let text = "";
+                    for (const subFragment of fragment.fragments) {
+                        if (typeof subFragment === "string") {
+                            text += subFragment;
+                        } else if (subFragment.type === "identifier") {
+                            text += "<" + subFragment.identifier + ":" + subFragment.text + ">";
+                        }
+                    }
+                    text = text.trim();
+                    if (!text) {
+                        continue;
+                    }
+                    if (fragment.type === "narration") {
+                        pieces.push("*" + text + "*");
+                    } else {
+                        pieces.push(text);
+                    }
                 }
             }
             finalList.push({
@@ -443,7 +560,7 @@ export function convertMessagesToSimpleList(messages) {
  *   useExponentialShrinkingSelectiveContextWindowStrategy?: boolean,
  *   enrichedMode?: boolean,
  * }} options
- * @returns {Promise<{messages: Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>, author: string, storyMaster: boolean, id: string | null, conversationId: string | null}>, conversingCharacters: string[], mentionedCharacters: string[]}>}
+ * @returns {Promise<{messages: Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null}>, conversingCharacters: string[], mentionedCharacters: string[]}>}
  */
 export async function getHistoryFragmentForCharacter(engine, character, options) {
     if (!engine.deObject) {
@@ -453,7 +570,7 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
     let generator = await allHistory.next();
 
     /**
-     * @type {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>, author: string, storyMaster: boolean, id: string | null, conversationId: string | null}>}
+     * @type {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null}>}
      */
     let messagesToAdd = [];
     /**
@@ -492,17 +609,17 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
             } else if (options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_LAST_MESSAGE_INCLUDING_CHAR_LAST_MESSAGE") {
                 shouldAddMessage = cycleCount === 0;
             } else if (options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_LAST_MESSAGE_EXCLUDING_CHAR_LAST_MESSAGE") {
-                shouldAddMessage = cycleCount === 0 && generator.value.name !== character.name;
+                shouldAddMessage = cycleCount === 0 && generator.value.characterId !== character.id;
             } else if (options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_INCLUDING_CHAR_2ND_LAST_MESSAGE") {
-                shouldAddMessage = cycleCount === 0 || (cycleCount === 1 && generator.value.name !== character.name);
+                shouldAddMessage = cycleCount === 0 || (cycleCount === 1 && generator.value.characterId !== character.id);
             } else if (options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_EXCLUDING_CHAR_2ND_LAST_MESSAGE") {
-                shouldAddMessage = (cycleCount === 0 && generator.value.name !== character.name) || (cycleCount === 1 && generator.value.name !== character.name);
+                shouldAddMessage = (cycleCount === 0 && generator.value.characterId !== character.id) || (cycleCount === 1 && generator.value.characterId !== character.id);
             } else if (options.msgLimit === "ALL_UNTIMED_MESSAGES_UNTIL_FIRST_TIMED_MESSAGE") {
                 shouldAddMessage = generator.value.untimed;
                 shouldStopAddingMessages = !generator.value.untimed;
             }
 
-            if (generator.value.name === character.name) {
+            if (generator.value.characterId === character.id) {
                 cycleCount++;
             }
 
@@ -522,33 +639,44 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
             if (shouldAddMessage) {
                 messagesToAdd.push({
                     content: content,
-                    author: generator.value.name,
+                    name: generator.value.name,
+                    characterId: generator.value.characterId,
                     storyMaster: generator.value.storyMaster,
                     id: generator.value.id,
                     conversationId: generator.value.conversationId,
                 });
-                if (!conversingCharacters.includes(generator.value.name) && !generator.value.storyMaster) {
-                    conversingCharacters.push(generator.value.name);
-                    if (!mentionedCharacters.includes(generator.value.name)) {
-                        mentionedCharacters.push(generator.value.name);
+                if (generator.value.characterId) {
+                    if (!conversingCharacters.includes(generator.value.characterId) && !generator.value.storyMaster) {
+                        conversingCharacters.push(generator.value.characterId);
+                        if (!mentionedCharacters.includes(generator.value.characterId)) {
+                            mentionedCharacters.push(generator.value.characterId);
+                        }
                     }
                 }
-                for (const charName of generator.value.interactingCharacters) {
-                    if (!mentionedCharacters.includes(charName)) {
-                        mentionedCharacters.push(charName);
+                for (const charId of generator.value.interactingCharacters) {
+                    if (!mentionedCharacters.includes(charId)) {
+                        mentionedCharacters.push(charId);
                     }
                 }
-                if (generator.value.storyMaster) {
-                    // we want to extract mentioned characters from the story master messages as well, because they can contain important information about the world and the interactions that took place, so we want to make sure to include them in the context of the character, even if they are not directly interacting with them, because they can be mentioned in the story master messages as part of the interactions that took place
-                    for (const charName of Object.keys(engine.deObject.characters)) {
-                        const pattern = new RegExp(`(?<![\\w])${charName}(?![\\w])`, 'i');
-                        for (const contentPart of content) {
-                            if (contentPart.type === "narration" && pattern.test(contentPart.text) && !mentionedCharacters.includes(charName)) {
-                                mentionedCharacters.push(charName);
-                            } else if (contentPart.type === "dialogue") {
-                                for (const fragment of contentPart.fragments) {
-                                    if (fragment.type === "narration" && pattern.test(fragment.text) && !mentionedCharacters.includes(charName)) {
-                                        mentionedCharacters.push(charName);
+                for (const contentBit of generator.value.content) {
+                    if (contentBit.type === "narration") {
+                        for (const fragment of contentBit.fragments) {
+                            if (typeof fragment !== "string" && fragment.type === "identifier" && !mentionedCharacters.includes(fragment.identifier) && fragment.foundAs === "character") {
+                                mentionedCharacters.push(fragment.identifier);
+                            }
+                        }
+                    } else if (contentBit.type === "dialogue") {
+                        for (const fragment of contentBit.fragments) {
+                            if (fragment.type === "narration") {
+                                for (const subFragment of fragment.fragments) {
+                                    if (typeof subFragment !== "string" && subFragment.type === "identifier" && !mentionedCharacters.includes(subFragment.identifier) && subFragment.foundAs === "character") {
+                                        mentionedCharacters.push(subFragment.identifier);
+                                    }
+                                }
+                            } else if (fragment.type === "dialogue") {
+                                for (const subFragment of fragment.fragments) {
+                                    if (typeof subFragment !== "string" && subFragment.type === "identifier" && !mentionedCharacters.includes(subFragment.identifier) && subFragment.foundAs === "character") {
+                                        mentionedCharacters.push(subFragment.identifier);
                                     }
                                 }
                             }
