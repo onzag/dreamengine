@@ -185,8 +185,6 @@ export class EngineWorkerClient {
 
     /** @param {{ user: DEMinimalCharacterReference | null, playMode: "player" | "narrator" | "voice-in-the-head" }} args */
     initialize(args) { return this.#call("initialize", args); }
-    /** @param {{ newName: string | null }} args */
-    completeDisruptedInitializationDueToNameConflict(args) { return this.#call("completeDisruptedInitializationDueToNameConflict", args); }
     endSimulation() { return this.#call("endSimulation"); }
     /**
      * @returns {Promise<import('../engine/index.js').EngineInitializationInfo>}

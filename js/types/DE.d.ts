@@ -3682,12 +3682,26 @@ declare interface DENarrationStyle {
 
 declare interface DEUtils {
     id: {
-        itemIdGenerator(): string;
+        itemIdGenerator(itemName: string): string;
         characterIdGenerator(): string;
         conversationIdGenerator(): string;
     },
     items: {
-        newItem(definition: Omit<DEItemDescription, "id">): DEItemDescription;
+        newItem(definition: Omit<DEItem, "id">): DEItem;
+        /**
+         * Recursively clones an item and its contents, providing a new item list with a new id and the specified amount
+         * the new item will not contain any character references
+         * @param item 
+         * @param amount 
+         */
+        cloneItem(item: DEItem, amount: number): DEItem[];
+        /**
+         * Copies an item but not its contents, providing a new item list with new ids of the copied item and the specified amount
+         * the contents will be empty and the new item will not contain any character references
+         * @param item 
+         * @param amount 
+         */
+        shallowCloneItem(item: DEItem, amount: number): DEItem[];
     },
     world: {
         newLocation(name: string, definition: DELocationDefinition): DELocationDefinition;
@@ -4268,7 +4282,9 @@ declare interface DEObject {
      */
     counters: {
         characterId: number;
-        itemId: number;
+        itemId: {
+            [itemName: string]: number;
+        };
         conversationId: number;
     };
     /**

@@ -7,6 +7,8 @@ import './game/cycle-inform.js';
 import { VOICE_ADAPTERS } from '../../engine/voice/all.js';
 import { GameVoiceSession } from './game/voice-session.js';
 
+// TODO refactor this whole thing, let's get the new version with different images and presentation
+
 /**
  * The main in-dream game UI. Renders a transition ("falling asleep" white
  * tunnel) then settles into the main play screen with a hideable sidebar
@@ -238,8 +240,8 @@ class GameOverlay extends HTMLElement {
             sidebarPortrait.addEventListener('mouseenter', () => playHoverSound());
             sidebarPortrait.addEventListener('click', () => {
                 const titleEl = this.root.querySelector('.game-sidebar-title');
-                const name = (titleEl && titleEl.textContent) || this.getAttribute('character-name') || '';
-                this._openCharacterDialog(name);
+                const id = (titleEl && titleEl.textContent) || this.getAttribute('character-id') || '';
+                this._openCharacterDialog(id);
             });
         }
 
@@ -465,130 +467,130 @@ class GameOverlay extends HTMLElement {
         });
     }
 
-    async prepareGame(comeFromConflictError = false, newName = null) {
+    async prepareGame() {
         try {
             this.gameDifficulty = (await window.API.getConfigValue("difficulty") || "normal").toLowerCase();
 
             const partyCharactersJson = this.getAttribute('party-characters') || '[]';
             const partyCharacters = JSON.parse(partyCharactersJson);
 
-            if (!comeFromConflictError) {
-                await window.ENGINE_WORKER_CLIENT.jsEngineClearExecutionOrder();
+            await window.ENGINE_WORKER_CLIENT.jsEngineClearExecutionOrder();
 
-                const saveId = this.getAttribute('save-id') || '';
-                let isSelfInsert = this.getAttribute('is-self-insert') === 'true';
-                if (saveId) {
-                    this.saveObject = this.saveObject || await (await fetch(window.DREAMENGINE_HOME + `/saves/${this.getAttribute('world-namespace') || ''}/${this.getAttribute('world-id') || ''}/${encodeURIComponent(saveId)}.json`)).json();
-                    isSelfInsert = this.saveObject.__self_insert;
+            const saveId = this.getAttribute('save-id') || '';
+            let isSelfInsert = this.getAttribute('is-self-insert') === 'true';
+            if (saveId) {
+                this.saveObject = this.saveObject || await (await fetch(window.DREAMENGINE_HOME + `/saves/${this.getAttribute('world-namespace') || ''}/${this.getAttribute('world-id') || ''}/${encodeURIComponent(saveId)}.json`)).json();
+                isSelfInsert = this.saveObject.__self_insert;
 
-                    for (const script of this.saveObject.__scripts || []) {
-                        await window.ENGINE_WORKER_CLIENT.jsEngineImportScript({
-                            namespace: script.split("/")[0] || '',
-                            id: script.split("/")[1] || '',
-                        });
-                    }
-
-                    await window.ENGINE_WORKER_CLIENT.initializeFromJSONState({ json: this.saveObject });
-                    await this.updateStory();
-                } else {
+                for (const script of this.saveObject.__scripts || []) {
                     await window.ENGINE_WORKER_CLIENT.jsEngineImportScript({
-                        namespace: this.getAttribute('world-namespace') || '',
-                        id: this.getAttribute('world-id') || '',
+                        namespace: script.split("/")[0] || '',
+                        id: script.split("/")[1] || '',
                     });
-
-                    for (const partyMember of partyCharacters) {
-                        await window.ENGINE_WORKER_CLIENT.jsEngineImportScript({
-                            namespace: partyMember.namespace,
-                            id: partyMember.id,
-                        });
-                    }
-
-                    const specialMode = this.getAttribute('special-mode') || '';
-                    /** @type {"player" | "narrator" | "voice-in-the-head"} */
-                    const playMode = specialMode === 'narrator'
-                        ? 'narrator'
-                        : specialMode === 'schizophrenia'
-                            ? 'voice-in-the-head'
-                            : 'player';
-
-                    /** @type {DEMinimalCharacterReference | null} */
-                    let user = null;
-                    if (isSelfInsert) {
-                        // Pull every DEMinimalCharacterReference field from the user
-                        // config. When picking an existing character we leave `user`
-                        // null and let the engine assume that character's identity
-                        // afterwards.
-                        const cfg = window.API.getConfigValue;
-                        const [
-                            name, sex, gender,
-                            heightCm, weightKg, ageYears,
-                            carryingCapacityLiters, carryingCapacityKg,
-                            maintenanceCaloriesPerDay, maintenanceHydrationLitersPerDay,
-                            rangeMeters, locomotionSpeedMetersPerSecond,
-                            shortDescription, shortDescriptionTopNakedAdd, shortDescriptionBottomNakedAdd,
-                            stealth, perception, attractiveness, charisma,
-                            tier, tierValue, apparentTier, apparentTierValue, powerGrowthRate,
-                            species, speciesType, race, groupBelonging, initialClothing, initialClothingFitment
-                        ] = await Promise.all([
-                            cfg('user.name'), cfg('user.sex'), cfg('user.gender'),
-                            cfg('user.heightCm'), cfg('user.weightKg'), cfg('user.ageYears'),
-                            cfg('user.carryingCapacityLiters'), cfg('user.carryingCapacityKg'),
-                            cfg('user.maintenanceCaloriesPerDay'), cfg('user.maintenanceHydrationLitersPerDay'),
-                            cfg('user.rangeMeters'), cfg('user.locomotionSpeedMetersPerSecond'),
-                            cfg('user.shortDescription'), cfg('user.shortDescriptionTopNakedAdd'), cfg('user.shortDescriptionBottomNakedAdd'),
-                            cfg('user.stealth'), cfg('user.perception'), cfg('user.attractiveness'), cfg('user.charisma'),
-                            cfg('user.tier'), cfg('user.tierValue'), cfg('user.apparentTier'), cfg('user.apparentTierValue'), cfg('user.powerGrowthRate'),
-                            cfg('user.species'), cfg('user.speciesType'), cfg('user.race'), cfg('user.groupBelonging'), cfg('user.initialClothing'), cfg('user.initialClothingFitment')
-                        ]);
-
-                        const actualInitialClothing = initialClothing || "auto";
-                        const actualInitialClothingFitment = initialClothingFitment || "normal";
-
-                        user = {
-                            name,
-                            metadata: {
-                                assets: {
-                                    neutral: "profile",
-                                },
-                            },
-                            clothing: actualInitialClothing !== "auto" ? "custom" : (actualInitialClothingFitment === "tight" ? "auto-tight" : (actualInitialClothingFitment === "loose" ? "auto-loose" : "auto")),
-                            sex: sex || "male",
-                            gender: gender || sex || "male",
-                            heightCm: typeof heightCm === "number" ? Number(heightCm) : 175,
-                            weightKg: typeof weightKg === "number" ? Number(weightKg) : 70,
-                            ageYears: typeof ageYears === "number" ? Number(ageYears) : 25,
-                            carryingCapacityLiters: typeof carryingCapacityLiters === "number" ? Number(carryingCapacityLiters) : 50,
-                            carryingCapacityKg: typeof carryingCapacityKg === "number" ? Number(carryingCapacityKg) : 50,
-                            maintenanceCaloriesPerDay: typeof maintenanceCaloriesPerDay === "number" ? Number(maintenanceCaloriesPerDay) : 2000,
-                            maintenanceHydrationLitersPerDay: typeof maintenanceHydrationLitersPerDay === "number" ? Number(maintenanceHydrationLitersPerDay) : 2,
-                            rangeMeters: typeof rangeMeters === "number" ? Number(rangeMeters) : 10000,
-                            locomotionSpeedMetersPerSecond: typeof locomotionSpeedMetersPerSecond === "number" ? Number(locomotionSpeedMetersPerSecond) : 1.4,
-                            shortDescription: shortDescription || '',
-                            shortDescriptionTopNakedAdd: shortDescriptionTopNakedAdd || null,
-                            shortDescriptionBottomNakedAdd: shortDescriptionBottomNakedAdd || null,
-                            stealth: typeof stealth === "number" ? Number(stealth) : 0.5,
-                            perception: typeof perception === "number" ? Number(perception) : 0.5,
-                            attractiveness: typeof attractiveness === "number" ? Number(attractiveness) : 0.5,
-                            charisma: typeof charisma === "number" ? Number(charisma) : 0.5,
-                            tier: tier || "human",
-                            tierValue: typeof tierValue === "undefined" ? 50 : Number(tierValue),
-                            apparentTier: apparentTier || "human",
-                            apparentTierValue: typeof apparentTierValue === "undefined" ? 50 : Number(apparentTierValue),
-                            powerGrowthRate: typeof powerGrowthRate === "undefined" ? 0.25 : Number(powerGrowthRate),
-                            species: species || 'human',
-                            speciesType: speciesType || 'humanoid',
-                            race: race || null,
-                            groupBelonging: groupBelonging || [],
-                        };
-
-                        console.log('User config values retrieved for self-insert:', user);
-                    }
-
-                    await window.ENGINE_WORKER_CLIENT.initialize({ user, playMode });
-                    await this.updateStory();
                 }
+
+                await window.ENGINE_WORKER_CLIENT.initializeFromJSONState({ json: this.saveObject });
+                await this.updateStory();
             } else {
-                await window.ENGINE_WORKER_CLIENT.completeDisruptedInitializationDueToNameConflict({ newName });
+                await window.ENGINE_WORKER_CLIENT.jsEngineImportScript({
+                    namespace: this.getAttribute('world-namespace') || '',
+                    id: this.getAttribute('world-id') || '',
+                });
+
+                for (const partyMember of partyCharacters) {
+                    await window.ENGINE_WORKER_CLIENT.jsEngineImportScript({
+                        namespace: partyMember.namespace,
+                        id: partyMember.id,
+                    });
+                }
+
+                const specialMode = this.getAttribute('special-mode') || '';
+                /** @type {"player" | "narrator" | "voice-in-the-head"} */
+                const playMode = specialMode === 'narrator'
+                    ? 'narrator'
+                    : specialMode === 'schizophrenia'
+                        ? 'voice-in-the-head'
+                        : 'player';
+
+                /** @type {DEMinimalCharacterReference | null} */
+                let user = null;
+                if (isSelfInsert) {
+                    // Pull every DEMinimalCharacterReference field from the user
+                    // config. When picking an existing character we leave `user`
+                    // null and let the engine assume that character's identity
+                    // afterwards.
+                    const cfg = window.API.getConfigValue;
+                    const [
+                        name, sex, gender,
+                        heightCm, weightKg, ageYears,
+                        carryingCapacityLiters, carryingCapacityKg,
+                        maintenanceCaloriesPerDay, maintenanceHydrationLitersPerDay,
+                        rangeMeters, locomotionSpeedMetersPerSecond,
+                        shortDescription, shortDescriptionTopNakedAdd, shortDescriptionBottomNakedAdd,
+                        stealth, perception, attractiveness, charisma,
+                        tier, tierValue, apparentTier, apparentTierValue, powerGrowthRate,
+                        species, speciesType, race, groupBelonging, initialClothing, initialClothingFitment
+                    ] = await Promise.all([
+                        cfg('user.name'), cfg('user.sex'), cfg('user.gender'),
+                        cfg('user.heightCm'), cfg('user.weightKg'), cfg('user.ageYears'),
+                        cfg('user.carryingCapacityLiters'), cfg('user.carryingCapacityKg'),
+                        cfg('user.maintenanceCaloriesPerDay'), cfg('user.maintenanceHydrationLitersPerDay'),
+                        cfg('user.rangeMeters'), cfg('user.locomotionSpeedMetersPerSecond'),
+                        cfg('user.shortDescription'), cfg('user.shortDescriptionTopNakedAdd'), cfg('user.shortDescriptionBottomNakedAdd'),
+                        cfg('user.stealth'), cfg('user.perception'), cfg('user.attractiveness'), cfg('user.charisma'),
+                        cfg('user.tier'), cfg('user.tierValue'), cfg('user.apparentTier'), cfg('user.apparentTierValue'), cfg('user.powerGrowthRate'),
+                        cfg('user.species'), cfg('user.speciesType'), cfg('user.race'), cfg('user.groupBelonging'), cfg('user.initialClothing'), cfg('user.initialClothingFitment')
+                    ]);
+
+                    const actualInitialClothing = initialClothing || "auto";
+                    const actualInitialClothingFitment = initialClothingFitment || "normal";
+
+                    user = {
+                        id: "character0",
+                        script: "",
+                        scriptGivenId: "",
+                        unknownName: (species || 'human') ? "Stranger" : "Unknown Creature",
+                        name,
+                        metadata: {
+                            assets: {
+                                neutral: "profile",
+                            },
+                        },
+                        clothing: actualInitialClothing !== "auto" ? "custom" : (actualInitialClothingFitment === "tight" ? "auto-tight" : (actualInitialClothingFitment === "loose" ? "auto-loose" : "auto")),
+                        sex: sex || "male",
+                        gender: gender || sex || "male",
+                        heightCm: typeof heightCm === "number" ? Number(heightCm) : 175,
+                        weightKg: typeof weightKg === "number" ? Number(weightKg) : 70,
+                        ageYears: typeof ageYears === "number" ? Number(ageYears) : 25,
+                        carryingCapacityLiters: typeof carryingCapacityLiters === "number" ? Number(carryingCapacityLiters) : 50,
+                        carryingCapacityKg: typeof carryingCapacityKg === "number" ? Number(carryingCapacityKg) : 50,
+                        maintenanceCaloriesPerDay: typeof maintenanceCaloriesPerDay === "number" ? Number(maintenanceCaloriesPerDay) : 2000,
+                        maintenanceHydrationLitersPerDay: typeof maintenanceHydrationLitersPerDay === "number" ? Number(maintenanceHydrationLitersPerDay) : 2,
+                        rangeMeters: typeof rangeMeters === "number" ? Number(rangeMeters) : 10000,
+                        locomotionSpeedMetersPerSecond: typeof locomotionSpeedMetersPerSecond === "number" ? Number(locomotionSpeedMetersPerSecond) : 1.4,
+                        shortDescription: shortDescription || '',
+                        shortDescriptionTopNakedAdd: shortDescriptionTopNakedAdd || null,
+                        shortDescriptionBottomNakedAdd: shortDescriptionBottomNakedAdd || null,
+                        stealth: typeof stealth === "number" ? Number(stealth) : 0.5,
+                        perception: typeof perception === "number" ? Number(perception) : 0.5,
+                        attractiveness: typeof attractiveness === "number" ? Number(attractiveness) : 0.5,
+                        charisma: typeof charisma === "number" ? Number(charisma) : 0.5,
+                        tier: tier || "human",
+                        tierValue: typeof tierValue === "undefined" ? 50 : Number(tierValue),
+                        apparentTier: apparentTier || "human",
+                        apparentTierValue: typeof apparentTierValue === "undefined" ? 50 : Number(apparentTierValue),
+                        powerGrowthRate: typeof powerGrowthRate === "undefined" ? 0.25 : Number(powerGrowthRate),
+                        species: species || 'human',
+                        speciesType: speciesType || 'humanoid',
+                        race: race || null,
+                        groupBelonging: groupBelonging || [],
+                    };
+
+                    console.log('User config values retrieved for self-insert:', user);
+                }
+
+                await window.ENGINE_WORKER_CLIENT.initialize({ user, playMode });
+                await this.updateStory();
             }
 
             if (!this.saveObject) {
@@ -705,20 +707,9 @@ class GameOverlay extends HTMLElement {
         } catch (error) {
             await this.lightFadePromise; // ensure the light fade has completed before showing the error dialog, so it appears above the fade
 
-            // Name conflict errors are recoverable: the engine reports them by
-            // including "Name Conflict" in the error message. We then prompt
-            // the user to pick a different name and resume initialization.
-            const message = (error && /** @type {Error} */ (error).message) || String(error);
             // @ts-ignore
-            const isNameConflictError = /name conflict/i.test(message);
-
-            if (isNameConflictError) {
-                this.askForNewNameAndRetry();
-            } else {
-                // @ts-ignore
-                this.displayFatalError('Failed to load the world script. Please check that the world exists and is valid.', error);
-                console.error('Error loading world script:', error);
-            }
+            this.displayFatalError('Failed to load the world script. Please check that the world exists and is valid.', error);
+            console.error('Error loading world script:', error);
         }
     }
 
@@ -1418,12 +1409,12 @@ class GameOverlay extends HTMLElement {
      * Open a character detail dialog when a present-character card is clicked.
      * In "debug" difficulty this opens the debug-character overlay.
      * Other modes are reserved for future use.
-     * @param {string} charName
+     * @param {string} charId
      */
-    _openCharacterDialog(charName) {
+    _openCharacterDialog(charId) {
         if (this.gameDifficulty === 'debug') {
             const dialog = document.createElement('app-dialog');
-            dialog.setAttribute('dialog-title', "Debug: " + charName + " (Character Sysprompt)");
+            dialog.setAttribute('dialog-title', "Debug: " + charId + " (Character Sysprompt)");
             dialog.setAttribute('confirmation', 'true');
             dialog.setAttribute('confirm-text', 'Close');
             dialog.setAttribute('cancel-text-disable', 'true');
@@ -1432,7 +1423,7 @@ class GameOverlay extends HTMLElement {
             dialog.setAttribute("pre-expand", "true");
 
             const debugPanel = document.createElement('app-debug-character');
-            debugPanel.setAttribute('character-name', charName);
+            debugPanel.setAttribute('character-id', charId);
             dialog.appendChild(debugPanel);
 
             dialog.addEventListener('confirm', () => {
@@ -2263,63 +2254,6 @@ class GameOverlay extends HTMLElement {
             this.displayProblematicWarning('Failed to update character stats in the sidebar. The game can continue, but some character information may be missing or outdated.', error);
             console.error('Error updating character UI:', error);
         }
-    }
-
-    async askForNewNameAndRetry() {
-        // Don't stack dialogs.
-        if (document.querySelector('app-dialog[data-name-conflict="true"]')) return;
-
-        const currentName = this.getAttribute('character-name') || '';
-
-        const dialog = document.createElement('app-dialog');
-        dialog.setAttribute('dialog-title', 'Name already taken');
-        dialog.setAttribute('confirmation', 'true');
-        dialog.setAttribute('confirm-text', 'Continue');
-        dialog.setAttribute('cancel-text', 'Wake up');
-        dialog.setAttribute('no-cancel-on-backdrop-click', 'true');
-        dialog.setAttribute('extra-z-index', '100');
-        dialog.dataset.nameConflict = 'true';
-
-        const escapedName = escapeHtml(currentName);
-
-        dialog.innerHTML = `
-            <p style="margin: 0 0 1.2vh 0;">
-                A character in this world already uses the name ${escapedName}. Please pick a different name to use for this dream.
-            </p>
-            <app-overlay-input
-                id="new-name-input"
-                label="Your name"
-                input-placeholder="Enter a different name"
-                input-default-value="${escapedName}"
-            ></app-overlay-input>
-        `;
-
-        const nameInput = dialog.querySelector('app-overlay-input#new-name-input');
-
-        dialog.addEventListener('confirm', () => {
-            // @ts-ignore
-            const chosen = (nameInput?.getValue?.() || '').trim();
-            if (!chosen || chosen === currentName) {
-                // Reject empty names and no-op renames; keep the dialog open
-                // so the user can adjust the input.
-                return;
-            }
-            playConfirmSound();
-            if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
-            // Reflect the new name on the host so the rest of the UI (input
-            // placeholder, sidebar title, etc.) stays in sync if it re-reads.
-            this.setAttribute('character-name', chosen);
-            this.prepareGame(true, chosen);
-        });
-
-        dialog.addEventListener('cancel', () => {
-            playCancelSound();
-            if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
-            // The user chose not to rename — there is no way forward, so wake up.
-            this.dispatchEvent(new CustomEvent('exit', { bubbles: true, composed: true }));
-        });
-
-        document.body.appendChild(dialog);
     }
 
     /**

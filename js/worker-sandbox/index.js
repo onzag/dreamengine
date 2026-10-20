@@ -307,11 +307,6 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
             return { ok: true };
         },
 
-        async completeDisruptedInitializationDueToNameConflict({ newName }) {
-            await engine.completeDisruptedInitializationDueToNameConflict(newName);
-            return { ok: true };
-        },
-
         async executeCommand({ commandText }) {
             await engine.executeCommand(commandText);
             return { ok: true };

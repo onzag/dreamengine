@@ -27,7 +27,7 @@ declare type CharacterVoiceModifiersAssets = { [x: string]: CharacterVoiceEntry;
 declare type CharacterSoundEntry = { asset: string | string[]; preGapRange: [number, number]; postGapRange: [number, number]; volume: number; };
 declare type CharacterSoundAssets = { [x: string]: CharacterSoundEntry; };
 declare type CharacterMetadataFields = { assets: CharacterImageAssets; voice?: CharacterVoiceAssets | undefined; voiceModifiers?: CharacterVoiceModifiersAssets | undefined; sounds?: CharacterSoundAssets | undefined; };
-declare type WorldMetadataFields = { theme?: ThemeSong | undefined; narrationVoice?: CharacterVoiceEntry | undefined; };
+declare type WorldMetadataFields = { theme?: ThemeSong | undefined; narrationVoice?: CharacterVoiceEntry | undefined; ghostVoices?: Record<string, { voice: CharacterVoiceAssets; voiceModifiers?: CharacterVoiceModifiersAssets; sounds?: CharacterSoundAssets; }> | undefined; };
 declare type LocationMetadataFields = { theme?: ThemeSong | undefined; themeAlternateByWeather?: Record<string, ThemeSong> | undefined; weatherSounds?: Record<string, ThemeSong> | undefined; asset: string; };
 declare type ItemMetadataFields = { asset: string; };
 declare type CharacterScriptMetadata = CharacterScriptMetadataFields & Record<string, any>;
@@ -47,7 +47,7 @@ declare interface DEScriptRegistry {
     };
     "@bond-systems/full-standard-bond-system": DEScript & {
         language: string;
-        setup(DE: DEObject, character: DECompleteCharacterReference, options: FSS4DOptions | FSS4DCreepyOptions): DECompleteCharacterReference;
+        setup(DE: DEObject, character: Omit<DECompleteCharacterReference, "id" | "scriptGivenId">, options: FSS4DOptions | FSS4DCreepyOptions): Omit<DECompleteCharacterReference, "id" | "scriptGivenId">;
     };
     "@bond-systems-preset/aromantic": DEScript & {
         name: string;

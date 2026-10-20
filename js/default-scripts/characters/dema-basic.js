@@ -105,15 +105,17 @@ engine.exports = {
          */
         function demaTie(base) { return { family: base, nonFamily: base }; }
 
-        const Dema = DE.utils.newCharacter(fss.setup(DE, {
+        const Dema = DE.utils.characters.newCharacter(fss.setup(DE, {
             metadata: stdapp.buildCharacterMetadata({
                 assets: {
                     neutral: "@assets/characters/dema-basic/profile",
                 },
                 sounds: {},
             }),
+            script: engine.script,
             clothing: "custom",
             name: "Dema",
+            unknownName: "Unknown Robot",
             shortDescription: "A human sized anthropomorphic robot with a blue and white color scheme and a reflective visor.",
             shortDescriptionTopNakedAdd: "showing its sleek robotic body.",
             shortDescriptionBottomNakedAdd: "revealing its articulated legs.",
@@ -191,7 +193,7 @@ engine.exports = {
             },
             libido: 0,
             violence: 0,
-            voice: DE.utils.createVoice({
+            voice: DE.utils.characters.createVoice({
                 mute: false,
                 modes: [
                     {
@@ -455,70 +457,70 @@ engine.exports = {
             },
         }));
 
-        DE.utils.newTrigger(Dema, {
+        DE.utils.characters.newTrigger(Dema, {
             type: "yes_no",
             question: (info) => `Has ${info.other.name} been nice towards ${info.char.name} and respected its nature as a robot?`,
             askPer: "present_character",
             onValue: (answer, char, other) => {
                 if (answer) {
-                    DE.utils.shiftBond(char, other, 0.3, 0);
+                    DE.utils.bonds.shiftBond(char, other, 0.3, 0);
                 } else {
-                    DE.utils.shiftBond(char, other, -0.5, 0);
+                    DE.utils.bonds.shiftBond(char, other, -0.5, 0);
                 }
             }
         });
 
-        DE.utils.newTrigger(Dema, {
+        DE.utils.characters.newTrigger(Dema, {
             type: "yes_no",
             question: (info) => `Has ${info.other?.name} helped ${info.char.name} with tasks or shown consideration for its feelings?`,
             askPer: "present_character",
             onValue: (answer, char, other) => {
                 if (answer) {
-                    DE.utils.shiftBond(char, other, 1, 0);
+                    DE.utils.bonds.shiftBond(char, other, 1, 0);
                 }
             }
         });
 
-        DE.utils.newTrigger(Dema, {
+        DE.utils.characters.newTrigger(Dema, {
             type: "yes_no",
             question: (info) => `Has ${info.other?.name} spent quality time with ${info.char.name} and engaged in meaningful interactions?`,
             askPer: "present_character",
             onValue: (answer, char, other) => {
                 if (answer) {
-                    DE.utils.shiftBond(char, other, 0.5, 0);
+                    DE.utils.bonds.shiftBond(char, other, 0.5, 0);
                 }
             }
         });
 
-        DE.utils.newTrigger(Dema, {
+        DE.utils.characters.newTrigger(Dema, {
             type: "yes_no",
             question: (info) => `Has ${info.other?.name} been rude or dismissive towards ${info.char.name} and its nature as a robot?`,
             askPer: "present_character",
             onValue: (answer, char, other) => {
                 if (answer) {
-                    DE.utils.shiftBond(char, other, -1, 0);
+                    DE.utils.bonds.shiftBond(char, other, -1, 0);
                 }
             }
         });
 
-        DE.utils.newTrigger(Dema, {
+        DE.utils.characters.newTrigger(Dema, {
             type: "yes_no",
             question: (info) => `Has ${info.other?.name} neglected ${info.char.name}'s needs or ignored its feelings?`,
             askPer: "present_character",
             onValue: (answer, char, other) => {
                 if (answer) {
-                    DE.utils.shiftBond(char, other, -1, 0);
+                    DE.utils.bonds.shiftBond(char, other, -1, 0);
                 }
             }
         });
 
-        DE.utils.newTrigger(Dema, {
+        DE.utils.characters.newTrigger(Dema, {
             type: "yes_no",
             question: (info) => `Has ${info.other?.name} caused harm or distress to ${info.char.name}, either intentionally or unintentionally?`,
             askPer: "present_character",
             onValue: (answer, char, other) => {
                 if (answer) {
-                    DE.utils.shiftBond(char, other, -1, 0);
+                    DE.utils.bonds.shiftBond(char, other, -1, 0);
                 }
             }
         });

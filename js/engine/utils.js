@@ -128,22 +128,69 @@ export const deEngineUtilsFn = (DE, engine) => ({
     id: {
         characterIdGenerator() {
             DE.counters.characterId++;
-            return "CHAR_" + DE.counters.characterId;
+            return "character" + DE.counters.characterId;
         },
-        itemIdGenerator() {
-            DE.counters.itemId++;
-            return "ITEM_" + DE.counters.itemId;
+        itemIdGenerator(itemName) {
+            const normalizedItemName = itemName ? itemName.toLowerCase().replace(/\s+/g, "-") : "item";
+            DE.counters.itemId[normalizedItemName] = (DE.counters.itemId[normalizedItemName] || 0) + 1;
+            return normalizedItemName + DE.counters.itemId[normalizedItemName];
         },
         conversationIdGenerator() {
             DE.counters.conversationId++;
-            return "CONV_" + DE.counters.conversationId;
+            return "conversation" + DE.counters.conversationId;
         },
     },
 
     items: {
         newItem(definition) {
-            const id = DE.utils.id.itemIdGenerator();
+            const id = DE.utils.id.itemIdGenerator(definition.name);
             return { ...definition, id };
+        },
+        cloneItem(item, amount) {
+            if (amount <= 0) {
+                return [];
+            }
+            const clones = [];
+            for (let i = 0; i < amount; i++) {
+                const newId = DE.utils.id.itemIdGenerator(item.name);
+                /**
+                 * @type {DEItem}
+                 */
+                const newItem = { ...item, id: newId, containing: [], ontop: [], containingCharacters: [], ontopCharacters: [] };
+                if (item.containing) {
+                    for (const containedItem of item.containing) {
+                        const singleClone = DE.utils.items.cloneItem(containedItem, 1)[0];
+                        if (singleClone) {
+                            newItem.containing.push(singleClone);
+                        }
+                    }
+                }
+                if (item.ontop) {
+                    for (const ontopItem of item.ontop) {
+                        const singleClone = DE.utils.items.cloneItem(ontopItem, 1)[0];
+                        if (singleClone) {
+                            newItem.ontop.push(singleClone);
+                        }
+                    }
+                }
+                clones.push(newItem);
+            }
+            return clones;
+        },
+        shallowCloneItem(item, amount) {
+            if (amount <= 0) {
+                return [];
+            }
+            const clones = [];
+            for (let i = 0; i < amount; i++) {
+                const newId = DE.utils.id.itemIdGenerator(item.name);
+                /**
+                 * @type {DEItem}
+                 */
+                const newItem = { ...item, id: newId, containing: [], ontop: [], containingCharacters: [], ontopCharacters: [] };
+                clones.push(newItem);
+            }
+            return clones;
         },
     },
 

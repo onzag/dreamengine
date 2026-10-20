@@ -279,8 +279,9 @@ engine.exports = {
 
     /**
      * @param {DEObject} DE
-     * @param {DECompleteCharacterReference} character
+     * @param {Omit<DECompleteCharacterReference, "id" | "scriptGivenId">} character
      * @param {FSS4DOptions | FSS4DCreepyOptions} options
+     * @returns {Omit<DECompleteCharacterReference, "id" | "scriptGivenId">}
      */
     setup(DE, character, options) {
         character.bonds = {

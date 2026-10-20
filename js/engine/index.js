@@ -175,6 +175,10 @@ export function repairPotentialUserWithDefaults(character) {
  */
 export function createCharacterFromUser(user) {
     return {
+        id: "character0",
+        script: "",
+        scriptGivenId: "",
+        unknownName: user.species === "human" ? "Stranger" : "Unknown Creature",
         adventurousness: 0,
         antagonism: 0,
         combat: [],
@@ -318,7 +322,7 @@ export class DEngine {
          */
         this.informListeners = [];
         /**
-         * @type {((thinking: boolean, characterName: string | null, noMoreCharactersToTalk: boolean) => void)[]}
+         * @type {((thinking: boolean, characterId: string | null, noMoreCharactersToTalk: boolean) => void)[]}
          */
         this.thinkingListeners = [];
         /**
@@ -488,7 +492,7 @@ export class DEngine {
         const defaultTimeDEFormat = millisecondsToTime((new Date()).getTime());
         const userValue = user ? repairPotentialUserWithDefaults(user) : repairPotentialUserWithDefaults(/**@type {DEMinimalCharacterReference} */({ name: "Player" }));
         this.deObject = {
-            user: userValue.name,
+            user: userValue.id,
             party: [],
             world: {
                 metadata: {},
@@ -528,6 +532,11 @@ export class DEngine {
             internalState: {},
             state: {},
             stability: 0,
+            counters: {
+                characterId: 0,
+                conversationId: 0,
+                itemId: {},
+            },
             utils:  /** @type {*} */ (/** @type {unknown} */ (null)),
         };
 
@@ -538,7 +547,7 @@ export class DEngine {
 
         const userCharacter = user ? createCharacterFromUser(userValue) : null;
         if (userCharacter) {
-            this.deObject.characters[userCharacter.name] = userCharacter;
+            this.deObject.characters[userCharacter.id] = userCharacter;
         }
 
         if (!this.jsEngine) {
@@ -565,22 +574,20 @@ export class DEngine {
     }
 
     /**
-     * @param {string} characterName 
+     * @param {string} characterId 
      */
-    assumeCharacterIdentity(characterName) {
+    assumeCharacterIdentity(characterId) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
 
-        if (!this.deObject.characters[characterName]) {
-            throw new Error(`Character with name ${characterName} does not exist so its identity cannot be assumed.`);
+        if (!this.deObject.characters[characterId]) {
+            throw new Error(`Character with id ${characterId} does not exist so its identity cannot be assumed.`);
         }
 
-        const userCharacter = this.deObject.characters[characterName];
-
-        this.deObject.user = characterName;
-        this.deObject.world.currentLocation = this.deObject.stateFor[characterName].location;
-        this.deObject.world.currentLocationSlot = this.deObject.stateFor[characterName].locationSlot;
+        this.deObject.user = characterId;
+        this.deObject.world.currentLocation = this.deObject.stateFor[characterId].location;
+        this.deObject.world.currentLocationSlot = this.deObject.stateFor[characterId].locationSlot;
 
         this.backupDEObject();
     }
@@ -597,20 +604,20 @@ export class DEngine {
 
     /**
      * 
-     * @param {string} characterName 
+     * @param {string} characterId 
      * @returns 
      */
-    addCharacterToParty(characterName) {
+    addCharacterToParty(characterId) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
-        if (!this.deObject.characters[characterName]) {
-            throw new Error(`Character with name ${characterName} does not exist so it cannot be added to the party.`);
+        if (!this.deObject.characters[characterId]) {
+            throw new Error(`Character with id ${characterId} does not exist so it cannot be added to the party.`);
         }
-        if (this.deObject.party.includes(characterName)) {
+        if (this.deObject.party.includes(characterId)) {
             return; // already in party
         }
-        this.deObject.party.push(characterName);
+        this.deObject.party.push(characterId);
     }
 
     /**
@@ -625,7 +632,7 @@ export class DEngine {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
-        let currentCharacterNames = new Set(Object.keys(this.deObject.characters).filter((c) => !this.deObject?.internalState["CHARACTER_UNCLAIMED_" + c]));
+        let currentcharacterIds = new Set(Object.keys(this.deObject.characters).filter((c) => !this.deObject?.internalState["CHARACTER_UNCLAIMED_" + c]));
         let handled = false;
         for (const script of scripts) {
             let breakCycle = false;
@@ -638,9 +645,9 @@ export class DEngine {
                     handled = true;
                 }
             }
-            const newCharacterNames = new Set(Object.keys(this.deObject.characters).filter((c) => !this.deObject?.internalState["CHARACTER_UNCLAIMED_" + c]));
+            const newcharacterIds = new Set(Object.keys(this.deObject.characters).filter((c) => !this.deObject?.internalState["CHARACTER_UNCLAIMED_" + c]));
             // get the difference between the sets to find out which characters were added by this script
-            const addedCharacters = [...newCharacterNames].filter(x => !currentCharacterNames.has(x));
+            const addedCharacters = [...newcharacterIds].filter(x => !currentcharacterIds.has(x));
             for (const charName of addedCharacters) {
                 this.engineScriptInfo.charactersAdded.push({
                     byNamespace: script.scriptKey.split("/")[0],
@@ -648,7 +655,7 @@ export class DEngine {
                     name: charName,
                 });
             }
-            currentCharacterNames = newCharacterNames;
+            currentcharacterIds = newcharacterIds;
             if (breakCycle) {
                 break;
             }
@@ -732,53 +739,6 @@ export class DEngine {
                     };
                 }
             }
-        }
-
-        await this.completeDisruptedInitializationDueToNameConflict(null);
-    }
-
-    /**
-     * 
-     * @param {string | null} newName 
-     */
-    async completeDisruptedInitializationDueToNameConflict(newName) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-
-        const orderOfExecution = [
-            "world",
-            "characters",
-            "world-mechanic",
-            "character-mechanic",
-            "misc",
-        ];
-
-        if (this.deObject.user) {
-            if (newName) {
-                this.deObject.user = newName;
-                this.deObject.characters[this.deObject.user].name = newName;
-            }
-            const stateForUserChar = this.deObject.stateFor[this.deObject.user];
-            if (!stateForUserChar) {
-                const randomLocation = this.pickRandomLocationForCharacter(this.deObject.characters[this.deObject.user]);
-                const allNamesInLowerCase = Object.keys(this.deObject.characters).map(name => name.toLowerCase());
-                if (allNamesInLowerCase.includes(this.deObject.user.toLowerCase())) {
-                    throw new Error(`Name Conflict, The player and a character in the world share the same name ${this.deObject.user}, which is not allowed. Please change the player's name to be different.`);
-                }
-                this.addCharacter(this.deObject.characters[this.deObject.user], randomLocation.location, randomLocation.locationSlot);
-            }
-        }
-
-        for (const type of orderOfExecution) {
-            /**
-             * @type {Array<{script: DEScript, scriptKey: string}>}
-             */
-            const scripts =
-                // @ts-ignore typescript bugs
-                this.jsEngine.scriptOrder.map(scriptKey => ({ script: this.jsEngine.scriptCache[scriptKey], scriptKey })).filter(script => script.script.type === type);
-
-            await this.callFunctionInScripts(scripts, (script) => `Running onWorldInitialized for script ${script.scriptKey} of type ${type}`, "onWorldInitialized", { untilTrue: false }, this.deObject);
         }
 
         // delete invalid characters that have not been owned by a script
@@ -884,7 +844,7 @@ export class DEngine {
                 // stupid typescript
                 throw new Error("DEngine not initialized");
             }
-            console.warn(`No viable slots found for character ${char.name}, picking random slot without checking viability.`);
+            console.warn(`No viable slots found for character ${char.name} with id ${char.id}, picking random slot without checking viability.`);
             const locationNames = Object.keys(this.deObject.world.locations);
             if (locationNames.length === 0) {
                 throw new Error(`No locations found in world to pick from for fallback.`);
@@ -926,11 +886,6 @@ export class DEngine {
             throw new Error("DEngine not initialized");
         }
 
-        const allNamesInLowerCase = Object.keys(this.deObject.characters).map(name => name.toLowerCase());
-        if (allNamesInLowerCase.includes(character.name.toLowerCase())) {
-            throw new Error(`Character with name ${character.name} already exists.`);
-        }
-
         if (INVALID_NAMES.includes(character.name.toLowerCase())) {
             throw new Error(`Character name ${character.name} is invalid or reserved.`);
         }
@@ -948,13 +903,13 @@ export class DEngine {
             }
         }
 
-        this.deObject.characters[character.name] = character;
-        this.deObject.bonds[character.name] = {
+        this.deObject.characters[character.id] = character;
+        this.deObject.bonds[character.id] = {
             active: [],
             ex: [],
         };
 
-        this.deObject.stateFor[character.name] = {
+        this.deObject.stateFor[character.id] = {
             history: [],
             dead: false,
             deadEnded: false,
@@ -1068,17 +1023,16 @@ export class DEngine {
 
             const expectedParticipants = (sceneObject.engagedCharacters ? (
                 typeof sceneObject.engagedCharacters === "function" ? sceneObject.engagedCharacters() : sceneObject.engagedCharacters
-            ) : []).map((v) => typeof v === "string" ? v : v.name);
+            ) : []).map((v) => typeof v === "string" ? v : v.id);
             expectedParticipants.push(this.deObject.user);
 
             // ensure these are at the given location, if not, teleport them there
-            for (const participantName of expectedParticipants) {
-                if (!this.deObject.characters[participantName]) {
-                    throw new Error(`Participant character ${participantName} not found in DEObject characters.`);
+            for (const participantId of expectedParticipants) {
+                if (!this.deObject.characters[participantId]) {
+                    throw new Error(`Participant character ${participantId} not found in DEObject characters.`);
                 }
-                this.deObject.stateFor[participantName].location = sceneObject.location;
-                this.deObject.stateFor[participantName].locationSlot = sceneObject.locationSlot;
-                this.deObject.stateFor[participantName].conversationId = sceneId;
+                this.deObject.stateFor[participantId].location = sceneObject.location;
+                this.deObject.stateFor[participantId].locationSlot = sceneObject.locationSlot;
             }
 
             this.deObject.world.selectedScene = optionName;
@@ -1117,7 +1071,7 @@ export class DEngine {
                 char: this.deObject.characters[this.deObject.user],
             });
 
-            const conversation = this.deObject.utils.addConversation({
+            const conversation = this.deObject.utils.conversations.newConversation({
                 location: sceneObject.location,
                 participants: expectedParticipants,
                 pseudoConversation: false,
@@ -1127,7 +1081,7 @@ export class DEngine {
                 unsafeMode: false,
             });
 
-            this.deObject.utils.addMessage(conversation.id, {
+            this.deObject.utils.conversations.addMessage(conversation.id, {
                 canOnlyBeSeenByCharacter: null,
                 content: [
                     {
@@ -1168,7 +1122,7 @@ export class DEngine {
                 // some normalization
                 const actualMessages = messages.map((text) => text.trim()).filter((text) => text.length > 0).join("\n\n").split("\n\n");
 
-                this.deObject.utils.addMessage(conversation.id, {
+                this.deObject.utils.conversations.addMessage(conversation.id, {
                     canOnlyBeSeenByCharacter: userOnly ? this.deObject.user : null,
                     content: actualMessages.map((text) => ({ type: "narration", text })),
                     sender: "Story Master",
@@ -1202,8 +1156,8 @@ export class DEngine {
                 const randomizedList = ([...(typeof sceneObject.engagedCharacters === "function" ? sceneObject.engagedCharacters() : sceneObject.engagedCharacters)]).sort(() => Math.random() - 0.5);
                 for (const participantName of randomizedList) {
                     const participant = typeof participantName === "string" ? this.deObject.characters[participantName] : participantName;
-                    this.informCycleState("info", "Running all triggers for " + participant.name + "...");
-                    this.informThinking(true, participant.name, false);
+                    this.informCycleState("info", "Running all triggers for " + participant.name + " with id " + participant.id + "...");
+                    this.informThinking(true, participant.id, false);
                     const triggersResult = await runAllTriggersFor(this, participant, lastItemChangesInfo.interactedCharacters);
 
                     const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
@@ -1224,10 +1178,10 @@ export class DEngine {
                         return await this.gameOver();
                     }
 
-                    this.informCycleState("info", "Pre-calculating initial states for " + participant.name + " and the world...");
+                    this.informCycleState("info", "Pre-calculating initial states for " + participant.name + " with id " + participant.id + " and the world...");
                     await calculateStateChange(this, participant, lastItemChangesInfo.interactedCharacters);
 
-                    this.informCycleState("info", "Pre-calculating initial bonds for " + participant.name + "...");
+                    this.informCycleState("info", "Pre-calculating initial bonds for " + participant.name + " with id " + participant.id + "...");
                     await calculateBondsChangesDueToMessages(this, participant, lastItemChangesInfo.interactedCharacters);
 
                     /**
@@ -1236,7 +1190,7 @@ export class DEngine {
                     const messagesAccum = [];
 
                     for (const participantName of expectedParticipants) {
-                        this.informCycleState("info", "Pre-calculating posture for " + participantName + "...");
+                        this.informCycleState("info", "Pre-calculating posture for " + participantName + " with id " + this.deObject.characters[participantName].id + "...");
                         const messages = await calculatePostureChange(this, this.deObject.characters[participantName], lastItemChangesInfo.charactersThatMoved);
                         messagesAccum.push(...messages);
                     }
@@ -1372,13 +1326,13 @@ export class DEngine {
 
     /**
      * @param {boolean} thinking 
-     * @param {string | null} characterName
+     * @param {string | null} characterId
      * @param {boolean} noMoreCharactersToTalk
      */
-    informThinking(thinking, characterName, noMoreCharactersToTalk) {
+    informThinking(thinking, characterId, noMoreCharactersToTalk) {
         for (const listener of this.thinkingListeners) {
             try {
-                listener(thinking, characterName, noMoreCharactersToTalk);
+                listener(thinking, characterId, noMoreCharactersToTalk);
             } catch (e) {
                 console.error("Error in thinking listener:", e);
             }
@@ -1390,6 +1344,7 @@ export class DEngine {
     }
 
     /**
+     * TODO this is fully non implemented
      * @param {DECompleteCharacterReference} character
      * @param {Array<DEngineInteraction>} previouslyLeftOrderOfInteraction
      * @param {number} internalCycleDepth
@@ -1733,14 +1688,14 @@ export class DEngine {
     }
 
     /**
-     * @param {(thinking: boolean, characterName: string | null, noMoreCharactersToTalk: boolean) => void} listener 
+     * @param {(thinking: boolean, character: string | null, noMoreCharactersToTalk: boolean) => void} listener 
      */
     addThinkingListener(listener) {
         this.thinkingListeners.push(listener);
     }
 
     /**
-     * @param {(thinking: boolean, characterName: string | null, noMoreCharactersToTalk: boolean) => void} listener 
+     * @param {(thinking: boolean, characterId: string | null, noMoreCharactersToTalk: boolean) => void} listener 
      */
     removeThinkingListener(listener) {
         this.thinkingListeners = this.thinkingListeners.filter(l => l !== listener);
