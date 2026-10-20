@@ -29,30 +29,30 @@ export function makeTimestamp(deObject, time, includeNowLabel = true) {
 
 /**
  * Provides the name that one character knows another character as, based on their bond and knowledge of each other.
- * @param {import("../index.js").DEngine} engine
+ * @param {DEObject} deObject
  * @param {DECompleteCharacterReference} character
  * @param {DECompleteCharacterReference} otherCharacter
  */
-export function getNameIdentificationForOneCharacterTowardsAnother(engine, character, otherCharacter) {
-    const knowsThemAs = getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine, character, otherCharacter);
+export function getNameIdentificationForOneCharacterTowardsAnother(deObject, character, otherCharacter) {
+    const knowsThemAs = getNameIdentificationForOneCharacterTowardsAnotherOnlyName(deObject, character, otherCharacter);
     return "<" + otherCharacter.id + ":" + knowsThemAs + ">";
 }
 
 /**
  * Provides the name that one character knows another character as, based on their bond and knowledge of each other.
- * @param {import("../index.js").DEngine} engine
+ * @param {DEObject} deObject
  * @param {DECompleteCharacterReference} character
  * @param {DECompleteCharacterReference} otherCharacter
  */
-export function getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine, character, otherCharacter) {
+export function getNameIdentificationForOneCharacterTowardsAnotherOnlyName(deObject, character, otherCharacter) {
     if (character.id === otherCharacter.id) {
         // you know yourself, so return your own name
         return character.name;
     }
 
     const defaultName = otherCharacter.unknownName;
-    const characterBond = engine.getDEObject().bonds[character.id]?.active.find(b => b.towards === otherCharacter.id) ||
-        engine.getDEObject().bonds[character.id]?.ex.find(b => b.towards === otherCharacter.id);
+    const characterBond = deObject.bonds[character.id]?.active.find(b => b.towards === otherCharacter.id) ||
+        deObject.bonds[character.id]?.ex.find(b => b.towards === otherCharacter.id);
 
     const knowsThemAs = (characterBond ? characterBond.knowsAs.find(k => k.primary) || characterBond.knowsAs[0] : null) || null;
     const actualNameKnowsThemAs = knowsThemAs?.nickname ?
@@ -98,7 +98,7 @@ export function buildCharacterListNarrationFragments(engine, character, particip
         const participantChar = engine.getDEObject().characters[participantId];
         fragments.push({
             type: "identifier",
-            text: getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine, character, participantChar),
+            text: getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine.getDEObject(), character, participantChar),
             identifier: participantId,
             foundAs: "character",
         });
@@ -352,7 +352,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     }
 
                     const otherCharInfo = engine.getDEObject().characters[message.characterId];
-                    const knownName = !otherCharInfo ? "<" + message.characterId + ":Unknown Entity>" : getNameIdentificationForOneCharacterTowardsAnother(engine, character, otherCharInfo);
+                    const knownName = !otherCharInfo ? "<" + message.characterId + ":Unknown Entity>" : getNameIdentificationForOneCharacterTowardsAnother(engine.getDEObject(), character, otherCharInfo);
                     
                     const keepgoing = yield ({
                         name: knownName,
