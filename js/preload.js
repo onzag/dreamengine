@@ -175,4 +175,39 @@ contextBridge.exposeInMainWorld('eAPI', {
     listNarrators: (language) => {
         return ipcRenderer.invoke('listNarrators', language);
     },
+
+    /**
+     * Open or create a SQLite database (with sqlite-vec) at a path relative to
+     * DREAMENGINE_HOME. The path must start with "saves/".
+     * @param {string} dePath - e.g. "saves/mygame/world.db"
+     * @returns {Promise<string>} UUID that identifies this connection.
+     */
+    openDatabase: (dePath) => {
+        return ipcRenderer.invoke('db:open', dePath);
+    },
+
+    /**
+     * Close the database connection identified by the given UUID.
+     * @param {string} id - UUID returned by openDatabase.
+     * @returns {Promise<void>}
+     */
+    closeDatabase: (id) => {
+        return ipcRenderer.invoke('db:close', id);
+    },
+
+    /**
+     * Run a SQL statement on the database identified by the given UUID.
+     *
+     * Binary values (e.g. vector embeddings) should be passed as Uint8Array or
+     * Float32Array — they are preserved as BLOBs. BLOB columns in returned rows
+     * are delivered as Uint8Array.
+     *
+     * @param {string} id - UUID returned by openDatabase.
+     * @param {string} sql - SQL statement to execute.
+     * @param {Array<string | number | bigint | Uint8Array | null>} [params] - Bound parameters.
+     * @returns {Promise<any[] | { changes: number, lastInsertRowid: number | bigint }>}
+     */
+    runQuery: (id, sql, params) => {
+        return ipcRenderer.invoke('db:query', id, sql, params ?? []);
+    },
 });

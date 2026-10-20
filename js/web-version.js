@@ -18,6 +18,7 @@ import { buildDreamEngineHome } from './util/build-dreamengine-home.js';
 import { watchScripts } from './util/watch-scripts.js';
 import express from 'express';
 import { startDiffusionProcess, stopDiffusionProcess } from './diffussion.js';
+import { openDatabase, closeDatabase, runQuery } from './db.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -852,6 +853,110 @@ async function startWebServer(creds) {
         req.on('close', () => {
             scriptChangeClients.delete(res);
         });
+    });
+
+    // --- SQLite / sqlite-vec database API ----------------------------------
+    // Mirrors the db:open / db:close / db:query IPC handlers in electron.js.
+    // The saves folder path restriction is enforced here too.
+    const SAVES_FOLDER_WEB = path.join(DREAMENGINE_HOME, 'saves');
+
+    /**
+     * @param {string} dePath
+     * @returns {string}
+     */
+    const resolveAndValidateDbPathWeb = (dePath) => {
+        if (typeof dePath !== 'string' || dePath.length === 0) {
+            throw new Error('Invalid database path');
+        }
+        const normalised = dePath.replace(/\\/g, '/').replace(/^\/+/, '');
+        if (normalised.includes('..')) {
+            throw new Error('Path traversal is not allowed');
+        }
+        if (!normalised.startsWith('saves/')) {
+            throw new Error('Database path must be within the saves folder');
+        }
+        const resolved = path.resolve(path.join(DREAMENGINE_HOME, normalised));
+        const savesResolved = path.resolve(SAVES_FOLDER_WEB);
+        if (!resolved.startsWith(savesResolved + path.sep)) {
+            throw new Error('Database path must be within the saves folder');
+        }
+        return resolved;
+    };
+
+    /**
+     * Decode params from the wire format: plain values pass through;
+     * `{ __type: 'binary', data: '<base64>' }` objects become Buffers.
+     * @param {any[]} params
+     * @returns {any[]}
+     */
+    const decodeParams = (params) => params.map((p) => {
+        if (p && typeof p === 'object' && p.__type === 'binary' && typeof p.data === 'string') {
+            return Buffer.from(p.data, 'base64');
+        }
+        return p;
+    });
+
+    /**
+     * Encode a result row for JSON: Buffer values become
+     * `{ __type: 'binary', data: '<base64>' }`.
+     * @param {Record<string, any>} row
+     * @returns {Record<string, any>}
+     */
+    const encodeRow = (row) => {
+        if (!row || typeof row !== 'object') return row;
+        const out = /** @type {Record<string, any>} */ ({});
+        for (const [k, v] of Object.entries(row)) {
+            out[k] = Buffer.isBuffer(v) ? { __type: 'binary', data: v.toString('base64') } : v;
+        }
+        return out;
+    };
+
+    app.post('/api/db/open', (/** @type {any} */ req, /** @type {any} */ res) => {
+        try {
+            const dePath = req.body?.dePath;
+            const resolved = resolveAndValidateDbPathWeb(dePath);
+            const { id } = openDatabase(resolved);
+            res.json({ id });
+        } catch (err) {
+            // @ts-ignore
+            res.status(400).json({ error: err?.message || String(err) });
+        }
+    });
+
+    app.post('/api/db/close', (/** @type {any} */ req, /** @type {any} */ res) => {
+        try {
+            const { id } = req.body || {};
+            if (typeof id !== 'string' || id.length === 0) {
+                throw new Error('Invalid connection id');
+            }
+            closeDatabase(id);
+            res.json({ ok: true });
+        } catch (err) {
+            // @ts-ignore
+            res.status(400).json({ error: err?.message || String(err) });
+        }
+    });
+
+    app.post('/api/db/query', (/** @type {any} */ req, /** @type {any} */ res) => {
+        try {
+            const { id, sql, params } = req.body || {};
+            if (typeof id !== 'string' || id.length === 0) {
+                throw new Error('Invalid connection id');
+            }
+            if (typeof sql !== 'string' || sql.length === 0) {
+                throw new Error('Invalid SQL');
+            }
+            const safeParams = Array.isArray(params) ? decodeParams(params) : [];
+            const result = runQuery(id, sql, safeParams);
+            if (Array.isArray(result)) {
+                res.json(result.map(encodeRow));
+            } else {
+                res.json(result);
+            }
+        } catch (err) {
+            // @ts-ignore
+            res.status(400).json({ error: err?.message || String(err) });
+        }
     });
 
     app.post('/api/diffusion/start', async (/** @type {any} */ req, /** @type {any} */ res) => {

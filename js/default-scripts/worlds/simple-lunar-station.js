@@ -60,7 +60,7 @@ engine.exports = {
             isRejectedMessage: false,
             perspectiveSummaryIds: {},
             rumors: [],
-            characterId: "ghost",
+            characterId: null,
             singleSummary: null,
         }, {
             ghost: true,

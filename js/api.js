@@ -328,6 +328,82 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
             }
             return res.json();
         },
+
+        openDatabase: async (dePath) => {
+            const res = await fetch('/api/db/open', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dePath }),
+            });
+            if (!res.ok) {
+                let detail = `${res.status} ${res.statusText}`;
+                try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
+                throw new Error(`openDatabase("${dePath}") failed: ${detail}`);
+            }
+            const { id } = await res.json();
+            return id;
+        },
+
+        closeDatabase: async (id) => {
+            const res = await fetch('/api/db/close', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id }),
+            });
+            if (!res.ok) {
+                let detail = `${res.status} ${res.statusText}`;
+                try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
+                throw new Error(`closeDatabase("${id}") failed: ${detail}`);
+            }
+        },
+
+        runQuery: async (id, sql, params) => {
+            // Binary params (Uint8Array / Float32Array) are base64-encoded so
+            // they survive JSON serialisation; the server decodes them to Buffers.
+            const encodedParams = (params ?? []).map((p) => {
+                if (p instanceof Uint8Array || ArrayBuffer.isView(p)) {
+                    const u8 = p instanceof Uint8Array ? p : new Uint8Array(/** @type {ArrayBufferView} */ (p).buffer);
+                    let bin = '';
+                    for (let i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i]);
+                    return { __type: 'binary', data: btoa(bin) };
+                }
+                return p;
+            });
+            const res = await fetch('/api/db/query', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, sql, params: encodedParams }),
+            });
+            if (!res.ok) {
+                let detail = `${res.status} ${res.statusText}`;
+                try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
+                throw new Error(`runQuery failed: ${detail}`);
+            }
+            const result = await res.json();
+            // Decode base64-encoded BLOB columns back to Uint8Array.
+            if (Array.isArray(result)) {
+                return result.map((row) => {
+                    if (!row || typeof row !== 'object') return row;
+                    const out = /** @type {Record<string, any>} */ ({});
+                    for (const [k, v] of Object.entries(row)) {
+                        if (v && typeof v === 'object' && /** @type {any} */ (v).__type === 'binary') {
+                            const bin = atob(/** @type {any} */ (v).data);
+                            const u8 = new Uint8Array(bin.length);
+                            for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+                            out[k] = u8;
+                        } else {
+                            out[k] = v;
+                        }
+                    }
+                    return out;
+                });
+            }
+            return result;
+        },
+
         pauseVoice: async () => {
             // to be defined
         },

@@ -3215,8 +3215,9 @@ declare interface DEConversationMessage {
     id: Readonly<string>;
     /**
      * Who sent this message, their character id
+     * or null if it was sent by the story master or the system
      */
-    characterId: string;
+    characterId: string | null;
     /**
      * Whether the sender is a character
      * this is also true for the user since the user is a character too

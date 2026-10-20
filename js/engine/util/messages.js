@@ -347,12 +347,12 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 }
             } else {
                 for (const message of conversationMessages.reverse()) {
-                    if (options.excludeFrom && options.excludeFrom.includes(message.characterId)) {
+                    if (message.characterId && options.excludeFrom && options.excludeFrom.includes(message.characterId)) {
                         continue;
                     }
 
-                    const otherCharInfo = engine.getDEObject().characters[message.characterId];
-                    const knownName = !otherCharInfo ? "<" + message.characterId + ":Unknown Entity>" : getNameIdentificationForOneCharacterTowardsAnother(engine.getDEObject(), character, otherCharInfo);
+                    const otherCharInfo = message.characterId ? engine.getDEObject().characters[message.characterId] : null;
+                    const knownName = message.isStoryMasterMessage ? "Story Master" : (!otherCharInfo ? "<" + message.characterId + ":Unknown Entity>" : getNameIdentificationForOneCharacterTowardsAnother(engine.getDEObject(), character, otherCharInfo));
                     
                     const keepgoing = yield ({
                         name: knownName,

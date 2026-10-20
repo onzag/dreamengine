@@ -33,11 +33,14 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.10.2",
     "@electron-forge/plugin-fuses": "^7.10.2",
     "@electron/fuses": "^1.8.0",
+    "@types/better-sqlite3": "^9.6.0",
     "electron": "^39.2.7"
   },
   "dependencies": {
+    "better-sqlite3": "^13.0.3",
     "de-aria": "github:otavanopisto/de-aria",
     "electron-squirrel-startup": "^1.0.1",
+    "sqlite-vec": "^0.1.9",
     "typescript": "^6.0.3"
   },
   "optionalDependencies": {

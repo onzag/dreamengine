@@ -37,6 +37,38 @@ declare interface DEAPI {
 
   listNarrators(language: string): Promise<Array<CharacterVoiceEntryWithLanguage>>;
 
+  /**
+   * Open or create a SQLite + sqlite-vec database at a path relative to
+   * DREAMENGINE_HOME. The path **must** start with `"saves/"`.
+   * If the same path is already open the existing connection UUID is returned.
+   * @param dePath e.g. `"saves/mygame/world.db"`
+   * @returns UUID that identifies this connection.
+   */
+  openDatabase(dePath: string): Promise<string>;
+
+  /**
+   * Close the database connection identified by `id`.
+   */
+  closeDatabase(id: string): Promise<void>;
+
+  /**
+   * Execute a SQL statement on the database identified by `id`.
+   *
+   * - **SELECT** → resolves with an array of plain row objects. BLOB columns
+   *   are delivered as `Uint8Array` (pass vector embeddings in the same way).
+   * - **INSERT / UPDATE / DELETE** → resolves with
+   *   `{ changes: number, lastInsertRowid: number | bigint }`.
+   *
+   * @param id UUID returned by {@link openDatabase}.
+   * @param sql SQL statement to execute.
+   * @param params Bound parameters. Pass `Uint8Array` for binary / vector data.
+   */
+  runQuery(
+    id: string,
+    sql: string,
+    params?: Array<string | number | bigint | Uint8Array | null>,
+  ): Promise<any[] | { changes: number; lastInsertRowid: number | bigint }>;
+
   startDiffusionProcess(): Promise<void>;
   stopDiffusionProcess(): Promise<void>;
   pauseVoice(): Promise<void>;

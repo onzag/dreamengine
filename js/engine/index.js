@@ -16,6 +16,7 @@ import { millisecondsToTime } from "./util/time.js";
 import { regenerateDEFromSavedDE, removeUnnecessaryPropertiesFromDE } from "./util/save-de.js";
 import runAllTriggersFor from "./gears/triggers-run.js";
 import { giveCharacterRandomClothing } from "./util/clothing.js";
+import { BaseDataManager } from "./data-management/base.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -335,6 +336,11 @@ export class DEngine {
         this.inferenceAdapter = null;
 
         /**
+         * @type {BaseDataManager | null}
+         */
+        this.dataManager = null;
+
+        /**
          * @type {DEJSEngine | null}
          */
         this.jsEngine = null;
@@ -405,6 +411,13 @@ export class DEngine {
      */
     setInferenceAdapter(adapter) {
         this.inferenceAdapter = adapter;
+    }
+
+    /**
+     * @param {BaseDataManager} dataManager 
+     */
+    setDataManager(dataManager) {
+        this.dataManager = dataManager;
     }
 
     /**
@@ -1060,7 +1073,7 @@ export class DEngine {
                         // check if the character is naked and humanoid, if so try to find some clothes at least
                         const charState = this.deObject.stateFor[charName];
                         if (char.speciesType === "humanoid") {
-                            giveCharacterRandomClothing(char, charState, this.deObject.world, fitment);
+                            giveCharacterRandomClothing(this.deObject.utils, char, charState, this.deObject.world, fitment);
                         }
                     }
                 }
@@ -1085,10 +1098,12 @@ export class DEngine {
                 content: [
                     {
                         type: "narration",
-                        text: narration,
+                        fragments: [
+                            narration,
+                        ],
                     },
                 ],
-                sender: "Story Master",
+                characterId: null,
                 isCharacter: false,
                 isDebugMessage: false,
                 isRejectedMessage: false,
@@ -1123,8 +1138,8 @@ export class DEngine {
 
                 this.deObject.utils.conversations.addMessage(conversation.id, {
                     canOnlyBeSeenByCharacter: userOnly ? this.deObject.user : null,
-                    content: actualMessages.map((text) => ({ type: "narration", text })),
-                    sender: "Story Master",
+                    content: actualMessages.map((text) => ({ type: "narration", fragments: [text] })),
+                    characterId: null,
                     isCharacter: false,
                     isDebugMessage: false,
                     isStoryMasterMessage: true,

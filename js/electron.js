@@ -7,6 +7,7 @@ import { buildDreamEngineHomeSync } from './util/build-dreamengine-home.js';
 import buildTypes from './util/build-types.js';
 import { watchScripts } from './util/watch-scripts.js';
 import { startDiffusionProcess, stopDiffusionProcess } from './diffussion.js';
+import { openDatabase, closeDatabase, runQuery } from './db.js';
 
 // @ts-ignore
 const __filename = fileURLToPath(import.meta.url);
@@ -790,4 +791,86 @@ ipcMain.handle('startDiffusionProcess', () => {
 
 ipcMain.handle('stopDiffusionProcess', () => {
     return stopDiffusionProcess();
+});
+
+/**
+ * Resolve a renderer-supplied relative path (relative to DREAMENGINE_HOME) to
+ * an absolute path and assert it lives inside SAVES_FOLDER.
+ * @param {string} dePath
+ * @returns {string}
+ */
+function resolveAndValidateDbPath(dePath) {
+    if (typeof dePath !== 'string' || dePath.length === 0) {
+        throw new Error('Invalid database path');
+    }
+    // Normalise separators and strip any leading slash.
+    const normalised = dePath.replace(/\\/g, '/').replace(/^\/+/, '');
+    if (normalised.includes('..')) {
+        throw new Error('Path traversal is not allowed');
+    }
+    if (!normalised.startsWith('saves/')) {
+        throw new Error('Database path must be within the saves folder');
+    }
+    const resolved = path.resolve(path.join(DREAMENGINE_HOME, normalised));
+    const savesResolved = path.resolve(SAVES_FOLDER);
+    if (!resolved.startsWith(savesResolved + path.sep)) {
+        throw new Error('Database path must be within the saves folder');
+    }
+    return resolved;
+}
+
+/**
+ * Convert any Uint8Array / typed-array elements in a params list to Buffer so
+ * better-sqlite3 stores them as BLOBs, and leaves all other values untouched.
+ * @param {any[]} params
+ * @returns {any[]}
+ */
+function prepareParams(params) {
+    return params.map(p => {
+        if (p instanceof Uint8Array) return Buffer.from(p.buffer, p.byteOffset, p.byteLength);
+        return p;
+    });
+}
+
+/**
+ * Convert Buffer values in a result row to plain Uint8Array so they survive
+ * the structured-clone crossing back to the renderer.
+ * @param {Record<string, any>} row
+ * @returns {Record<string, any>}
+ */
+function normaliseRow(row) {
+    if (!row || typeof row !== 'object') return row;
+    const out = /** @type {Record<string, any>} */ ({});
+    for (const [k, v] of Object.entries(row)) {
+        out[k] = Buffer.isBuffer(v) ? new Uint8Array(v) : v;
+    }
+    return out;
+}
+
+ipcMain.handle('db:open', (_event, dePath) => {
+    const resolved = resolveAndValidateDbPath(dePath);
+    const { id } = openDatabase(resolved);
+    return id;
+});
+
+ipcMain.handle('db:close', (_event, id) => {
+    if (typeof id !== 'string' || id.length === 0) {
+        throw new Error('Invalid connection id');
+    }
+    closeDatabase(id);
+});
+
+ipcMain.handle('db:query', (_event, id, sql, params) => {
+    if (typeof id !== 'string' || id.length === 0) {
+        throw new Error('Invalid connection id');
+    }
+    if (typeof sql !== 'string' || sql.length === 0) {
+        throw new Error('Invalid SQL');
+    }
+    const safeParams = Array.isArray(params) ? prepareParams(params) : [];
+    const result = runQuery(id, sql, safeParams);
+    if (Array.isArray(result)) {
+        return result.map(normaliseRow);
+    }
+    return result;
 });
