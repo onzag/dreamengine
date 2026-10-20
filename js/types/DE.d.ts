@@ -2377,6 +2377,12 @@ declare interface DEItem {
      * The name of the item, this is what the character will refer to when talking about it, and what the character will use to identify it in their inventory or when interacting with it
      */
     name: string;
+    /**
+     * A relative position to the parent item that it is on top or containing, or relative to the character that is carrying it, for example, a backpack may be on the back of the character, or a phone may be in the character's pocket, this is useful for determining where the item is located in relation to other items or characters
+     * the position should be simple, eg, "on the back", "in the pocket", "on the head", "in the hand", etc...
+     * for an object "on the corner of the table", etc... it should not mention other objects or characters and must be relative to the parent
+     */
+    relativePosition?: string | null;
     volumeLiters: number;
     weightKg: number;
     description: string;
@@ -2510,7 +2516,13 @@ declare interface DEItem {
      * The characters that are inside this item if it is a container, for example a backpack may have a character inside it if it's big enough, or a car may have characters inside it
      * this is different from ontop as these characters are actually inside the container and may be hidden from view, while ontop characters are on top of the item
      */
-    containingCharacters: Array<string>;
+    containingCharacters: Array<{
+        id: string;
+        /**
+         * Same as relative position for items, but for characters
+         */
+        relativePosition?: string | null;
+    }>;
     /**
      * The items that are on top of this item, for example a backpack may have a jacket on top of it, or a table may have a vase on top of it
      */
@@ -2518,7 +2530,13 @@ declare interface DEItem {
     /**
      * The characters that are on top of this item, for example a table may have a character sitting on top of it
      */
-    ontopCharacters: Array<string>;
+    ontopCharacters: Array<{
+        id: string;
+        /**
+         * Same as relative position for items, but for characters
+         */
+        relativePosition?: string | null;
+    }>;
     /**
      * The maximum weight in kilograms that can be on top of this item, for example a table may have a max weight on top of 100kg, while a fragile vase may have a max weight on top of 1kg
      * if something heavier than the max weight on top is placed, the item will break
@@ -2585,7 +2603,13 @@ declare interface DEStateForCharacter {
     conversationId: string | null;
     posture: DEPosture;
     carrying: DEItem[];
-    carryingCharactersDirectly: Array<string>;
+    carryingCharactersDirectly: Array<{
+        id: string;
+        /**
+         * Same as relative position for items, but for characters
+         */
+        relativePosition?: string | null;
+    }>;
     wearing: DEItem[];
     /**
      * Indicates if the character is dead, aka its deadEnd was a death scenario
@@ -3150,7 +3174,7 @@ declare interface DEStatefulLocationDefinition extends DELocationDefinition {
 
 declare interface DEConversationMessageNarration {
     type: "narration";
-    text: string;
+    fragments: Array<DEConversationMessageNarrationFragment>;
     __debug_id?: string;
 }
 
@@ -3160,10 +3184,16 @@ declare interface DEConversationMessageDialogue {
     __debug_id?: string;
 }
 
-declare type DEConversationMessageDialogueFragment = DEConversationMessageDialogueFragmentText | DEConversationMessageDialogueFragmentSound;
+declare type DEConversationMessageDialogueFragment = DEConversationMessageDialogueFragmentText | DEConversationMessageDialogueFragmentSound | DEConversationMessageFragmentIdentifier;
+declare type DEConversationMessageNarrationFragment = DEConversationMessageNarrationFragmentText | DEConversationMessageFragmentIdentifier;
 
 declare interface DEConversationMessageDialogueFragmentText {
     type: "narration" | "dialogue";
+    text: string;
+}
+
+declare interface DEConversationMessageNarrationFragmentText {
+    type: "narration";
     text: string;
 }
 
@@ -3176,15 +3206,22 @@ declare interface DEConversationMessageDialogueFragmentSound {
     };
 }
 
+declare interface DEConversationMessageFragmentIdentifier {
+    type: "identifier";
+    text: string;
+    identifier: string;
+    foundAs: "character" | "item";
+}
+
 declare interface DEConversationMessage {
     /**
      * Id of the message
      */
     id: Readonly<string>;
     /**
-     * Who sent this message
+     * Who sent this message, their character id
      */
-    sender: string;
+    characterId: string;
     /**
      * Whether the sender is a character
      * this is also true for the user since the user is a character too
@@ -3254,7 +3291,7 @@ declare interface DEConversationMessage {
      */
     untimed: boolean;
     /**
-     * If the message can only be seen by a specific character, their Name
+     * If the message can only be seen by a specific character, their Id
      * eg. for private thoughts, state changes, or secret messages; basically representing the character's internal monologue
      * Also true for schizophrenic characters that hear voices that no one else can hear
      * 

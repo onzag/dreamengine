@@ -1,118 +1,4 @@
 /**
- * Takes a complete message in the narrative form and converts it into components that conform the message
- * 
- * Returns an array of messages with each author and content separated, for example the following message:
- * 
- * *Alice looks around worried* Hello Jonh how are you doing?
- * 
- * Will turn into:
- * 
- * [
- *   { author: null, origin: "Alice", content: "Alice looks around worried" },
- *   { author: "Alice", origin: "Alice", content: "Hello John how are you doing?" }
- * ]
- * 
- * This allows the engine to separate the narrative parts of the message from the dialogue parts, and also to know who is saying what in a message that may contain multiple sentences and multiple narrative actions.
- * this can later be passed onto parseMessageInComponentsAsText to get
- * 
- * *Alice Looks Around Worried*
- * Alice: Hello Jonh how are you doing?
- * 
- * or it can be used to create more complex UI
- * 
- * This function is also able to take output in the same format, but cannot distinguish character when in such case as it
- * is expected that every time an author is given no spoken part belongs to another character, for example:
- * 
- * When the author is Alice and the message is:
- * 
- * *Alice looks around worried*
- * Bob: Hello Jonh how are you doing?
- * *Alice looks at Bob and smiles*
- * Alice: I'm doing great Bob, thanks for asking!
- * 
- * Would just cause all messages to be attributed to Alice because she is the author
- * 
- * @param {string} author 
- * @param {string} message
- */
-export function parseMessageInComponents(author, message) {
-    /**
-     * @type {Array<{author: string | null, origin: string, content: string}>}
-     */
-    const finalMessages = [];
-
-    if (author === "Story Master") {
-        // for story master messages we will not do any parsing, we will just return the whole message as a single component
-        const lines = message.split("\n").map(line => line.trim()).filter(line => !!line);
-        const results = [];
-        for (const line of lines) {
-            results.push({
-                author: null,
-                origin: author,
-                content: line,
-            });
-        }
-        return results;
-    }
-
-    if (message.trim().length === 0) {
-        return [];
-    }
-
-    const splittedLines = message.split("\n");
-    for (const line of splittedLines) {
-        const trimmedLine = line.trim();
-
-        if (!trimmedLine) {
-            continue;
-        }
-
-        if (trimmedLine.startsWith(author + ":")) {
-            finalMessages.push({
-                author: author,
-                origin: author,
-                content: trimmedLine.substring(author.length + 2).trim(),
-            });
-            continue;
-        }
-
-        finalMessages.push({
-            author: null,
-            origin: author,
-            content: trimmedLine,
-        });
-    }
-
-    return finalMessages;
-}
-
-/**
- * @param {string} author 
- * @param {string} message 
- * @returns {string}
- */
-export function parseMessageInComponentsAsText(author, message) {
-    const components = parseMessageInComponents(author, message);
-    let finalText = "";
-    for (const component of components) {
-        if (component.author) {
-            if (!component.content.endsWith(".")) {
-                finalText += `${component.author}: ${component.content}.\n\n`;
-            } else {
-                finalText += `${component.author}: ${component.content}\n\n`;
-            }
-        } else {
-            if (!component.content.endsWith(".")) {
-                finalText += `${component.content}.\n\n`;
-            } else {
-                finalText += `${component.content}\n\n`;
-            }
-        }
-    }
-    return finalText.trim();
-}
-
-/**
  * @param {DEObject} deObject
  * @param {DETimeDescription | null} time
  * @param {boolean} includeNowLabel
@@ -142,14 +28,63 @@ export function makeTimestamp(deObject, time, includeNowLabel = true) {
 }
 
 /**
+ * Provides the name that one character knows another character as, based on their bond and knowledge of each other.
+ * @param {import("../index.js").DEngine} engine
+ * @param {DECompleteCharacterReference} character
+ * @param {DECompleteCharacterReference} otherCharacter
+ */
+export function getNameIdentificationForOneCharacterTowardsAnother(engine, character, otherCharacter) {
+    const knowsThemAs = getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine, character, otherCharacter);
+    return "<" + otherCharacter.id + ":" + knowsThemAs + ">";
+}
+
+/**
+ * Provides the name that one character knows another character as, based on their bond and knowledge of each other.
+ * @param {import("../index.js").DEngine} engine
+ * @param {DECompleteCharacterReference} character
+ * @param {DECompleteCharacterReference} otherCharacter
+ */
+export function getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine, character, otherCharacter) {
+    if (character.id === otherCharacter.id) {
+        // you know yourself, so return your own name
+        return character.name;
+    }
+
+    const defaultName = otherCharacter.unknownName;
+    const characterBond = engine.getDEObject().bonds[character.id]?.active.find(b => b.towards === otherCharacter.id) ||
+        engine.getDEObject().bonds[character.id]?.ex.find(b => b.towards === otherCharacter.id);
+
+    const knowsThemAs = (characterBond ? characterBond.knowsAs.find(k => k.primary) || characterBond.knowsAs[0] : null) || null;
+    const actualNameKnowsThemAs = knowsThemAs?.nickname ?
+        ((characterBond ? characterBond.knowsAs.find(k => k.name === otherCharacter.name) || characterBond.knowsAs.find((k) => !k.nickname) : null) || null): null;
+    
+        /**
+         * @type {string}
+         */
+    let finalone;
+    if (knowsThemAs) {
+        if (actualNameKnowsThemAs) {
+            finalone = actualNameKnowsThemAs.name + (actualNameKnowsThemAs.nickname ? `, ${actualNameKnowsThemAs.nickname}` : "");
+        } else {
+            finalone = knowsThemAs.name;
+        }
+    } else {
+        finalone = defaultName;
+    }
+
+    return finalone;
+}
+
+/**
  * @typedef {Object} DEObjectMessageGeneratorResult
- * @property {string} name the name of the character or entity that generated the message
+ * @property {string} name the name of the character or entity that generated the message as known by the character that was passed in
+ * @property {string | null} characterId the id of the character that actually generated the message, if this message belongs to an actual character, otherwise null
  * @property {Array<DEConversationMessageNarration | DEConversationMessageDialogue>} content the message content, can be a narrative or a dialogue
  * @property {string | null} conversationId the id of the conversation this message belongs to, if any, otherwise null
  * @property {string | null} id the id of the message, if this is a conversation message, otherwise null
- * @property {boolean} debug wether this is a debug message
+ * @property {boolean} debug whether this is a debug message
  * @property {boolean} rejected whether this message was rejected by the story master or not
- * @property {boolean} hidden wheter this message is hidden or not
+ * @property {boolean} hidden whether this message is hidden or not
  * @property {boolean} storyMaster whether this message is from the story master or not
  * @property {string[]} interactingCharacters the interacting characters in this message
  * @property {string} gid a global id, always available, always unique, can be used to identify a message uniquely
@@ -215,7 +150,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
         // @ts-ignore typescript is wrong, deObject has been null checked at the beginning of the function
         let message = `From ${makeTimestamp(engine.deObject, fromTime)} to ${makeTimestamp(engine.deObject, statesAccumulatedFromTime)}, ` + character.name;
         if (statesAccumulated.size > 0) {
-            message += ` finds ${engine.getDEObject().utils.formatReflexive([character])} in the following states: `;
+            message += ` finds ${engine.getDEObject().utils.templates.formatReflexive([character])} in the following states: `;
             let statesList = "";
             statesAccumulated.forEach(s => {
                 if (statesList.length > 0) {
@@ -238,23 +173,29 @@ export async function* getHistoryForCharacter(engine, character, options) {
          */
         const narrationMessage = {
             type: "narration",
-            text: message,
+            fragments: [
+                {
+                    type: "narration",
+                    text: message,
+                },
+            ],
         };
 
         return {
             name: "Story Master",
+            characterId: null,
             content: [
                 narrationMessage,
             ],
             id: null,
-            gid: `story-master-states-${character.name}-${fromTime.time}`,
+            gid: `story-master-states-${character.id}-${fromTime.time}`,
             conversationId: null,
             debug: false,
             rejected: false,
             storyMaster: true,
             hidden: false,
             interactingCharacters: [
-                character.name,
+                character.id,
             ],
             emotion: null,
             emotionalRange: null,
@@ -282,11 +223,11 @@ export async function* getHistoryForCharacter(engine, character, options) {
 
             // process the conversation messages
             const conversationMessages = currentConversationObject.messages.filter(msg => (options.includeRejectedMessages || !msg.isRejectedMessage) && (options.includeDebugMessages || !msg.isDebugMessage) && (options.includeHiddenMessages || !msg.isHiddenMessage) &&
-                (!msg.canOnlyBeSeenByCharacter || msg.canOnlyBeSeenByCharacter === character.name));
+                (!msg.canOnlyBeSeenByCharacter || msg.canOnlyBeSeenByCharacter === character.id));
 
             const conversationLocation = currentConversationObject.location || "an unknown location";
             const conversationStartTime = currentConversationObject.startTime;
-            const firstMessageIsStoryMaster = conversationMessages.length > 0 && conversationMessages[0].sender === "Story Master";
+            const firstMessageIsStoryMaster = conversationMessages.length > 0 && conversationMessages[0].isStoryMasterMessage;
 
             if ((currentConversationObject.pseudoConversationSummary || currentConversationObject.pseudoConversation) && options.enrichedMode) {
                 if (!currentConversationObject.pseudoConversationSummary) {
@@ -299,9 +240,9 @@ export async function* getHistoryForCharacter(engine, character, options) {
                         currentConversationObject,
                     );
                 }
-                const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
+                const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.id);
                 const timeMark = makeTimestamp(engine.deObject, conversationStartTime);
-                const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.utils.formatAnd(participantsExcludingCharacter);
+                const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.utils.templates.formatAnd(participantsExcludingCharacter);
 
                 const expectedId = `story-master-${state.conversationId}-summary`;
                 const keepgoing = yield {
@@ -309,9 +250,15 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     content: [
                         {
                             type: "narration",
-                            text: (timeMark === "Now" ? "Right Now" : "At " + timeMark) + ", " + character.name + " is at " + conversationLocation + " " + withOrAlone + ". The interaction happened as follows:\n\n" + currentConversationObject.pseudoConversationSummary,
+                            fragments: [
+                                {
+                                    type: "narration",
+                                    text: (timeMark === "Now" ? "Right Now" : "At " + timeMark) + ", " + character.name + " is at " + conversationLocation + " " + withOrAlone + ". The interaction happened as follows:\n\n" + currentConversationObject.pseudoConversationSummary,
+                                },
+                            ],
                         },
                     ],
+                    characterId: null,
                     id: null,
                     conversationId: state.conversationId,
                     debug: false,
@@ -329,13 +276,18 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 }
             } else {
                 for (const message of conversationMessages.reverse()) {
-                    if (options.excludeFrom && options.excludeFrom.includes(message.sender)) {
+                    if (options.excludeFrom && options.excludeFrom.includes(message.characterId)) {
                         continue;
                     }
+
+                    const otherCharInfo = engine.getDEObject().characters[message.characterId];
+                    const knownName = getNameIdentificationForOneCharacterTowardsAnother(engine, character, otherCharInfo);
+                    
                     const keepgoing = yield ({
-                        name: message.sender,
+                        name: knownName,
                         content: message.content,
                         id: message.id,
+                        characterId: message.characterId,
                         conversationId: state.conversationId,
                         debug: message.isDebugMessage,
                         rejected: message.isRejectedMessage,
@@ -356,7 +308,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
                     const timeMark = makeTimestamp(engine.deObject, conversationStartTime);
                     const timeMarkDetailed = timeMark === "Now" ? "right now" : "at " + timeMark;
-                    const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.utils.formatAnd(participantsExcludingCharacter);
+                    const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.utils.templates.formatAnd(participantsExcludingCharacter);
                     const keepgoing = yield {
                         name: "Story Master",
                         content: [
@@ -366,6 +318,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                             },
                         ],
                         id: null,
+                        characterId: null,
                         conversationId: state.conversationId,
                         debug: false,
                         rejected: false,

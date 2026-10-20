@@ -142,13 +142,13 @@ function findClothingItem(world, searchOrder, matchFn) {
 }
 
 /**
+ * @param {DEUtils} utils
  * @param {DEItem} item 
  * @param {DECompleteCharacterReference} character
  * @param {"tight" | "loose" | "normal"} fitment
  */
-export function resizeClothingItem(item, character, fitment) {
-    const newItem = structuredClone(item);
-    newItem.amount = 1; // ensure we only give one of the item, not a stack
+export function resizeClothingItem(utils, item, character, fitment) {
+    const newItem = utils.items.cloneItem(item, 1)[0];
     if (!newItem.wearableProperties) return newItem; // narrows type; structuredClone doesn't carry through the guard above
     const idealWeightForItem = (newItem.wearableProperties.volumeRangeMaxLiters + newItem.wearableProperties.volumeRangeMinLiters) / 2;
     const step = (newItem.wearableProperties.volumeRangeMaxLiters - newItem.wearableProperties.volumeRangeMinLiters);
@@ -209,13 +209,13 @@ export function resizeClothingItem(item, character, fitment) {
 }
 
 /**
- * 
+ * @param {DEUtils} utils
  * @param {DECompleteCharacterReference} character
  * @param {DEStateForCharacterWithHistory} charState
  * @param {DEWorld} world
  * @param {"tight" | "loose" | "normal"} fitment
  */
-export function giveCharacterRandomClothing(character, charState, world, fitment) {
+export function giveCharacterRandomClothing(utils, character, charState, world, fitment) {
     let isNotWearingBottomClothes = !charState.wearing.some(item => item.wearableProperties?.coversBottomNakedness && !item.wearableProperties.underwear);
     let isNotWearingBottomUnderwear = !charState.wearing.some(item => item.wearableProperties?.coversBottomNakedness && item.wearableProperties.underwear);
     let isNotWearingTopClothes = !charState.wearing.some(item => item.wearableProperties?.coversTopNakedness && !item.wearableProperties.underwear);
@@ -258,7 +258,7 @@ export function giveCharacterRandomClothing(character, charState, world, fitment
             );
         }
         if (item) {
-            charState.wearing.push(resizeClothingItem(item, character, fitment));
+            charState.wearing.push(resizeClothingItem(utils, item, character, fitment));
             if (item.wearableProperties?.coversTopNakedness) {
                 isNotWearingTopClothes = false;
             }
@@ -274,7 +274,7 @@ export function giveCharacterRandomClothing(character, charState, world, fitment
             isGenderCompatible(item)
         );
         if (item) {
-            charState.wearing.push(resizeClothingItem(item, character, fitment));
+            charState.wearing.push(resizeClothingItem(utils, item, character, fitment));
             if (item.wearableProperties?.coversTopNakedness) {
                 isNotWearingTopUnderwear = false;
             }
@@ -300,7 +300,7 @@ export function giveCharacterRandomClothing(character, charState, world, fitment
                 isGenderCompatible(item)
             );
         }
-        if (item) charState.wearing.push(resizeClothingItem(item, character, fitment));
+        if (item) charState.wearing.push(resizeClothingItem(utils, item, character, fitment));
     }
 
     // Top underwear (e.g. bras) is only relevant for non-male characters.
@@ -314,6 +314,6 @@ export function giveCharacterRandomClothing(character, charState, world, fitment
             !item.wearableProperties.noRandomClothingSpawn &&
             isGenderCompatible(item)
         );
-        if (item) charState.wearing.push(resizeClothingItem(item, character, fitment));
+        if (item) charState.wearing.push(resizeClothingItem(utils, item, character, fitment));
     }
 }

@@ -69,9 +69,6 @@ export function getBeingCarriedByCharacter(deObject, characterId) {
 export function findLocationOfCharInsideOrAtopItemRecursive(otherCharName, list, pathSoFar) {
     for (let i = 0; i < list.length; i++) {
         const item = list[i];
-        if (item.amount === 0) {
-            continue;
-        }
         if (item.containingCharacters && item.containingCharacters.includes(otherCharName)) {
             return {
                 path: [...pathSoFar, i],
@@ -117,9 +114,6 @@ export function findLocationOfCharInsideOrAtopItemRecursive(otherCharName, list,
 export function findLocationOfAnyCharInsideOrAtopItemRecursive(list, pathSoFar, resultsSoFar) {
     for (let i = 0; i < list.length; i++) {
         const item = list[i];
-        if (item.amount === 0) {
-            continue;
-        }
         if (item.containingCharacters) {
             for (const char of item.containingCharacters) {
                 resultsSoFar.push({
@@ -286,9 +280,6 @@ export function isTopNaked(deObject, characterId) {
 
     const wearingItems = charState.wearing;
     for (const item of wearingItems) {
-        if (item.amount <= 0) {
-            continue;
-        }
         if (item.wearableProperties?.coversTopNakedness) {
             return false;
         }
@@ -309,9 +300,6 @@ export function isBottomNaked(deObject, characterId) {
 
     const wearingItems = charState.wearing;
     for (const item of wearingItems) {
-        if (item.amount <= 0) {
-            continue;
-        }
         if (item.wearableProperties?.coversBottomNakedness) {
             return false;
         }
@@ -573,6 +561,8 @@ export function getPowerLevelFromCharacter(character) {
  * @param {boolean} onlyBasics
  * @param {boolean} hideCurrentPosture
  * @returns {Promise<string>}
+ * 
+ * TODOREFORMAT
  */
 export async function getExternalDescriptionOfCharacter(deObject, characterId, onlyBasics = false, hideCurrentPosture = false) {
     const character = deObject.characters[characterId];
@@ -672,8 +662,8 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, o
         finalDescription += ` Not wearing any clothes on the lower body.`;
     }
     
-    const hasItemsCoveringBottomNakenessThatAreNotUnderwear = characterState.wearing.some(item => item.amount > 0 && item.wearableProperties && item.wearableProperties.coversBottomNakedness && !item.wearableProperties.underwear);
-    const hasItemsCoveringTopNakenessThatAreNotUnderwear = characterState.wearing.some(item => item.amount > 0 && item.wearableProperties && item.wearableProperties.coversTopNakedness && !item.wearableProperties.underwear);
+    const hasItemsCoveringBottomNakenessThatAreNotUnderwear = characterState.wearing.some(item => item.wearableProperties && item.wearableProperties.coversBottomNakedness && !item.wearableProperties.underwear);
+    const hasItemsCoveringTopNakenessThatAreNotUnderwear = characterState.wearing.some(item => item.wearableProperties && item.wearableProperties.coversTopNakedness && !item.wearableProperties.underwear);
 
     if (characterState.wearing.length > 0) {
         const visibleWornItems = characterState.wearing.filter(item => {
@@ -690,7 +680,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, o
 
             return isVisibleAtBottom || isVisibleAtTop;
         });
-        finalDescription += " Wearing " + deObject.utils.formatAnd(visibleWornItems.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(deObject, item, characterId).fitment + ")" : item.description + " (" + getWearableFitment(deObject, item, characterId).fitment + ")")) + ".";
+        finalDescription += " Wearing " + deObject.utils.templates.formatAnd(visibleWornItems.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(deObject, item, characterId).fitment + ")" : item.description + " (" + getWearableFitment(deObject, item, characterId).fitment + ")")) + ".";
     } else {
         finalDescription += " Completely naked, without clothes or accessories.";
     }
@@ -699,7 +689,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, o
 
     if (!onlyBasics) {
         if (characterState.carrying.length > 0) {
-            finalDescription += " Carrying " + deObject.utils.formatAnd(characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + item.description : item.description)) + ".";
+            finalDescription += " Carrying " + deObject.utils.templates.formatAnd(characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + item.description : item.description)) + ".";
         } else {
             finalDescription += " Not carrying any items.";
         }
