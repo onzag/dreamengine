@@ -263,34 +263,6 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
             return true;
         },
 
-        saveFile: async (namespace, id, saveName, saveData, saveIndexData) => {
-            const res = await fetch('/api/save', {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ namespace, id, saveName, saveData, saveIndexData }),
-            });
-            if (!res.ok) {
-                let detail = `${res.status} ${res.statusText}`;
-                try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
-                throw new Error(`saveFile("${namespace}/${id}/${saveName}") failed: ${detail}`);
-            }
-        },
-
-        deleteSaveFile: async (namespace, id, saveName) => {
-            const res = await fetch('/api/save/delete', {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ namespace, id, saveName }),
-            });
-            if (!res.ok) {
-                let detail = `${res.status} ${res.statusText}`;
-                try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
-                throw new Error(`deleteSaveFile("${namespace}/${id}/${saveName}") failed: ${detail}`);
-            }
-        },
-
         startDiffusionProcess: async () => {
             const res = await fetch('/api/diffusion/start', {
                 method: 'POST',
@@ -329,17 +301,15 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
             return res.json();
         },
 
-        openDatabase: async (dePath) => {
-            const res = await fetch('/api/db/open', {
+        newDatabase: async () => {
+            const res = await fetch('/api/db/new', {
                 method: 'POST',
                 credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dePath }),
             });
             if (!res.ok) {
                 let detail = `${res.status} ${res.statusText}`;
                 try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
-                throw new Error(`openDatabase("${dePath}") failed: ${detail}`);
+                throw new Error(`newDatabase failed: ${detail}`);
             }
             const { id } = await res.json();
             return id;
@@ -402,6 +372,66 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
                 });
             }
             return result;
+        },
+
+        saveDatabase: async (id, namespace, scriptId, saveName, fileName, metadata) => {
+            const res = await fetch('/api/db/save', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, namespace, scriptId, saveName, fileName, metadata }),
+            });
+            if (!res.ok) {
+                let detail = `${res.status} ${res.statusText}`;
+                try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
+                throw new Error(`saveDatabase("${namespace}/${scriptId}/${fileName}") failed: ${detail}`);
+            }
+            const { filePath } = await res.json();
+            return filePath;
+        },
+
+        loadDatabaseFromStore: async (namespace, scriptId, fileName) => {
+            const res = await fetch('/api/db/load', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ namespace, scriptId, fileName }),
+            });
+            if (!res.ok) {
+                let detail = `${res.status} ${res.statusText}`;
+                try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
+                throw new Error(`loadDatabaseFromStore("${namespace}/${scriptId}/${fileName}") failed: ${detail}`);
+            }
+            const { id } = await res.json();
+            return id;
+        },
+
+        listSaveFiles: async (namespace, scriptId) => {
+            const params = new URLSearchParams({ namespace, scriptId });
+            const res = await fetch(`/api/db/list?${params}`, {
+                method: 'GET',
+                credentials: 'same-origin',
+            });
+            if (!res.ok) {
+                let detail = `${res.status} ${res.statusText}`;
+                try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
+                throw new Error(`listSaveFiles("${namespace}/${scriptId}") failed: ${detail}`);
+            }
+            return res.json();
+        },
+
+        deleteDatabaseFromStore: async (namespace, scriptId, fileName) => {
+            const res = await fetch('/api/db/delete', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ namespace, scriptId, fileName }),
+            });
+            if (!res.ok) {
+                let detail = `${res.status} ${res.statusText}`;
+                try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
+                throw new Error(`deleteDatabaseFromStore("${namespace}/${scriptId}/${fileName}") failed: ${detail}`);
+            }
         },
 
         pauseVoice: async () => {

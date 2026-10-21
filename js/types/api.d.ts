@@ -32,22 +32,19 @@ declare interface DEAPI {
     options?: { deleted?: boolean; moved?: { newNamespace: string; newId: string } }
   ) => void): void;
 
-  saveFile(namespace: string, id: string, saveName: string, saveData: string, saveIndexData?: any): Promise<void>;
-  deleteSaveFile(namespace: string, id: string, saveName: string): Promise<void>;
-
   listNarrators(language: string): Promise<Array<CharacterVoiceEntryWithLanguage>>;
 
   /**
-   * Open or create a SQLite + sqlite-vec database at a path relative to
-   * DREAMENGINE_HOME. The path **must** start with `"saves/"`.
-   * If the same path is already open the existing connection UUID is returned.
-   * @param dePath e.g. `"saves/mygame/world.db"`
+   * Create a brand new, empty SQLite + sqlite-vec database in the OS temporary
+   * directory. Read/write it through {@link runQuery}, then persist it with
+   * {@link saveDatabase}.
    * @returns UUID that identifies this connection.
    */
-  openDatabase(dePath: string): Promise<string>;
+  newDatabase(): Promise<string>;
 
   /**
-   * Close the database connection identified by `id`.
+   * Close the database connection identified by `id` and delete its temporary
+   * backing file.
    */
   closeDatabase(id: string): Promise<void>;
 
@@ -59,7 +56,7 @@ declare interface DEAPI {
    * - **INSERT / UPDATE / DELETE** → resolves with
    *   `{ changes: number, lastInsertRowid: number | bigint }`.
    *
-   * @param id UUID returned by {@link openDatabase}.
+   * @param id UUID returned by {@link newDatabase} / {@link loadDatabaseFromStore}.
    * @param sql SQL statement to execute.
    * @param params Bound parameters. Pass `Uint8Array` for binary / vector data.
    */
@@ -68,6 +65,60 @@ declare interface DEAPI {
     sql: string,
     params?: Array<string | number | bigint | Uint8Array | null>,
   ): Promise<any[] | { changes: number; lastInsertRowid: number | bigint }>;
+
+  /**
+   * Persist a gzip-compressed, pristine copy of an open database into the saves
+   * folder and record it in the saves index. Overwrites any existing save at
+   * the same location. The file is stored under
+   * `saves/<namespace>/<scriptId>/<fileName>.gz`.
+   * @param id UUID of the open connection to snapshot.
+   * @param namespace Script namespace (used as a subdirectory).
+   * @param scriptId Script id (used as a subdirectory).
+   * @param saveName Human-readable name of the save.
+   * @param fileName Base file name supplied by the user (no extension).
+   * @param metadata Arbitrary JSON metadata to store with the save.
+   * @returns Stored path, relative to the saves folder.
+   */
+  saveDatabase(
+    id: string,
+    namespace: string,
+    scriptId: string,
+    saveName: string,
+    fileName: string,
+    metadata?: any,
+  ): Promise<string>;
+
+  /**
+   * Decompress a stored save into the temporary directory and open it,
+   * returning a connection UUID usable with {@link runQuery} / {@link saveDatabase}.
+   * @param namespace Script namespace the save belongs to.
+   * @param scriptId Script id the save belongs to.
+   * @param fileName Base file name supplied when saving (no extension).
+   * @returns UUID that identifies the opened connection.
+   */
+  loadDatabaseFromStore(namespace: string, scriptId: string, fileName: string): Promise<string>;
+
+  /**
+   * List the saves recorded for a given script namespace/id.
+   */
+  listSaveFiles(
+    namespace: string,
+    scriptId: string,
+  ): Promise<Array<{
+    namespace: string;
+    scriptId: string;
+    filePath: string;
+    saveName: string;
+    metadata: any;
+  }>>;
+
+  /**
+   * Delete a stored save from disk and remove its entry from the saves index.
+   * @param namespace Script namespace the save belongs to.
+   * @param scriptId Script id the save belongs to.
+   * @param fileName Base file name supplied when saving (no extension).
+   */
+  deleteDatabaseFromStore(namespace: string, scriptId: string, fileName: string): Promise<void>;
 
   startDiffusionProcess(): Promise<void>;
   stopDiffusionProcess(): Promise<void>;

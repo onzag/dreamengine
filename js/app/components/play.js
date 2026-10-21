@@ -1116,6 +1116,7 @@ class PlayOverlay extends HTMLElement {
         pane.querySelectorAll('.mode-card').forEach(card => {
             card.addEventListener('mouseenter', playHoverSound);
             card.addEventListener('click', async () => {
+                if (!this.selectedWorld) return;
                 const mode = /** @type {'new' | 'load'} */ (card.getAttribute('data-mode'));
                 this.selectedMode = mode;
                 pane.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
@@ -1127,24 +1128,26 @@ class PlayOverlay extends HTMLElement {
                     stabilityPanel?.classList.add('hidden');
 
                     try {
-                        const savesResp = await fetch(window.DREAMENGINE_HOME + "/saves/" + this.selectedWorld?.namespace + "/" + this.selectedWorld?.id + ".json");
-                        const savesData = await savesResp.json();
-                        const saves = Array.isArray(savesData?.saves) ? savesData.saves : [];
-                        saves.reverse(); // show most recent saves first
+                        const saves = await window.API.listSaveFiles(this.selectedWorld.namespace, this.selectedWorld.id);
+                        if (!saves.some(s => s.filePath.split('/').pop()?.replace(/\.gz$/, '') === this.selectedSaveId)) {
+                            this.selectedSaveId = null;
+                        }
 
                         if (savesList) {
                             if (saves.length === 0) {
                                 savesList.innerHTML = `<div class="placeholder-pane">No saves found for this world.</div>`;
                             } else {
-                                savesList.innerHTML = saves.map(/** @param {any} s */ s => {
-                                    const metaChips = s.data && typeof s.data === 'object'
-                                        ? Object.entries(s.data).map(([k, v]) =>
+                                savesList.innerHTML = saves.map(s => {
+                                    // The store API takes the base file name without the .gz extension.
+                                    const saveId = s.filePath.split('/').pop()?.replace(/\.gz$/, '') || '';
+                                    const metaChips = s.metadata && typeof s.metadata === 'object'
+                                        ? Object.entries(s.metadata).map(([k, v]) =>
                                             `<span class="save-meta-chip"><span class="save-meta-key">${escapeHTML(String(k))}</span><span class="save-meta-value">${escapeHTML(String(v))}</span></span>`
                                           ).join('')
                                         : '';
                                     return `
-                                        <div class="save-item" data-save-id="${escapeHTML(s.save)}">
-                                            <div class="save-item-name">${escapeHTML(s.save)}</div>
+                                        <div class="save-item" data-save-id="${escapeHTML(saveId)}">
+                                            <div class="save-item-name">${escapeHTML(s.saveName)}</div>
                                             ${metaChips ? `<div class="save-item-chips">${metaChips}</div>` : ''}
                                         </div>
                                     `;
@@ -1166,6 +1169,7 @@ class PlayOverlay extends HTMLElement {
                             }
                         }
                     } catch (err) {
+                        this.selectedSaveId = null;
                         if (savesList) savesList.innerHTML = `<div class="placeholder-pane">No save files found</div>`;
                     }
                 } else {

@@ -18,7 +18,7 @@ import { buildDreamEngineHome } from './util/build-dreamengine-home.js';
 import { watchScripts } from './util/watch-scripts.js';
 import express from 'express';
 import { startDiffusionProcess, stopDiffusionProcess } from './diffussion.js';
-import { openDatabase, closeDatabase, runQuery } from './db.js';
+import { newDatabase, closeDatabase, runQuery, saveDatabase, loadDatabaseFromStore, listSaveFiles, deleteDatabaseFromStore } from './db.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -620,102 +620,6 @@ async function startWebServer(creds) {
         }
     });
 
-    app.post('/api/save', (/** @type {any} */ req, /** @type {any} */ res) => {
-        try {
-            const { namespace, id, saveName, saveData, saveIndexData } = req.body || {};
-            if (!namespace || !id || !saveName) {
-                throw new Error("Namespace, ID, and save name are required");
-            }
-            const savePath = path.join(DREAMENGINE_HOME, 'saves', namespace, `${id}`, saveName + ".json");
-
-            fs.mkdirSync(path.dirname(savePath), { recursive: true });
-            fs.writeFileSync(savePath, saveData || ""); // create save file with data or empty
-
-            const saveIndexPath = path.join(DREAMENGINE_HOME, 'saves', namespace, `${id}.json`);
-
-            if (!fs.existsSync(saveIndexPath)) {
-                fs.writeFileSync(saveIndexPath, JSON.stringify({
-                    saves: [{
-                        save: saveName,
-                        data: saveIndexData,
-                    }]
-                }, null, 4));
-            } else {
-                const indexContent = fs.readFileSync(saveIndexPath, 'utf-8');
-                let indexData;
-                try {
-                    indexData = JSON.parse(indexContent);
-                } catch (err) {
-                    console.error("Failed to parse save index JSON:", err);
-                    indexData = { saves: [] };
-                }
-                if (!Array.isArray(indexData.saves)) {
-                    indexData.saves = [];
-                }
-                // @ts-ignore
-                const alreadyExists = indexData.saves.some(save => save.save === saveName);
-                if (alreadyExists) {
-                    // Update existing save entry
-                    // @ts-ignore
-                    indexData.saves = indexData.saves.map(save => {
-                        if (save.save === saveName) {
-                            return { save: saveName, data: saveIndexData };
-                        }
-                        return save;
-                    });
-                } else {
-                    indexData.saves.push({
-                        save: saveName,
-                        data: saveIndexData,
-                    });
-                }
-                fs.writeFileSync(saveIndexPath, JSON.stringify(indexData, null, 4));
-            }
-            res.json({ ok: true });
-        } catch (err) {
-            // @ts-ignore
-            res.status(400).json({ error: err?.message || String(err) });
-        }
-    });
-
-    app.post('/api/save/delete', (/** @type {any} */ req, /** @type {any} */ res) => {
-        try {
-            const { namespace, id, saveName } = req.body || {};
-            if (!namespace || !id || !saveName) {
-                throw new Error("Namespace, ID, and save name are required");
-            }
-
-            const savePath = path.join(DREAMENGINE_HOME, 'saves', namespace, `${id}`, saveName);
-            if (!fs.existsSync(savePath)) {
-                throw new Error("Save file does not exist");
-            }
-
-            fs.unlinkSync(savePath);
-
-            const saveIndexPath = path.join(DREAMENGINE_HOME, 'saves', namespace, `${id}.json`);
-            if (fs.existsSync(saveIndexPath)) {
-                const indexContent = fs.readFileSync(saveIndexPath, 'utf-8');
-                let indexData;
-                try {
-                    indexData = JSON.parse(indexContent);
-                } catch (err) {
-                    console.error("Failed to parse save index JSON:", err);
-                    indexData = { saves: [] };
-                }
-                if (Array.isArray(indexData.saves)) {
-                    // @ts-ignore
-                    indexData.saves = indexData.saves.filter(save => save.save !== saveName);
-                    fs.writeFileSync(saveIndexPath, JSON.stringify(indexData, null, 4));
-                }
-            }
-
-            res.json({ ok: true });
-        } catch (err) {
-            // @ts-ignore
-            res.status(400).json({ error: err?.message || String(err) });
-        }
-    });
-
     // --- Delete file from DE path --------------------------------------------
     // Mirrors the ipcMain `deleteFileFromDEPath` handler in js/electron.js.
     // The path must not contain ".." and must be "profile", under "assets/",
@@ -856,31 +760,24 @@ async function startWebServer(creds) {
     });
 
     // --- SQLite / sqlite-vec database API ----------------------------------
-    // Mirrors the db:open / db:close / db:query IPC handlers in electron.js.
-    // The saves folder path restriction is enforced here too.
+    // Mirrors the db:new / db:close / db:query / db:save / db:load / db:list
+    // IPC handlers in electron.js.
     const SAVES_FOLDER_WEB = path.join(DREAMENGINE_HOME, 'saves');
 
     /**
-     * @param {string} dePath
+     * Validate a single path segment (namespace / script id / file name).
+     * @param {any} value
+     * @param {string} label
      * @returns {string}
      */
-    const resolveAndValidateDbPathWeb = (dePath) => {
-        if (typeof dePath !== 'string' || dePath.length === 0) {
-            throw new Error('Invalid database path');
+    const validateDbSegment = (value, label) => {
+        if (typeof value !== 'string' || value.length === 0) {
+            throw new Error(`Invalid ${label}`);
         }
-        const normalised = dePath.replace(/\\/g, '/').replace(/^\/+/, '');
-        if (normalised.includes('..')) {
-            throw new Error('Path traversal is not allowed');
+        if (value.includes('..') || value.includes('/') || value.includes('\\') || value.includes('\0')) {
+            throw new Error(`Invalid ${label}`);
         }
-        if (!normalised.startsWith('saves/')) {
-            throw new Error('Database path must be within the saves folder');
-        }
-        const resolved = path.resolve(path.join(DREAMENGINE_HOME, normalised));
-        const savesResolved = path.resolve(SAVES_FOLDER_WEB);
-        if (!resolved.startsWith(savesResolved + path.sep)) {
-            throw new Error('Database path must be within the saves folder');
-        }
-        return resolved;
+        return value;
     };
 
     /**
@@ -911,11 +808,9 @@ async function startWebServer(creds) {
         return out;
     };
 
-    app.post('/api/db/open', (/** @type {any} */ req, /** @type {any} */ res) => {
+    app.post('/api/db/new', (/** @type {any} */ _req, /** @type {any} */ res) => {
         try {
-            const dePath = req.body?.dePath;
-            const resolved = resolveAndValidateDbPathWeb(dePath);
-            const { id } = openDatabase(resolved);
+            const { id } = newDatabase();
             res.json({ id });
         } catch (err) {
             // @ts-ignore
@@ -953,6 +848,67 @@ async function startWebServer(creds) {
             } else {
                 res.json(result);
             }
+        } catch (err) {
+            // @ts-ignore
+            res.status(400).json({ error: err?.message || String(err) });
+        }
+    });
+
+    app.post('/api/db/save', async (/** @type {any} */ req, /** @type {any} */ res) => {
+        try {
+            const { id, namespace, scriptId, saveName, fileName, metadata } = req.body || {};
+            if (typeof id !== 'string' || id.length === 0) {
+                throw new Error('Invalid connection id');
+            }
+            validateDbSegment(namespace, 'namespace');
+            validateDbSegment(scriptId, 'script id');
+            validateDbSegment(fileName, 'file name');
+            if (typeof saveName !== 'string' || saveName.length === 0) {
+                throw new Error('Invalid save name');
+            }
+            const { filePath } = await saveDatabase(id, SAVES_FOLDER_WEB, namespace, scriptId, saveName, fileName, metadata);
+            res.json({ filePath });
+        } catch (err) {
+            // @ts-ignore
+            res.status(400).json({ error: err?.message || String(err) });
+        }
+    });
+
+    app.post('/api/db/load', async (/** @type {any} */ req, /** @type {any} */ res) => {
+        try {
+            const { namespace, scriptId, fileName } = req.body || {};
+            validateDbSegment(namespace, 'namespace');
+            validateDbSegment(scriptId, 'script id');
+            validateDbSegment(fileName, 'file name');
+            const { id } = await loadDatabaseFromStore(SAVES_FOLDER_WEB, namespace, scriptId, fileName);
+            res.json({ id });
+        } catch (err) {
+            // @ts-ignore
+            res.status(400).json({ error: err?.message || String(err) });
+        }
+    });
+
+    app.get('/api/db/list', (/** @type {any} */ req, /** @type {any} */ res) => {
+        try {
+            const namespace = String(req.query.namespace || '');
+            const scriptId = String(req.query.scriptId || '');
+            validateDbSegment(namespace, 'namespace');
+            validateDbSegment(scriptId, 'script id');
+            res.json(listSaveFiles(SAVES_FOLDER_WEB, namespace, scriptId));
+        } catch (err) {
+            // @ts-ignore
+            res.status(400).json({ error: err?.message || String(err) });
+        }
+    });
+
+    app.post('/api/db/delete', (/** @type {any} */ req, /** @type {any} */ res) => {
+        try {
+            const { namespace, scriptId, fileName } = req.body || {};
+            validateDbSegment(namespace, 'namespace');
+            validateDbSegment(scriptId, 'script id');
+            validateDbSegment(fileName, 'file name');
+            deleteDatabaseFromStore(SAVES_FOLDER_WEB, namespace, scriptId, fileName);
+            res.json({ ok: true });
         } catch (err) {
             // @ts-ignore
             res.status(400).json({ error: err?.message || String(err) });

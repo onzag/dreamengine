@@ -7,7 +7,7 @@ import { buildDreamEngineHomeSync } from './util/build-dreamengine-home.js';
 import buildTypes from './util/build-types.js';
 import { watchScripts } from './util/watch-scripts.js';
 import { startDiffusionProcess, stopDiffusionProcess } from './diffussion.js';
-import { openDatabase, closeDatabase, runQuery } from './db.js';
+import { newDatabase, closeDatabase, runQuery, saveDatabase, loadDatabaseFromStore, listSaveFiles, deleteDatabaseFromStore } from './db.js';
 
 // @ts-ignore
 const __filename = fileURLToPath(import.meta.url);
@@ -627,88 +627,6 @@ ipcMain.handle('openInEditor', async (event, filePath, editorCmd) => {
     }
 });
 
-ipcMain.handle('saveFile', async (event, namespace, id, saveName, saveData, saveIndexData) => {
-    if (!namespace || !id || !saveName) {
-        throw new Error("Namespace, ID, and save name are required");
-    }
-
-    const savePath = path.join(SAVES_FOLDER, namespace, `${id}`, saveName + ".json");
-
-    fs.mkdirSync(path.dirname(savePath), { recursive: true });
-    fs.writeFileSync(savePath, saveData || ""); // create save file with data or empty
-
-    const saveIndexPath = path.join(SAVES_FOLDER, namespace, `${id}.json`);
-
-    if (!fs.existsSync(saveIndexPath)) {
-        fs.writeFileSync(saveIndexPath, JSON.stringify({
-            saves: [{
-                save: saveName,
-                data: saveIndexData,
-            }]
-        }, null, 4));
-    } else {
-        const indexContent = fs.readFileSync(saveIndexPath, 'utf-8');
-        let indexData;
-        try {
-            indexData = JSON.parse(indexContent);
-        } catch (err) {
-            console.error("Failed to parse save index JSON:", err);
-            indexData = { saves: [] };
-        }
-        if (!Array.isArray(indexData.saves)) {
-            indexData.saves = [];
-        }
-        // @ts-ignore
-        const alreadyExists = indexData.saves.some(save => save.save === saveName);
-        if (alreadyExists) {
-            // Update existing save entry
-            // @ts-ignore
-            indexData.saves = indexData.saves.map(save => {
-                if (save.save === saveName) {
-                    return { save: saveName, data: saveIndexData };
-                }
-                return save;
-            });
-        } else {
-            indexData.saves.push({
-                save: saveName,
-                data: saveIndexData,
-            });
-        }
-        fs.writeFileSync(saveIndexPath, JSON.stringify(indexData, null, 4));
-    }
-});
-
-ipcMain.handle('deleteSaveFile', async (event, namespace, id, saveName) => {
-    if (!namespace || !id || !saveName) {
-        throw new Error("Namespace, ID, and save name are required");
-    }
-
-    const savePath = path.join(SAVES_FOLDER, namespace, `${id}`, saveName);
-    if (!fs.existsSync(savePath)) {
-        throw new Error("Save file does not exist");
-    }
-
-    fs.unlinkSync(savePath);
-
-    const saveIndexPath = path.join(SAVES_FOLDER, namespace, `${id}.json`);
-    if (fs.existsSync(saveIndexPath)) {
-        const indexContent = fs.readFileSync(saveIndexPath, 'utf-8');
-        let indexData;
-        try {
-            indexData = JSON.parse(indexContent);
-        } catch (err) {
-            console.error("Failed to parse save index JSON:", err);
-            indexData = { saves: [] };
-        }
-        if (Array.isArray(indexData.saves)) {
-            // @ts-ignore
-            indexData.saves = indexData.saves.filter(save => save.save !== saveName);
-            fs.writeFileSync(saveIndexPath, JSON.stringify(indexData, null, 4));
-        }
-    }
-});
-
 ipcMain.handle('listNarrators', async (event, language) => {
     const narratorsDir = path.join(DREAMENGINE_HOME, 'narrators');
     const defaultNarratorsDir = path.join(__dirname, 'default-scripts', "voices");
@@ -794,29 +712,21 @@ ipcMain.handle('stopDiffusionProcess', () => {
 });
 
 /**
- * Resolve a renderer-supplied relative path (relative to DREAMENGINE_HOME) to
- * an absolute path and assert it lives inside SAVES_FOLDER.
- * @param {string} dePath
+ * Validate a single path segment (namespace / script id / file name) supplied
+ * by the renderer. Rejects empty values and anything that could escape the
+ * intended directory.
+ * @param {any} value
+ * @param {string} label
  * @returns {string}
  */
-function resolveAndValidateDbPath(dePath) {
-    if (typeof dePath !== 'string' || dePath.length === 0) {
-        throw new Error('Invalid database path');
+function validateDbSegment(value, label) {
+    if (typeof value !== 'string' || value.length === 0) {
+        throw new Error(`Invalid ${label}`);
     }
-    // Normalise separators and strip any leading slash.
-    const normalised = dePath.replace(/\\/g, '/').replace(/^\/+/, '');
-    if (normalised.includes('..')) {
-        throw new Error('Path traversal is not allowed');
+    if (value.includes('..') || value.includes('/') || value.includes('\\') || value.includes('\0')) {
+        throw new Error(`Invalid ${label}`);
     }
-    if (!normalised.startsWith('saves/')) {
-        throw new Error('Database path must be within the saves folder');
-    }
-    const resolved = path.resolve(path.join(DREAMENGINE_HOME, normalised));
-    const savesResolved = path.resolve(SAVES_FOLDER);
-    if (!resolved.startsWith(savesResolved + path.sep)) {
-        throw new Error('Database path must be within the saves folder');
-    }
-    return resolved;
+    return value;
 }
 
 /**
@@ -847,9 +757,8 @@ function normaliseRow(row) {
     return out;
 }
 
-ipcMain.handle('db:open', (_event, dePath) => {
-    const resolved = resolveAndValidateDbPath(dePath);
-    const { id } = openDatabase(resolved);
+ipcMain.handle('db:new', () => {
+    const { id } = newDatabase();
     return id;
 });
 
@@ -873,4 +782,39 @@ ipcMain.handle('db:query', (_event, id, sql, params) => {
         return result.map(normaliseRow);
     }
     return result;
+});
+
+ipcMain.handle('db:save', async (_event, id, namespace, scriptId, saveName, fileName, metadata) => {
+    if (typeof id !== 'string' || id.length === 0) {
+        throw new Error('Invalid connection id');
+    }
+    validateDbSegment(namespace, 'namespace');
+    validateDbSegment(scriptId, 'script id');
+    validateDbSegment(fileName, 'file name');
+    if (typeof saveName !== 'string' || saveName.length === 0) {
+        throw new Error('Invalid save name');
+    }
+    const { filePath } = await saveDatabase(id, SAVES_FOLDER, namespace, scriptId, saveName, fileName, metadata);
+    return filePath;
+});
+
+ipcMain.handle('db:load', async (_event, namespace, scriptId, fileName) => {
+    validateDbSegment(namespace, 'namespace');
+    validateDbSegment(scriptId, 'script id');
+    validateDbSegment(fileName, 'file name');
+    const { id } = await loadDatabaseFromStore(SAVES_FOLDER, namespace, scriptId, fileName);
+    return id;
+});
+
+ipcMain.handle('db:list', (_event, namespace, scriptId) => {
+    validateDbSegment(namespace, 'namespace');
+    validateDbSegment(scriptId, 'script id');
+    return listSaveFiles(SAVES_FOLDER, namespace, scriptId);
+});
+
+ipcMain.handle('db:delete', (_event, namespace, scriptId, fileName) => {
+    validateDbSegment(namespace, 'namespace');
+    validateDbSegment(scriptId, 'script id');
+    validateDbSegment(fileName, 'file name');
+    deleteDatabaseFromStore(SAVES_FOLDER, namespace, scriptId, fileName);
 });

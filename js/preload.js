@@ -133,28 +133,6 @@ contextBridge.exposeInMainWorld('eAPI', {
     },
 
     /**
-     * @param {string} namespace 
-     * @param {string} id 
-     * @param {string} saveName 
-     * @param {any} saveData 
-     * @param {any} saveIndexData 
-     * @returns {Promise<void>}
-     */
-    saveFile: (namespace, id, saveName, saveData, saveIndexData) => {
-        return ipcRenderer.invoke('saveFile', namespace, id, saveName, saveData, saveIndexData);
-    },
-
-    /**
-     * @param {string} namespace 
-     * @param {string} id 
-     * @param {string} saveName 
-     * @returns {Promise<void>}
-     */
-    deleteSaveFile: (namespace, id, saveName) => {
-        return ipcRenderer.invoke('deleteSaveFile', namespace, id, saveName);
-    },
-
-    /**
      * @returns {Promise<void>}
      */
     startDiffusionProcess: () => {
@@ -177,18 +155,19 @@ contextBridge.exposeInMainWorld('eAPI', {
     },
 
     /**
-     * Open or create a SQLite database (with sqlite-vec) at a path relative to
-     * DREAMENGINE_HOME. The path must start with "saves/".
-     * @param {string} dePath - e.g. "saves/mygame/world.db"
+     * Create a brand new, empty SQLite database (with sqlite-vec) in the OS
+     * temporary directory. Read/write it via runQuery, then persist it with
+     * saveDatabase.
      * @returns {Promise<string>} UUID that identifies this connection.
      */
-    openDatabase: (dePath) => {
-        return ipcRenderer.invoke('db:open', dePath);
+    newDatabase: () => {
+        return ipcRenderer.invoke('db:new');
     },
 
     /**
-     * Close the database connection identified by the given UUID.
-     * @param {string} id - UUID returned by openDatabase.
+     * Close the database connection identified by the given UUID and delete its
+     * temporary backing file.
+     * @param {string} id - UUID returned by newDatabase/loadDatabaseFromStore.
      * @returns {Promise<void>}
      */
     closeDatabase: (id) => {
@@ -202,12 +181,61 @@ contextBridge.exposeInMainWorld('eAPI', {
      * Float32Array — they are preserved as BLOBs. BLOB columns in returned rows
      * are delivered as Uint8Array.
      *
-     * @param {string} id - UUID returned by openDatabase.
+     * @param {string} id - UUID returned by newDatabase/loadDatabaseFromStore.
      * @param {string} sql - SQL statement to execute.
      * @param {Array<string | number | bigint | Uint8Array | null>} [params] - Bound parameters.
      * @returns {Promise<any[] | { changes: number, lastInsertRowid: number | bigint }>}
      */
     runQuery: (id, sql, params) => {
         return ipcRenderer.invoke('db:query', id, sql, params ?? []);
+    },
+
+    /**
+     * Persist a gzip-compressed, pristine copy of an open database into the
+     * saves folder and record it in the saves index. Overwrites any existing
+     * save at the same location.
+     * @param {string} id - UUID of the open connection to snapshot.
+     * @param {string} namespace - Script namespace (used as a subdirectory).
+     * @param {string} scriptId - Script id (used as a subdirectory).
+     * @param {string} saveName - Human-readable name of the save.
+     * @param {string} fileName - Base file name supplied by the user (no extension).
+     * @param {any} [metadata] - Arbitrary JSON metadata to store with the save.
+     * @returns {Promise<string>} Stored path, relative to the saves folder.
+     */
+    saveDatabase: (id, namespace, scriptId, saveName, fileName, metadata) => {
+        return ipcRenderer.invoke('db:save', id, namespace, scriptId, saveName, fileName, metadata);
+    },
+
+    /**
+     * Decompress a stored save into the temporary directory and open it,
+     * returning a connection UUID that can be used with runQuery/saveDatabase.
+     * @param {string} namespace - Script namespace the save belongs to.
+     * @param {string} scriptId - Script id the save belongs to.
+     * @param {string} fileName - Base file name supplied when saving (no extension).
+     * @returns {Promise<string>} UUID that identifies the opened connection.
+     */
+    loadDatabaseFromStore: (namespace, scriptId, fileName) => {
+        return ipcRenderer.invoke('db:load', namespace, scriptId, fileName);
+    },
+
+    /**
+     * List the saves recorded for a given script namespace/id.
+     * @param {string} namespace - Script namespace to filter by.
+     * @param {string} scriptId - Script id to filter by.
+     * @returns {Promise<Array<{ namespace: string, scriptId: string, filePath: string, saveName: string, metadata: any }>>}
+     */
+    listSaveFiles: (namespace, scriptId) => {
+        return ipcRenderer.invoke('db:list', namespace, scriptId);
+    },
+
+    /**
+     * Delete a stored save from disk and remove its entry from the saves index.
+     * @param {string} namespace - Script namespace the save belongs to.
+     * @param {string} scriptId - Script id the save belongs to.
+     * @param {string} fileName - Base file name supplied when saving (no extension).
+     * @returns {Promise<void>}
+     */
+    deleteDatabaseFromStore: (namespace, scriptId, fileName) => {
+        return ipcRenderer.invoke('db:delete', namespace, scriptId, fileName);
     },
 });
