@@ -1,6 +1,7 @@
 import { playCancelSound, playConfirmSound, playHoverSound } from '../../sound.js';
 import '../world-image.js';
-import { escapeHTML, formatName, namespaceLabel, renderCharacterDetails } from './character-details.js';
+import { escapeHTML, namespaceLabel } from './character-details.js';
+import { collectExposedCharacters, renderCharacterCard } from './character-card.js';
 
 /**
  * @typedef {Object} PartyMember
@@ -9,6 +10,7 @@ import { escapeHTML, formatName, namespaceLabel, renderCharacterDetails } from '
  * @property {string} scriptGivenId Stable identity of the exposed character.
  * @property {string} name Display name only.
  * @property {string} asset
+ * @property {number} [exposedCount] Number of characters exposed by this script.
  * @property {string} description
  * @property {Record<string, string | number | boolean>} details
  */
@@ -405,42 +407,7 @@ button:focus-visible { outline: 2px solid #ffb87a; outline-offset: 4px; }
 
     /** @param {PartyScript[]} scripts @returns {PartyOption[]} */
     collectCharacters(scripts) {
-        /** @type {PartyOption[]} */
-        const characters = [];
-        const seen = new Set();
-        for (const script of scripts) {
-            if (script.type !== 'characters') continue;
-            const exposed = Object.entries(script.exposeCharacters || {});
-            const system = script.namespace.startsWith('@');
-            const fallbackAsset = `${system ? '@' : ''}assets/${system ? script.namespace.slice(1) : script.namespace}/${script.id}/profile`;
-            for (const [name, definition] of exposed) {
-                const scriptGivenId = definition?.scriptGivenId;
-                if (typeof scriptGivenId !== 'string' || !scriptGivenId.trim() || seen.has(scriptGivenId)) continue;
-                seen.add(scriptGivenId);
-                characters.push({
-                    namespace: script.namespace,
-                    id: script.id,
-                    scriptGivenId,
-                    name,
-                    asset: definition.asset || fallbackAsset,
-                    description: definition.description || '',
-                    details: definition.details || {},
-                    exposedCount: exposed.length,
-                    disabledReason: this.disabledReason(script),
-                });
-            }
-        }
-        return characters.sort((a, b) => a.name.localeCompare(b.name));
-    }
-
-    /** @param {PartyScript} script */
-    disabledReason(script) {
-        if (script.metadata?.__placeholder) return 'Not ready — no content in the file.';
-        if (script.metadata?.__in_progress) return 'Not ready — still in progress.';
-        const language = script.language || 'en';
-        const engineLanguage = window.DREAMENGINE_LANGUAGE || 'en';
-        return language !== '*' && language.split('-')[0] !== engineLanguage.split('-')[0]
-            ? `Not compatible — script is in ${language}, engine is in ${engineLanguage}.` : '';
+        return collectExposedCharacters(scripts.filter(script => script.type === 'characters'));
     }
 
     /** @param {Element} groups */
@@ -491,17 +458,7 @@ button:focus-visible { outline: 2px solid #ffb87a; outline-offset: 4px; }
 
     /** @param {PartyOption} character */
     renderCard(character) {
-        return `
-            <button type="button" class="character-card party-card${character.disabledReason ? ' disabled' : ''}"
-                data-script-given-id="${escapeHTML(character.scriptGivenId)}" aria-pressed="false" ${character.disabledReason ? 'disabled' : ''}>
-                <span class="character-card-image"><app-asset-image image-url="${escapeHTML(character.asset)}" default-image="./images/default-profile.png"></app-asset-image></span>
-                <span class="character-card-name">${formatName(escapeHTML(character.name))}</span>
-                ${character.exposedCount > 1 ? '<span class="character-card-mcs">Multiple-character script</span>' : ''}
-                ${character.description ? `<span class="character-card-desc">${escapeHTML(character.description)}</span>` : ''}
-                ${renderCharacterDetails(character.details)}
-                ${character.disabledReason ? `<span class="character-card-disabled-note">${escapeHTML(character.disabledReason)}</span>` : ''}
-                <span class="party-selected-badge">✓ In party</span>
-            </button>`;
+        return renderCharacterCard(character, { party: true });
     }
 
     /** @param {string} scriptGivenId */
@@ -526,8 +483,8 @@ button:focus-visible { outline: 2px solid #ffb87a; outline-offset: 4px; }
 
     /** @param {PartyOption} character @returns {PartyMember} */
     memberReference(character) {
-        const { namespace, id, scriptGivenId, name, asset, description, details } = character;
-        return { namespace, id, scriptGivenId, name, asset, description, details: { ...details } };
+        const { namespace, id, scriptGivenId, name, asset, description, details, exposedCount } = character;
+        return { namespace, id, scriptGivenId, name, asset, description, details: { ...details }, exposedCount };
     }
 
     updateSelection() {

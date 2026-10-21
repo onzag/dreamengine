@@ -118,21 +118,20 @@ playBtn?.addEventListener('click', async () => {
         const detail = e.detail || {};
         const world = detail.world || {};
         const character = detail.character || {};
-        const isSelfInsert = character.scriptKey === '__self__';
+        const isSelfInsert = detail.identity ? detail.identity.scriptGivenId === null : character.scriptKey === '__self__';
 
         overlay.setAttribute("inert", "true");
 
         const game = document.createElement('app-game');
         game.setAttribute('character-name', character.name || '');
-        game.setAttribute('character-script-key', character.scriptKey || '');
+        if (character.scriptKey) game.setAttribute('character-script-key', character.scriptKey);
         game.setAttribute('character-asset', character.asset || '');
         game.setAttribute('is-self-insert', isSelfInsert ? 'true' : 'false');
+        game.setAttribute('character-script-given-id', detail.identity?.scriptGivenId || '');
+        game.setAttribute('play-mode', detail.identity?.mode || 'player');
         game.setAttribute('special-mode', detail.specialMode || '');
         game.setAttribute('voice-name', detail.voiceName || '');
-        game.setAttribute('default-narrator-voice', detail.defaultNarratorVoice || '@none');
-        game.setAttribute('default-narrator-voice-override', detail.defaultNarratorVoiceOverride ? 'true' : 'false');
-        game.setAttribute('default-narrator-voice-transcript', detail.defaultNarratorVoiceTranscript || '');
-        game.setAttribute('default-narrator-voice-tags', JSON.stringify(detail.defaultNarratorVoiceTags || []));
+        if (detail.narratorVoice !== undefined) game.setAttribute('narrator-voice', detail.narratorVoice);
         game.setAttribute('world-namespace', world.namespace || '');
         game.setAttribute('world-id', world.id || '');
         game.setAttribute('mode', detail.mode || '');

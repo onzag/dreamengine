@@ -4,6 +4,7 @@
  * @param {HTMLElement} game
  */
 export async function initializeNewGame(game) {
+    /** @type {string[]} */
     const partyCharacters = JSON.parse(game.getAttribute('party-characters') || '[]');
     const isSelfInsert = game.getAttribute('is-self-insert') === 'true';
     await window.ENGINE_WORKER_CLIENT.jsEngineClearExecutionOrder();
@@ -12,22 +13,35 @@ export async function initializeNewGame(game) {
         id: game.getAttribute('world-id') || '',
     });
 
-    const importedPartyScripts = new Set();
-    for (const partyMember of partyCharacters) {
-        const scriptKey = `${partyMember.namespace}/${partyMember.id}`;
-        if (importedPartyScripts.has(scriptKey)) continue;
-        importedPartyScripts.add(scriptKey);
-        await window.ENGINE_WORKER_CLIENT.jsEngineImportScript({
-            namespace: partyMember.namespace,
-            id: partyMember.id,
-        });
+    if (partyCharacters.length > 0) {
+        const infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMap();
+        const selectedIds = new Set(partyCharacters);
+        /** @type {Map<string, {namespace: string, id: string}>} */
+        const sources = new Map();
+        for (const info of Object.values(infoMap)) {
+            if (info.type !== 'characters') continue;
+            for (const exposed of Object.values(info.exposeCharacters || {})) {
+                if (selectedIds.has(exposed.scriptGivenId) && !sources.has(exposed.scriptGivenId)) {
+                    sources.set(exposed.scriptGivenId, { namespace: info.namespace, id: info.id });
+                }
+            }
+        }
+        const imported = new Set([game.getAttribute('world-namespace') + '/' + game.getAttribute('world-id')]);
+        for (const scriptGivenId of selectedIds) {
+            const source = sources.get(scriptGivenId);
+            if (!source) throw new Error('Selected party character ' + scriptGivenId + ' is not exposed.');
+            const key = source.namespace + '/' + source.id;
+            if (imported.has(key)) continue;
+            imported.add(key);
+            await window.ENGINE_WORKER_CLIENT.jsEngineImportScript(source);
+        }
     }
 
     const specialMode = game.getAttribute('special-mode') || '';
     /** @type {"player" | "narrator" | "voice-in-the-head"} */
-    const playMode = specialMode === 'narrator'
+    const playMode = game.getAttribute('play-mode') === 'narrator' || specialMode === 'narrator'
         ? 'narrator'
-        : specialMode === 'schizophrenia'
+        : game.getAttribute('play-mode') === 'voice-in-the-head' || specialMode === 'schizophrenia'
             ? 'voice-in-the-head'
             : 'player';
 
@@ -69,10 +83,10 @@ export async function initializeNewGame(game) {
             script: "",
             scriptGivenId: "",
             unknownName: (species || 'human') ? "Stranger" : "Unknown Creature",
-            name,
+            name: game.getAttribute('character-name') || name || 'Unnamed Dreamer',
             metadata: {
                 assets: {
-                    neutral: "profile",
+                    neutral: game.getAttribute('character-asset') || 'profile',
                 },
             },
             clothing: actualInitialClothing !== "auto" ? "custom" : (actualInitialClothingFitment === "tight" ? "auto-tight" : (actualInitialClothingFitment === "loose" ? "auto-loose" : "auto")),
@@ -112,62 +126,31 @@ export async function initializeNewGame(game) {
     const dreamStability = game.getAttribute('dream-stability') || 'stable';
     await window.ENGINE_WORKER_CLIENT.setDreamStability({ stability: dreamStability === "stable" ? 1 : (dreamStability === "unstable" ? 0.99 : 0.95) });
 
-    const defaultNarratorVoice = game.getAttribute('default-narrator-voice') || '';
-    const defaultNarratorVoiceOverride = (game.getAttribute('default-narrator-voice-override') || 'false') === 'true';
-    const defaultNarratorVoiceTranscript = game.getAttribute('default-narrator-voice-transcript') || '';
-    const defaultNarratorVoiceTags = JSON.parse(game.getAttribute('default-narrator-voice-tags') || '[]');
-    if (defaultNarratorVoiceOverride && defaultNarratorVoice) {
+    // Absence keeps every narrator setting supplied by the world untouched.
+    if (game.hasAttribute('narrator-voice')) {
         await window.ENGINE_WORKER_CLIENT.forceSetDEObject({
-            path: ["state", "__INTERNAL_NARRATOR_OVERRIDE"],
-            value: {
-                asset: defaultNarratorVoice,
-                transcript: defaultNarratorVoiceTranscript,
-                tags: defaultNarratorVoiceTags,
-            },
-        });
-    } else if (defaultNarratorVoice) {
-        await window.ENGINE_WORKER_CLIENT.forceSetDEObject({
-            path: ["state", "__INTERNAL_NARRATOR"],
-            value: {
-                asset: defaultNarratorVoice,
-                transcript: defaultNarratorVoiceTranscript,
-                tags: defaultNarratorVoiceTags,
-            },
+            path: ['state', '__INTERNAL_NARRATOR_OVERRIDE'],
+            value: { asset: game.getAttribute('narrator-voice') },
         });
     }
 
     // Only selected exposed characters join the party, even when their script adds others.
-    const engineScriptInfo = await window.ENGINE_WORKER_CLIENT.getEngineScriptInfo();
+    const scriptGivenId = game.getAttribute('character-script-given-id') || '';
+    const characters = partyCharacters.length > 0 || !isSelfInsert
+        ? Object.values(await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters'] })) : [];
     if (partyCharacters.length > 0) {
-        const characters = Object.values(await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters'] }));
-        for (const partyMember of partyCharacters) {
-            const character = characters.find(c => c.scriptGivenId === partyMember.scriptGivenId);
-            if (!partyMember.scriptGivenId || !character) {
-                throw new Error(`Selected party character ${partyMember.scriptGivenId || '(missing scriptGivenId)'} was not created.`);
+        for (const partyId of new Set(partyCharacters)) {
+            const character = characters.find(c => c.scriptGivenId === partyId);
+            if (!partyId || !character) {
+                throw new Error(`Selected party character ${partyId || '(missing scriptGivenId)'} was not created.`);
             }
             await window.ENGINE_WORKER_CLIENT.addCharacterToParty({ charId: character.id });
         }
     }
 
-    // check if we are taking a character's identity (i.e. not a self-insert but sharing a name with an existing character), and if so, assume that identity to get the correct starting location and inventory
-    const characterName = game.getAttribute('character-name') || '';
-
-    if (!isSelfInsert && characterName) {
-        if (characterName.startsWith('script://')) {
-            const [namespace, id] = characterName.substring('script://'.length).split('/');
-            const potentialChars = engineScriptInfo.charactersAdded.filter(c => c.scriptNamespace === namespace && c.scriptId === id);
-            if (potentialChars.length !== 1) {
-                throw new Error(`The character selected in Play must resolve to one character; script ${namespace}/${id} added ${potentialChars.length}.`);
-            }
-            await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ charId: potentialChars[0].charId });
-        } else {
-            const characters = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ["characters"] });
-            const scriptKey = game.getAttribute('character-script-key') || '';
-            const character = Object.values(characters).find(c =>
-                c.name === characterName && c.script === scriptKey
-            );
-            if (!character) throw new Error(`Character ${characterName} from script ${scriptKey} not found.`);
-            await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ charId: character.id });
-        }
+    if (!isSelfInsert) {
+        const character = characters.find(c => c.scriptGivenId === scriptGivenId);
+        if (!scriptGivenId || !character) throw new Error(`Selected identity ${scriptGivenId || '(missing scriptGivenId)'} was not created.`);
+        await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ charId: character.id });
     }
 }
