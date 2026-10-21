@@ -5,6 +5,7 @@
  * useless opaque "ErrorEvent".
  */
 
+import { SQLiteBridge } from "../engine/data-management/sqlite-bridge.js";
 import { INFERENCE_ADAPTERS } from "../engine/inference/all.js";
 import { getInternalDescriptionOfCharacter, getRelationship, getSysPromptForCharacter } from "../engine/util/character-info.js";
 import { getHistoryForCharacter } from "../engine/util/messages.js";
@@ -127,6 +128,7 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
 
     // ── Instances ───────────────────────────────────────────────────────
     const engine = new DEngine();
+    engine.setDataManager(new SQLiteBridge());
 
     /**
      * The resolver/listResolver here delegate to `currentResolver`/`currentListResolver`

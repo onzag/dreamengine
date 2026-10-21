@@ -96,7 +96,7 @@ function getCausantsHelperLocal(DE, character, stateName) {
     if (!stateForCharacter) {
         throw new Error(`Character with id ${character.id} not found in DE.stateFor`);
     }
-    
+
     const characterHistoryAndCurrent = [...stateForCharacter.history, stateForCharacter];
     /** @type {DEStateForCharacter | null} */
     let lastEntryWithActivation = null;
@@ -726,15 +726,17 @@ export const deEngineUtilsFn = (DE, engine) => ({
             // message.sender is a character id
             if (
                 (
-                    !conversationObject.participants.includes(message.sender) &&
-                    !(
-                        conversationObject.remoteParticipants &&
-                        conversationObject.remoteParticipants.includes(message.sender)
-                    ) &&
-                    !options.unsafeMode &&
-                    !message.isStoryMasterMessage
+                    !message.characterId || (
+                        !conversationObject.participants.includes(message.characterId) &&
+                        !(
+                            conversationObject.remoteParticipants &&
+                            conversationObject.remoteParticipants.includes(message.characterId)
+                        ) &&
+                        !options.unsafeMode &&
+                        !message.isStoryMasterMessage
+                    )
                 )) {
-                throw new Error(`Sender ${message.sender} is not a participant nor a remote participant of conversation ${conversationId}`);
+                throw new Error(`Sender ${message.characterId} is not a participant nor a remote participant of conversation ${conversationId}`);
             }
 
             const newMessageId = "MSG_" + crypto.randomUUID();
@@ -770,11 +772,11 @@ export const deEngineUtilsFn = (DE, engine) => ({
             }
 
             // message.sender is a character id
-            const senderChar = DE.stateFor[message.sender];
-            let senderIsGhost = options.ghost || message.isStoryMasterMessage || false;
+            const senderChar = message.characterId ? DE.stateFor[message.characterId] : null;
+            let senderIsGhost = !message.characterId || options.ghost || message.isStoryMasterMessage || false;
             if (!senderChar && !senderIsGhost) {
                 if (!options.unsafeMode) {
-                    throw new Error(`Sender character state not found for sender ${message.sender}`);
+                    throw new Error(`Sender character state not found for sender ${message.characterId}`);
                 }
                 senderIsGhost = true;
             }
@@ -785,16 +787,16 @@ export const deEngineUtilsFn = (DE, engine) => ({
             let newParticipants = [];
             /** @type {Array<string>} */
             let newRemoteParticipants = [];
-            if (!senderIsGhost) {
+            if (!senderIsGhost && message.characterId) {
                 if (options.isolation === "isolate") {
-                    newParticipants = Array.from(new Set([target, message.sender]));
+                    newParticipants = Array.from(new Set([target, message.characterId]));
                 } else {
                     const currentConversationIdOfSender = senderChar && options.isolation === "merge-groups" ? senderChar.conversationId : null;
                     const participantsOfCurrentConversationOfTarget = currentConversationIdOfTarget ? DE.conversations[currentConversationIdOfTarget].participants : [];
                     const remoteParticipantsOfCurrentConversationOfTarget = currentConversationIdOfTarget ? DE.conversations[currentConversationIdOfTarget].remoteParticipants : [];
                     const participantsOfCurrentConversationOfSender = currentConversationIdOfSender ? DE.conversations[currentConversationIdOfSender].participants : [];
                     const remoteParticipantsOfCurrentConversationOfSender = currentConversationIdOfSender ? DE.conversations[currentConversationIdOfSender].remoteParticipants : [];
-                    newParticipants = Array.from(new Set([target, message.sender, ...participantsOfCurrentConversationOfTarget, ...participantsOfCurrentConversationOfSender]));
+                    newParticipants = Array.from(new Set([target, message.characterId, ...participantsOfCurrentConversationOfTarget, ...participantsOfCurrentConversationOfSender]));
                     newRemoteParticipants = Array.from(new Set([...remoteParticipantsOfCurrentConversationOfTarget, ...remoteParticipantsOfCurrentConversationOfSender]));
 
                     newRemoteParticipants = newRemoteParticipants.filter(rp => !newParticipants.includes(rp));
@@ -1548,7 +1550,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             }
 
             // message.sender is a character id
-            return conversationToUse.messages.filter((m) => m.sender === char1Ref.id || m.sender === char2Ref.id).length <= 1;
+            return conversationToUse.messages.filter((m) => m.characterId === char1Ref.id || m.characterId === char2Ref.id).length <= 1;
         },
         getSocialGroup(char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
             const charRef = resolveCharacter(DE, char);
