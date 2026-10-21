@@ -5,15 +5,19 @@ engine.exports = {
     type: "characters",
     description: "A friendly robot for testing purposes.",
     language: "en",
-    metadata: stdapp.buildCharacterScriptMetadata({
-        __name: "Dema",
-        age: 5,
-        gender: "ambiguous",
-        sex: "none",
-        height: 175,
-        weight: 70,
-        species: "robot",
-        speciesType: "humanoid",
+    exposeCharacters: stdapp.buildCharacterExpose({
+        "Dema": {
+            details: {
+                age: 5,
+                gender: "ambiguous",
+                sex: "none",
+                height: 175,
+                weight: 70,
+                species: "robot",
+                speciesType: "humanoid",
+            },
+            scriptGivenId: "@characters/dema-basic/Dema",
+        },
     }),
     initialize(DE) {
         /**
@@ -455,7 +459,7 @@ engine.exports = {
                 stalkingInterest_35_50: demaTie(demaBase(bestFriendBondTemplate, "Best Friend", "not", "Dema is alarmed by the stalking and refuses affection regardless of how deep the bond is.", 0)),
                 sexualAbuseInterest_50_100: demaTie(demaBase(bestFriendBondTemplate, "Best Friend", "not", "Dema firmly rejects any contact from someone displaying abusive intent, regardless of history.", 0)),
             },
-        }));
+        }), "@characters/dema-basic/Dema");
 
         DE.utils.characters.newTrigger(Dema, {
             type: "yes_no",

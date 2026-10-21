@@ -2,9 +2,8 @@
  * Initialize a new world using setup attributes supplied by app-play.
  * Kept apart from the game controller and scene-selection presentation.
  * @param {HTMLElement} game
- * @param {(options: Array<{name: string, description: string, assetImage: string}>) => Promise<string>} selectCharacter
  */
-export async function initializeNewGame(game, selectCharacter) {
+export async function initializeNewGame(game) {
     const partyCharacters = JSON.parse(game.getAttribute('party-characters') || '[]');
     const isSelfInsert = game.getAttribute('is-self-insert') === 'true';
     await window.ENGINE_WORKER_CLIENT.jsEngineClearExecutionOrder();
@@ -13,7 +12,11 @@ export async function initializeNewGame(game, selectCharacter) {
         id: game.getAttribute('world-id') || '',
     });
 
+    const importedPartyScripts = new Set();
     for (const partyMember of partyCharacters) {
+        const scriptKey = `${partyMember.namespace}/${partyMember.id}`;
+        if (importedPartyScripts.has(scriptKey)) continue;
+        importedPartyScripts.add(scriptKey);
         await window.ENGINE_WORKER_CLIENT.jsEngineImportScript({
             namespace: partyMember.namespace,
             id: partyMember.id,
@@ -133,15 +136,16 @@ export async function initializeNewGame(game, selectCharacter) {
         });
     }
 
-    // adding characters that were added by those scripts as the party members, the reason is that
-    // a script can add many characters and not just one, so they all need to be added by name
-    // everything is dynamic so we don't necessarily know by the namespace and id
+    // Only selected exposed characters join the party, even when their script adds others.
     const engineScriptInfo = await window.ENGINE_WORKER_CLIENT.getEngineScriptInfo();
-    for (const partyMember of partyCharacters) {
-        for (const charInfo of engineScriptInfo.charactersAdded) {
-            if (charInfo.byId === partyMember.id && charInfo.byNamespace === partyMember.namespace) {
-                await window.ENGINE_WORKER_CLIENT.addCharacterToParty({ characterName: charInfo.name });
+    if (partyCharacters.length > 0) {
+        const characters = Object.values(await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters'] }));
+        for (const partyMember of partyCharacters) {
+            const character = characters.find(c => c.scriptGivenId === partyMember.scriptGivenId);
+            if (!partyMember.scriptGivenId || !character) {
+                throw new Error(`Selected party character ${partyMember.scriptGivenId || '(missing scriptGivenId)'} was not created.`);
             }
+            await window.ENGINE_WORKER_CLIENT.addCharacterToParty({ charId: character.id });
         }
     }
 
@@ -151,55 +155,19 @@ export async function initializeNewGame(game, selectCharacter) {
     if (!isSelfInsert && characterName) {
         if (characterName.startsWith('script://')) {
             const [namespace, id] = characterName.substring('script://'.length).split('/');
-            const potentialChars = engineScriptInfo.charactersAdded.filter(c => c.byNamespace === namespace && c.byId === id);
-            if (potentialChars.length === 0) {
-                throw new Error(`Character with script key ${namespace + "/" + id} did not add any characters to the world.`);
-            } else if (potentialChars.length === 1) {
-                const charInfo = potentialChars[0];
-                if (charInfo) {
-                    await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ characterName: charInfo.name });
-                } else {
-                    throw new Error(`Character with script key ${namespace + "/" + id} not found among characters added by the world and party scripts.` + JSON.stringify(engineScriptInfo.charactersAdded));
-                }
-            } else {
-                // The script added several characters. Let the player
-                // pick which one to assume the identity of, showing a
-                // portrait and short description for each (same
-                // mechanism used for the user's own sidebar info).
-                /** @type {Array<{ name: string, description: string, assetImage: string }>} */
-                const characterOptions = [];
-                for (const charInfo of potentialChars) {
-                    // eslint-disable-next-line no-await-in-loop
-                    const description = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                        path: ["utils", "getExternalDescriptionOfCharacter"],
-                        call: [{ char: charInfo.name }, true, false],
-                    });
-                    // eslint-disable-next-line no-await-in-loop
-                    const assetImage = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                        path: ["characters", charInfo.name, "metadata", "assets", "neutral"],
-                    }) || "";
-                    characterOptions.push({
-                        name: charInfo.name,
-                        description: typeof description === 'string' ? description : '',
-                        assetImage,
-                    });
-                }
-
-                // Show the picker only once the dream is being revealed,
-                // otherwise the white "falling asleep" overlay would sit
-                // on top of it.
-
-
-                const chosenCharacterName = await selectCharacter(characterOptions);
-                await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ characterName: chosenCharacterName });
-
-                // Keep the host attribute in sync so the rest of the UI
-                // (sidebar title, input placeholder, etc.) reflects the
-                // chosen character.
-                game.setAttribute('character-name', chosenCharacterName);
+            const potentialChars = engineScriptInfo.charactersAdded.filter(c => c.scriptNamespace === namespace && c.scriptId === id);
+            if (potentialChars.length !== 1) {
+                throw new Error(`The character selected in Play must resolve to one character; script ${namespace}/${id} added ${potentialChars.length}.`);
             }
+            await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ charId: potentialChars[0].charId });
         } else {
-            await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ characterName });
+            const characters = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ["characters"] });
+            const scriptKey = game.getAttribute('character-script-key') || '';
+            const character = Object.values(characters).find(c =>
+                c.name === characterName && c.script === scriptKey
+            );
+            if (!character) throw new Error(`Character ${characterName} from script ${scriptKey} not found.`);
+            await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ charId: character.id });
         }
     }
 }

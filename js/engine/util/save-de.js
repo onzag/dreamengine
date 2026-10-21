@@ -158,8 +158,6 @@ export function regenerateDEFromSavedDE(engine, savedDE) {
             properChar.state = char.state;
             properDE.characters[charId] = properChar;
         }
-
-        properDE.internalState["CHARACTER_UNCLAIMED_" + charId] = true;
     }
 
     for (const [locId, loc] of Object.entries(savedDE.world.locations)) {

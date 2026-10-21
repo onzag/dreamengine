@@ -31,9 +31,10 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
 /**
  * @typedef {Object} EngineInitializationInfo
  * @property {Array<{
- *    byNamespace: string;
- *    byId: string;
- *    name: string;
+ *    scriptNamespace: string;
+ *    scriptId: string;
+ *    charName: string;
+ *    charId: string;
  * }>} charactersAdded
  */
 
@@ -595,6 +596,10 @@ export class DEngine {
             throw new Error("DEngine not initialized");
         }
 
+        if (this.dataManager) {
+            await this.dataManager.closeCurrentDatabase();
+        }
+
         this.deObject = null;
         this.deObjectSafeBackup = null;
         this.initialized = false;
@@ -625,6 +630,22 @@ export class DEngine {
         this.backupDEObject();
     }
 
+    /**
+     * @param {string} scriptGivenId 
+     */
+    assumeCharacterIdentityByScriptGivenId(scriptGivenId) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+
+        const characterId = Object.keys(this.deObject.characters).find((charId) => this.getDEObject().characters[charId].scriptGivenId === scriptGivenId);
+        if (!characterId) {
+            throw new Error(`Character with scriptGivenId ${scriptGivenId} does not exist so its identity cannot be assumed.`);
+        }
+
+        this.assumeCharacterIdentity(characterId);
+    }
+
     backupDEObject() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
@@ -651,6 +672,21 @@ export class DEngine {
             return; // already in party
         }
         this.deObject.party.push(characterId);
+    }
+
+    /**
+     * @param {string} scriptGivenId
+     */
+    addCharacterToPartyByScriptGivenId(scriptGivenId) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        const characterId = Object.keys(this.deObject.characters).find((charId) => this.getDEObject().characters[charId].scriptGivenId === scriptGivenId);
+        if (!characterId) {
+            throw new Error(`Character with scriptGivenId ${scriptGivenId} does not exist so it cannot be added to the party.`);
+        }
+
+        this.addCharacterToParty(characterId);
     }
 
     /**
@@ -683,9 +719,10 @@ export class DEngine {
             const addedCharacters = [...newcharacterIds].filter(x => !currentcharacterIds.has(x));
             for (const charName of addedCharacters) {
                 this.engineScriptInfo.charactersAdded.push({
-                    byNamespace: script.scriptKey.split("/")[0],
-                    byId: script.scriptKey.split("/")[1],
-                    name: charName,
+                    scriptNamespace: script.scriptKey.split("/")[0],
+                    scriptId: script.scriptKey.split("/")[1],
+                    charName: charName,
+                    charId: this.deObject.characters[charName].id,
                 });
             }
             currentcharacterIds = newcharacterIds;

@@ -59,19 +59,7 @@ export class GameOverlay extends HTMLElement {
             }
             const introMessages = await this.getIntroMessages();
             if (!this.isConnected) return;
-            const ready = initializeNewGame(this, async options => {
-                await selector.introFinished;
-                if (!this.isConnected) throw new DOMException('Game closed', 'AbortError');
-                const characterPicker = new InitialSceneSelect();
-                this.root.querySelector('.game-root')?.appendChild(characterPicker);
-                characterPicker.render();
-                characterPicker.root.querySelector('.light-fade')?.remove();
-                try {
-                    return await characterPicker.prompt(Object.fromEntries(options.map(option => [option.name, option.description])), 'Who do you become?');
-                } finally {
-                    characterPicker.remove();
-                }
-            });
+            const ready = initializeNewGame(this);
             this.setupPromise = ready;
             this.startInitialThemeSong(ready, selector.revealStarted);
             const result = await selector.select({ ready, introMessages });

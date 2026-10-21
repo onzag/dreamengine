@@ -12,7 +12,7 @@ declare type FSSCreepyLoveDefinition = { sexualAbuseInterest_50_100?: FSSByFamil
 declare type FSSCreepyLoveDefinitionNoFamily = { sexualAbuseInterest_50_100?: FSSBase | undefined; stalkingInterest_35_50?: FSSBase | undefined; obsessiveInterest_20_35?: FSSBase | undefined; creepyInterest_10_20?: FSSBase | undefined; noRomance_0_10: FSSBase; };
 declare type FSS4DOptions = { type: "4d_standard"; familyCreepy: boolean; bondChangeFineTune?: number | undefined; bondChangeNegativityBias?: number | undefined; strangerBreakawayBondWeightAbsolute?: number | undefined; strangerBreakawayInteractionsCount?: number | undefined; strangerBreakawayTimeMinutes?: number | undefined; strangerNegativeMultiplier?: number | undefined; strangerPositiveMultiplier?: number | undefined; neutralInteractionBondChange?: number | undefined; foe_n100_n50: FSSLoveDefinition; hostile_n50_n35: FSSLoveDefinition; antagonistic_n35_n20: FSSLoveDefinition; unfriendly_n20_n10: FSSLoveDefinition; unpleasant_n10_0: FSSLoveDefinition; acquaintance_0_10: FSSLoveDefinition; friendly_10_20: FSSLoveDefinition; goodFriend_20_35: FSSLoveDefinition; closeFriend_35_50: FSSLoveDefinition; bestFriend_50_100: FSSLoveDefinition; strangerBad_n100_n5: FSSLoveDefinitionNoFamily; strangerNeutral_n5_5: FSSLoveDefinitionNoFamily; strangerGood_5_100: FSSLoveDefinitionNoFamily; };
 declare type FSS4DCreepyOptions = { type: "4d_creepy"; bondChangeFineTune?: number | undefined; bondChangeNegativityBias?: number | undefined; strangerBreakawayBondWeightAbsolute?: number | undefined; strangerBreakawayInteractionsCount?: number | undefined; strangerBreakawayTimeMinutes?: number | undefined; strangerNegativeMultiplier?: number | undefined; strangerPositiveMultiplier?: number | undefined; neutralInteractionBondChange?: number | undefined; foe_n100_n50: FSSCreepyLoveDefinition; hostile_n50_n35: FSSCreepyLoveDefinition; antagonistic_n35_n20: FSSCreepyLoveDefinition; unfriendly_n20_n10: FSSCreepyLoveDefinition; unpleasant_n10_0: FSSCreepyLoveDefinition; acquaintance_0_10: FSSCreepyLoveDefinition; friendly_10_20: FSSCreepyLoveDefinition; goodFriend_20_35: FSSCreepyLoveDefinition; closeFriend_35_50: FSSCreepyLoveDefinition; bestFriend_50_100: FSSCreepyLoveDefinition; strangerBad_n100_n5: FSSCreepyLoveDefinitionNoFamily; strangerNeutral_n5_5: FSSCreepyLoveDefinitionNoFamily; strangerGood_5_100: FSSCreepyLoveDefinitionNoFamily; };
-declare type CharacterScriptMetadataFields = { __name: string; __authors?: WorldCreditGeneralAuthor[] | undefined; age: number; gender: "male" | "female" | "ambiguous"; sex: "male" | "female" | "intersex" | "none"; species: string; speciesType: "humanoid" | "feral" | "animal"; height: number; weight: number; };
+declare type CharacterScriptMetadataFields = { __authors?: WorldCreditGeneralAuthor[] | undefined; };
 declare type WorldIntroBit = { title: string; subtitle: string; };
 declare type WorldCreditBit = { title: string; subtitle: string; };
 declare type WorldCreditGeneralAuthor = { name: string; role: string; };
@@ -36,14 +36,18 @@ declare type CharacterMetadata = CharacterMetadataFields & Record<string, any>;
 declare type WorldMetadata = WorldMetadataFields & Record<string, any>;
 declare type LocationMetadata = LocationMetadataFields & Record<string, any>;
 declare type ItemMetadata = ItemMetadataFields & Record<string, any>;
+declare type CharacterExposeDetails = { age: number; gender: "male" | "female" | "ambiguous"; sex: "male" | "female" | "intersex" | "none"; species: string; speciesType: "humanoid" | "feral" | "animal"; height: number; weight: number; };
+declare type CharacterExpose = { details: CharacterExposeDetails; scriptGivenId: string; asset?: string | undefined; displayName?: string | undefined; description?: string | undefined; };
 
 declare interface DEScriptRegistry {
     "@bond-systems/basic-bond-questions": DEScript & {
         name: string;
+        language: string;
         addBasicBondQuestions(DE: DEObject, character: DECompleteCharacterReference): void;
     };
     "@bond-systems/deteriorating-bonds": DEScript & {
         name: string;
+        language: string;
     };
     "@bond-systems/full-standard-bond-system": DEScript & {
         language: string;
@@ -103,7 +107,6 @@ declare interface DEScriptRegistry {
     };
     "@characters/dema-basic": DEScript & {
         language: string;
-        metadata: CharacterScriptMetadata;
     };
     "@std/standard-app": DEScript & {
         language: string;
@@ -114,6 +117,7 @@ declare interface DEScriptRegistry {
         buildLocationMetadata(metadata: LocationMetadata): LocationMetadata;
         buildLocationSlotMetadata(metadata: LocationMetadata): LocationMetadata;
         buildItemMetadata(metadata: ItemMetadata): ItemMetadata;
+        buildCharacterExpose(expose: Record<string, CharacterExpose>): DEScriptExposeCharacters;
     };
     "@worlds/simple-lunar-station": DEScript & {
         language: string;

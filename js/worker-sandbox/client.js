@@ -231,10 +231,18 @@ export class EngineWorkerClient {
      * @returns {Promise<import('../engine/index.js').EngineInitializationInfo>}
      */
     getEngineScriptInfo() { return this.#call("getEngineScriptInfo"); }
-    /** @param {{ characterName: string }} args */
+    /** @param {{ charId: string }} args */
     assumeCharacterIdentity(args) { return this.#call("assumeCharacterIdentity", args); }
-    /** @param {{ characterName: string }} args */
+    /**
+     * @param {{ charScriptGivenId: string }} args
+     */
+    assumeCharacterIdentityByScriptGivenId(args) { return this.#call("assumeCharacterIdentityByScriptGivenId", args); }
+    /** @param {{ charId: string }} args */
     addCharacterToParty(args) { return this.#call("addCharacterToParty", args); }
+    /**
+     * @param {{ charScriptGivenId: string }} args
+     */
+    addCharacterToPartyByScriptGivenId(args) { return this.#call("addCharacterToPartyByScriptGivenId", args); }
     /** @param {{ loadId: string }} args */
     initializeFromStoredState(args) { return this.#call("initializeFromStoredState", args); }
     /** @param {{ commandText: string }} args */

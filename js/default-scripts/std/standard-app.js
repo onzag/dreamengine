@@ -10,15 +10,7 @@
  * a non-standard use case
  * 
  * @typedef {Object} CharacterScriptMetadataFields
- * @property {string} __name - The name of the character, this is a special property that replaces the display name in the UI
  * @property {Array<WorldCreditGeneralAuthor>} [__authors] - The authors of the character, will display in credits if the world has credits
- * @property {number} age - The age of the character.
- * @property {"male" | "female" | "ambiguous"} gender - The gender of the character.
- * @property {"male" | "female" | "intersex" | "none"} sex - The sex of the character.
- * @property {string} species - The species of the character.
- * @property {"humanoid" | "feral" | "animal"} speciesType - The species type of the character.
- * @property {number} height - The height of the character in centimeters.
- * @property {number} weight - The weight of the character in kilograms.
  */
 
 /**
@@ -160,6 +152,26 @@
  * @typedef {ItemMetadataFields & Record<string, *>} ItemMetadata
  */
 
+/**
+ * @typedef {Object} CharacterExposeDetails
+ * @property {number} age - The age of the character.
+ * @property {"male" | "female" | "ambiguous"} gender - The gender of the character.
+ * @property {"male" | "female" | "intersex" | "none"} sex - The sex of the character.
+ * @property {string} species - The species of the character.
+ * @property {"humanoid" | "feral" | "animal"} speciesType - The species type of the character.
+ * @property {number} height - The height of the character in centimeters.
+ * @property {number} weight - The weight of the character in kilograms.
+ */
+
+/**
+ * @typedef {Object} CharacterExpose
+ * @property {CharacterExposeDetails} details - The details of the character.
+ * @property {string} scriptGivenId - The script-given ID of the character, used to identify the character in the script.
+ * @property {string} [asset] - The script-given name of the character, used to identify the character in the script.
+ * @property {string} [displayName] - The display name of the character, used to display the character in the UI.
+ * @property {string} [description] - The description of the character, used to display the character in the UI.
+ */
+
 engine.exports = {
     type: "misc",
     language: "*",
@@ -172,8 +184,6 @@ engine.exports = {
      * @returns {CharacterScriptMetadata}
      */
     buildCharacterScriptMetadata: (metadata) => {
-        // @ts-ignore
-        metadata.__single_character = true;
         return metadata;
     },
 
@@ -225,5 +235,13 @@ engine.exports = {
      */
     buildItemMetadata: (metadata) => {
         return metadata;
+    },
+
+    /**
+     * @param {Record<string, CharacterExpose>} expose
+     * @returns {DEScriptExposeCharacters}
+     */
+    buildCharacterExpose: (expose) => {
+        return expose;
     },
 }

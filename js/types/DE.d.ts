@@ -4336,13 +4336,16 @@ declare type DEScriptExposeProperties = Record<string, {
     propertyLocation: "world" | "characters" | "items";
 }>;
 
-declare type DEScriptExposeCharacters = Record<string, {
+declare type DEScriptExposeCharacter = {
     asset?: string;
+    scriptGivenId: string;
     description?: string;
     details: {
         [key: string]: string | number | boolean;
     };
-}>;
+}
+
+declare type DEScriptExposeCharacters = Record<string, DEScriptExposeCharacter>;
 
 declare interface DEScript {
     type: "world" | "characters" | "world-mechanic" | "character-mechanic" | "misc";

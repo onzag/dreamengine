@@ -274,13 +274,23 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
             return engine.engineScriptInfo;
         },
 
-        async assumeCharacterIdentity({ characterName }) {
-            await engine.assumeCharacterIdentity(characterName);
+        async assumeCharacterIdentity({ charId }) {
+            await engine.assumeCharacterIdentity(charId);
             return { ok: true };
         },
 
-        async addCharacterToParty({ characterName }) {
-            await engine.addCharacterToParty(characterName);
+        async assumeCharacterIdentityByScriptGivenId({ charScriptGivenId }) {
+            await engine.assumeCharacterIdentityByScriptGivenId(charScriptGivenId);
+            return { ok: true };
+        },
+
+        async addCharacterToParty({ charId }) {
+            await engine.addCharacterToParty(charId);
+            return { ok: true };
+        },
+
+        async addCharacterToPartyByScriptGivenId({ charScriptGivenId }) {
+            await engine.addCharacterToPartyByScriptGivenId(charScriptGivenId);
             return { ok: true };
         },
 
