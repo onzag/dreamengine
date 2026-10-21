@@ -6,6 +6,7 @@
  */
 
 import { SQLiteBridge } from "../engine/data-management/sqlite-bridge.js";
+import { createDatabaseController } from "./database-controller.js";
 import { INFERENCE_ADAPTERS } from "../engine/inference/all.js";
 import { getInternalDescriptionOfCharacter, getRelationship, getSysPromptForCharacter } from "../engine/util/character-info.js";
 import { getHistoryForCharacter } from "../engine/util/messages.js";
@@ -128,7 +129,9 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
 
     // ── Instances ───────────────────────────────────────────────────────
     const engine = new DEngine();
-    engine.setDataManager(new SQLiteBridge());
+    engine.setDataManager(new SQLiteBridge(createDatabaseController((method, args) =>
+        requestMainThreadCall("databaseCall", { method, args })
+    )));
 
     /**
      * The resolver/listResolver here delegate to `currentResolver`/`currentListResolver`
@@ -219,6 +222,11 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
             return engine.getLastSafeState();
         },
 
+        async saveCurrentState({ saveName, metadata }) {
+            await engine.saveCurrentState(saveName, metadata);
+            return { ok: true };
+        },
+
         async setWorldRulesDisabled({ disabled }) {
             engine.setWorldRulesDisabled(disabled);
             return { ok: true };
@@ -233,35 +241,7 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
             const adapter = await INFERENCE_ADAPTERS[adapterName].build(engine, (v) => config[v]);
             engine.setInferenceAdapter(adapter);
             adapter.addBlockingEventListenerBeforeInference(async () => {
-                /**
-                 * @param {string} event
-                 * @returns {Promise<void>}
-                 */
-                const requestPrepareCall = (event) => {
-                    const callId = ++mainThreadCallId;
-                    return new Promise((resolve, reject) => {
-                        const timeoutId = setTimeout(() => {
-                            pendingMainThreadCalls.delete(callId);
-                            reject(new Error(`${event} call timed out after 30s`));
-                        }, 30_000);
-
-                        pendingMainThreadCalls.set(callId, {
-                            resolve: () => {
-                                clearTimeout(timeoutId);
-                                resolve();
-                            },
-                            reject: (err) => {
-                                clearTimeout(timeoutId);
-                                reject(err);
-                            },
-                        });
-                        self.postMessage({ type: "event", event, data: { callId } });
-                    });
-                };
-
-                await Promise.all([
-                    requestPrepareCall("prepareForInference"),
-                ]);
+                await requestMainThreadCall("prepareForInference");
             });
             return { ok: true };
         },
@@ -304,8 +284,8 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
             return { ok: true };
         },
 
-        async initializeFromJSONState({ json }) {
-            await engine.initializeFromJSONState(json);
+        async initializeFromStoredState({ loadId }) {
+            await engine.initializeFromStoredState(loadId);
             return { ok: true };
         },
 
@@ -772,8 +752,40 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
     /** @type {number} */
     let mainThreadCallId = 0;
 
-    /** @type {Map<number, {resolve: () => void, reject: (err: Error) => void}>} */
+    /** @type {Map<number, {resolve: (result: any) => void, reject: (err: Error) => void}>} */
     const pendingMainThreadCalls = new Map();
+
+    /**
+     * @param {string} event
+     * @param {Record<string, any>} [data]
+     * @returns {Promise<any>}
+     */
+    function requestMainThreadCall(event, data = {}) {
+        const callId = ++mainThreadCallId;
+        return new Promise((resolve, reject) => {
+            const timeoutId = setTimeout(() => {
+                pendingMainThreadCalls.delete(callId);
+                reject(new Error(`${event} call timed out after 30s`));
+            }, 30_000);
+            pendingMainThreadCalls.set(callId, {
+                resolve: (result) => {
+                    clearTimeout(timeoutId);
+                    resolve(result);
+                },
+                reject: (err) => {
+                    clearTimeout(timeoutId);
+                    reject(err);
+                },
+            });
+            try {
+                self.postMessage({ type: "event", event, data: { ...data, callId } });
+            } catch (err) {
+                clearTimeout(timeoutId);
+                pendingMainThreadCalls.delete(callId);
+                reject(err);
+            }
+        });
+    }
 
     /** @type {number} */
     let guiderQuestionId = 0;
@@ -929,7 +941,7 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
     self.onmessage = async (e) => {
         const msg = e.data;
 
-        // Handle stopDiffusionProcess response from main thread
+        // Handle responses to worker requests, including database query results.
         if (msg.type === "mainThreadCallResponse") {
             const { callId, error } = msg;
             const pending = pendingMainThreadCalls.get(callId);
@@ -938,7 +950,7 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
                 if (error) {
                     pending.reject(new Error(error));
                 } else {
-                    pending.resolve();
+                    pending.resolve(msg.result);
                 }
             }
             return;

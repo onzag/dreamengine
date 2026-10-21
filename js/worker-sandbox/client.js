@@ -131,6 +131,10 @@ export class EngineWorkerClient {
                     case "cardTypeWizardComplete":
                         this.onCardTypeWizardComplete?.(msg.data);
                         break;
+                    case "databaseCall": {
+                        void this.#handleDatabaseCall(msg.data);
+                        break;
+                    }
                     case "prepareForInference": {
                         const { callId } = msg.data;
                         window.API.prepareFor("inference").then(() => {
@@ -147,6 +151,41 @@ export class EngineWorkerClient {
     }
 
     // ── Internal helpers ────────────────────────────────────────────
+
+    /**
+     * Only expose the database operations needed by the worker's controller.
+     * @param {{ callId: number, method: string, args: any[] }} data
+     */
+    async #handleDatabaseCall({ callId, method, args }) {
+        try {
+            let result;
+            switch (method) {
+                case "newDatabase":
+                    result = await window.API.newDatabase();
+                    break;
+                case "loadDatabaseFromStore":
+                    result = await window.API.loadDatabaseFromStore(args[0], args[1], args[2]);
+                    break;
+                case "saveDatabase":
+                    result = await window.API.saveDatabase(args[0], args[1], args[2], args[3], args[4], args[5]);
+                    break;
+                case "closeDatabase":
+                    result = await window.API.closeDatabase(args[0]);
+                    break;
+                case "runQuery":
+                    result = await window.API.runQuery(args[0], args[1], args[2]);
+                    break;
+                default:
+                    throw new Error(`Unknown database method: ${method}`);
+            }
+            this.#worker.postMessage({ type: "mainThreadCallResponse", callId, result });
+        } catch (err) {
+            this.#worker.postMessage({
+                type: "mainThreadCallResponse", callId,
+                error: err instanceof Error ? err.message : String(err),
+            });
+        }
+    }
 
     /**
      * @param {string} method
@@ -178,7 +217,9 @@ export class EngineWorkerClient {
      */
     setScriptList(args) { return this.#call("setScriptList", args); }
 
-    getLastSafeState() { return this.#call("getLastSafeState"); }
+    /** @param {{ saveName: string, metadata?: any }} args */
+    saveCurrentState(args) { return this.#call("saveCurrentState", args); }
+
     /** @param {{ disabled: boolean }} args */
     setWorldRulesDisabled(args) { return this.#call("setWorldRulesDisabled", args); }
     enableSchizophreniaModeForUser() { return this.#call("enableSchizophreniaModeForUser"); }
@@ -194,8 +235,8 @@ export class EngineWorkerClient {
     assumeCharacterIdentity(args) { return this.#call("assumeCharacterIdentity", args); }
     /** @param {{ characterName: string }} args */
     addCharacterToParty(args) { return this.#call("addCharacterToParty", args); }
-    /** @param {{ json: * }} args */
-    initializeFromJSONState(args) { return this.#call("initializeFromJSONState", args); }
+    /** @param {{ loadId: string }} args */
+    initializeFromStoredState(args) { return this.#call("initializeFromStoredState", args); }
     /** @param {{ commandText: string }} args */
     executeCommand(args) { return this.#call("executeCommand", args); }
     requestTurn() { return this.#call("requestTurn"); }

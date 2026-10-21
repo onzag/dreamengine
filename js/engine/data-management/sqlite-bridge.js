@@ -1,4 +1,4 @@
-import { BaseDataManager } from "./base";
+import { BaseDataManager } from "./base.js";
 
 export class SQLiteBridge extends BaseDataManager {
     

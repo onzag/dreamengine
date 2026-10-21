@@ -436,15 +436,23 @@ export class DEngine {
     }
 
     /**
-     * @param {*} deObjectJSON 
+     * @param {*} loadName
+     * @returns {Promise<void>}
      */
-    async initializeFromJSONState(deObjectJSON) {
+    async initializeFromStoredState(loadName) {
         if (this.initialized) {
             throw new Error("DEngine already initialized");
+        } else if (!this.dataManager) {
+            throw new Error("Data manager not set, cannot initialize from stored state");
         }
+
+        await this.dataManager.loadDatabase(loadName);
+        const deObjectJSON = await this.dataManager.getDEObject();
+
         this.engineScriptInfo = {
             charactersAdded: [],
         };
+        
         this.deObject = deObjectJSON;
         if (!this.deObject) {
             throw new Error("Invalid DEObject JSON");
@@ -483,6 +491,19 @@ export class DEngine {
         fixed.__scripts = this.jsEngine.scriptOrder;
 
         return fixed;
+    }
+
+    /**
+     * @param {string} saveName 
+     * @param {any} [metadata] 
+     * @returns {Promise<void>}
+     */
+    async saveCurrentState(saveName, metadata) {
+        if (!this.dataManager) {
+            throw new Error("Data manager not set, cannot save current state");
+        }
+        await this.dataManager.setDEObject(this.getLastSafeState());
+        return this.dataManager.saveCurrentDatabase(saveName, metadata);
     }
 
     /**
