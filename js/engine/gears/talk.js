@@ -554,13 +554,15 @@ export async function talk(engine, character, options) {
 
     const conversationObject = engine.deObject.conversations[charState.conversationId];
 
-    const participantsThatJustStartedTalkingTo = conversationObject.participants.filter((participantName) => {
+    const participantsThatJustStartedTalkingTo = [];
+    for (const participantName of conversationObject.participants) {
         if (participantName === character.name) {
-            return false;
+            continue;
         }
-
-        return engine.getDEObject().utils.justStartedTalkingToEachOther(character.name, participantName);
-    });
+        if (await engine.getDEObject().utils.bonds.justStartedTalkingToEachOther(character.name, participantName)) {
+            participantsThatJustStartedTalkingTo.push(participantName);
+        }
+    }
 
     for (const participantName of conversationObject.participants) {
         const participantCharacterObject = engine.deObject.characters[participantName];

@@ -624,7 +624,7 @@ class GameOverlay extends HTMLElement {
                 // adding characters that were added by those scripts as the party members, the reason is that
                 // a script can add many characters and not just one, so they all need to be added by name
                 // everything is dynamic so we don't necessarily know by the namespace and id
-                const engineScriptInfo = await window.ENGINE_WORKER_CLIENT.getEngineScriptInfo();
+                const engineScriptInfo = await window.ENGINE_WORKER_CLIENT.x();
                 for (const partyMember of partyCharacters) {
                     for (const charInfo of engineScriptInfo.charactersAdded) {
                         if (charInfo.byId === partyMember.id && charInfo.byNamespace === partyMember.namespace) {

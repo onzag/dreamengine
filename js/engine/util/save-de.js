@@ -16,7 +16,6 @@ export function removeUnnecessaryPropertiesFromDE(object) {
         state: object.state,
         stateFor: object.stateFor,
         internalState: object.internalState,
-        conversations: object.conversations,
         bonds: object.bonds,
         gameOver: object.gameOver,
         importantEvents: object.importantEvents,
@@ -160,6 +159,7 @@ export function regenerateDEFromSavedDE(engine, savedDE) {
         }
     }
 
+    // regenerate locations with whatever properties
     for (const [locId, loc] of Object.entries(savedDE.world.locations)) {
         properDE.world.locations[locId] = {
             state: loc.state,
@@ -183,6 +183,7 @@ export function regenerateDEFromSavedDE(engine, savedDE) {
         };
     }
 
+    // regenerate connections
     for (const [connId, conn] of Object.entries(savedDE.world.connections)) {
         properDE.world.connections[connId] = {
             state: conn.state,

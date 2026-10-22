@@ -227,10 +227,6 @@ export class EngineWorkerClient {
     /** @param {{ user: DEMinimalCharacterReference | null, playMode: "player" | "narrator" | "voice-in-the-head" }} args */
     initialize(args) { return this.#call("initialize", args); }
     endSimulation() { return this.#call("endSimulation"); }
-    /**
-     * @returns {Promise<import('../engine/index.js').EngineInitializationInfo>}
-     */
-    getEngineScriptInfo() { return this.#call("getEngineScriptInfo"); }
     /** @param {{ charId: string }} args */
     assumeCharacterIdentity(args) { return this.#call("assumeCharacterIdentity", args); }
     /**

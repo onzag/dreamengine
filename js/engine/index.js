@@ -29,16 +29,6 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "ooc"];
 
 /**
- * @typedef {Object} EngineInitializationInfo
- * @property {Array<{
- *    scriptNamespace: string;
- *    scriptId: string;
- *    charName: string;
- *    charId: string;
- * }>} charactersAdded
- */
-
-/**
  * @typedef {Object} EngineConversationEventBase
  * @property {string} conversationId
  * @property {string} messageId
@@ -354,14 +344,35 @@ export class DEngine {
          */
         this.disabledWorldRules = false;
 
-        /**
-         * @type {EngineInitializationInfo}
-         */
-        this.engineScriptInfo = {
-            charactersAdded: [],
-        };
-
         this.getDEObject = this.getDEObject.bind(this);
+    }
+
+    /**
+     * 
+     * @param {Omit<DEConversation, "id">} conversationToBeGenerated 
+     * @returns {Promise<Record<string, any>>}
+     */
+    async callConversationMetadataGenerator(conversationToBeGenerated) {
+        if (!this.jsEngine) {
+            throw new Error("JS engine not set");
+        }
+
+        // TODO
+        return {};
+    }
+
+    /**
+     * 
+     * @param {Omit<DEConversationMessage, "id">} conversationMessageToBeGenerated 
+     * @returns {Promise<Record<string, any>>}
+     */
+    async callConversationMessageMetadataGenerator(conversationMessageToBeGenerated) {
+        if (!this.jsEngine) {
+            throw new Error("JS engine not set");
+        }
+
+        // TODO
+        return {};
     }
 
     /**
@@ -449,11 +460,6 @@ export class DEngine {
 
         await this.dataManager.loadDatabase(loadName);
         const deObjectJSON = await this.dataManager.getDEObject();
-
-        this.engineScriptInfo = {
-            charactersAdded: [],
-        };
-        
         this.deObject = deObjectJSON;
         if (!this.deObject) {
             throw new Error("Invalid DEObject JSON");
@@ -462,6 +468,11 @@ export class DEngine {
         }
 
         this.deObject = regenerateDEFromSavedDE(this, this.deObject);
+        const scriptOrder = await this.dataManager.getScriptOrder();
+
+        for (const script of scriptOrder || []) {
+            await this.jsEngine.importScript(script.split("/")[0] || '', script.split("/")[1] || '');
+        }
 
         this.backupDEObject();
 
@@ -481,19 +492,6 @@ export class DEngine {
         this.initialized = true;
     }
 
-    getLastSafeState() {
-        if (!this.deObjectSafeBackup) {
-            throw new Error("DEngine safe state not found");
-        } else if (!this.jsEngine) {
-            throw new Error("JS Engine not set, cannot get last safe state");
-        }
-
-        const fixed = removeUnnecessaryPropertiesFromDE(this.deObjectSafeBackup);
-        fixed.__scripts = this.jsEngine.scriptOrder;
-
-        return fixed;
-    }
-
     /**
      * @param {string} saveName 
      * @param {any} [metadata] 
@@ -502,8 +500,16 @@ export class DEngine {
     async saveCurrentState(saveName, metadata) {
         if (!this.dataManager) {
             throw new Error("Data manager not set, cannot save current state");
+        } else if (!this.deObjectSafeBackup) {
+            throw new Error("DEngine safe state not found");
+        } else if (!this.jsEngine) {
+            throw new Error("JS Engine not set, cannot get last safe state");
         }
-        await this.dataManager.setDEObject(this.getLastSafeState());
+        const lastSafe = removeUnnecessaryPropertiesFromDE(this.deObjectSafeBackup);
+        const scriptOrder = this.jsEngine.scriptOrder;
+
+        await this.dataManager.setDEObject(lastSafe);
+        await this.dataManager.setScriptOrder(scriptOrder);
         return this.dataManager.saveCurrentDatabase(saveName, metadata);
     }
 
@@ -516,10 +522,9 @@ export class DEngine {
             throw new Error("DEngine already initialized");
         }
 
-        this.engineScriptInfo = {
-            charactersAdded: [],
-        };
-
+        if (!this.dataManager) {
+            throw new Error("Data manager not set, cannot initialize");
+        }
         /**
          * @type {DETimeDescription}
          */
@@ -549,7 +554,6 @@ export class DEngine {
                 fem: [],
                 amb: [],
             },
-            conversations: {},
             stateFor: {},
             initialTime: defaultTimeDEFormat,
             currentTime: { ...defaultTimeDEFormat },
@@ -568,10 +572,10 @@ export class DEngine {
             stability: 0,
             counters: {
                 characterId: 0,
-                conversationId: 0,
                 itemId: {},
             },
             utils:  /** @type {*} */ (/** @type {unknown} */ (null)),
+            database: this.dataManager.getDatabaseForDEObject(),
         };
 
         // @ts-ignore
@@ -604,9 +608,6 @@ export class DEngine {
         this.deObjectSafeBackup = null;
         this.initialized = false;
         this.disabledWorldRules = false;
-        this.engineScriptInfo = {
-            charactersAdded: [],
-        };
         this.executingCycle = false;
         this.talkingTurnRequested = false;
     }
@@ -701,7 +702,6 @@ export class DEngine {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
-        let currentcharacterIds = new Set(Object.keys(this.deObject.characters).filter((c) => !this.deObject?.internalState["CHARACTER_UNCLAIMED_" + c]));
         let handled = false;
         for (const script of scripts) {
             let breakCycle = false;
@@ -714,18 +714,6 @@ export class DEngine {
                     handled = true;
                 }
             }
-            const newcharacterIds = new Set(Object.keys(this.deObject.characters).filter((c) => !this.deObject?.internalState["CHARACTER_UNCLAIMED_" + c]));
-            // get the difference between the sets to find out which characters were added by this script
-            const addedCharacters = [...newcharacterIds].filter(x => !currentcharacterIds.has(x));
-            for (const charName of addedCharacters) {
-                this.engineScriptInfo.charactersAdded.push({
-                    scriptNamespace: script.scriptKey.split("/")[0],
-                    scriptId: script.scriptKey.split("/")[1],
-                    charName: charName,
-                    charId: this.deObject.characters[charName].id,
-                });
-            }
-            currentcharacterIds = newcharacterIds;
             if (breakCycle) {
                 break;
             }
@@ -766,8 +754,8 @@ export class DEngine {
 
             await this.callFunctionInScripts(scripts, (script) => `Initializing script ${script.scriptKey} of type ${type}`, "initialize", { untilTrue: false }, this.deObject);
 
-            for (const charName in this.deObject.characters) {
-                const character = this.deObject.characters[charName];
+            for (const charId in this.deObject.characters) {
+                const character = this.deObject.characters[charId];
                 if (INVALID_NAMES.includes(character.name.toLowerCase())) {
                     throw new Error(`Character name ${character.name} is invalid or reserved.`);
                 }
@@ -777,19 +765,17 @@ export class DEngine {
                     throw new Error(`Character name ${character.name} is invalid. It must start with a capital letter and contain only letters and spaces.`);
                 }
 
-                const charState = this.deObject.stateFor[charName];
+                const charState = this.deObject.stateFor[charId];
                 if (!charState) {
                     // adding a char state for this character by default
                     const futureLocation = this.pickRandomLocationForCharacter(character);
-                    this.deObject.stateFor[charName] = {
-                        history: [],
+                    this.deObject.stateFor[charId] = {
                         carrying: [],
                         carryingCharactersDirectly: [],
                         conversationId: null,
                         dead: false,
                         deadEnded: false,
                         deadEndReason: null,
-                        id: crypto.randomUUID(),
                         location: futureLocation.location,
                         locationSlot: futureLocation.locationSlot,
                         posture: "standing",
@@ -801,9 +787,9 @@ export class DEngine {
                     }
                 }
 
-                const bonds = this.deObject.bonds[charName];
+                const bonds = this.deObject.bonds[charId];
                 if (!bonds) {
-                    this.deObject.bonds[charName] = {
+                    this.deObject.bonds[charId] = {
                         active: [],
                         ex: [],
                     };
@@ -980,11 +966,9 @@ export class DEngine {
         };
 
         this.deObject.stateFor[character.id] = {
-            history: [],
             dead: false,
             deadEnded: false,
             deadEndReason: null,
-            id: crypto.randomUUID(),
             location: location,
             locationSlot: locationSlot,
             states: [],
@@ -1141,7 +1125,7 @@ export class DEngine {
                 char: this.deObject.characters[this.deObject.user],
             });
 
-            const conversation = this.deObject.utils.conversations.newConversation({
+            const conversation = await this.deObject.utils.conversations.newConversation({
                 location: sceneObject.location,
                 participants: expectedParticipants,
                 pseudoConversation: false,
@@ -1151,7 +1135,7 @@ export class DEngine {
                 unsafeMode: false,
             });
 
-            this.deObject.utils.conversations.addMessage(conversation.id, {
+            await this.deObject.utils.conversations.addMessage(conversation.id, {
                 canOnlyBeSeenByCharacter: null,
                 content: [
                     {
@@ -1173,6 +1157,7 @@ export class DEngine {
                 emotionalRange: null,
                 interactingCharacters: [],
                 rumors: [],
+                metadata: {},
             });
 
             await this.informDEObjectUpdated();
@@ -1194,7 +1179,7 @@ export class DEngine {
                 // some normalization
                 const actualMessages = messages.map((text) => text.trim()).filter((text) => text.length > 0).join("\n\n").split("\n\n");
 
-                this.deObject.utils.conversations.addMessage(conversation.id, {
+                await this.deObject.utils.conversations.addMessage(conversation.id, {
                     canOnlyBeSeenByCharacter: userOnly ? this.deObject.user : null,
                     content: actualMessages.map((text) => ({ type: "narration", fragments: [text] })),
                     characterId: null,
@@ -1209,6 +1194,7 @@ export class DEngine {
                     emotionalRange: null,
                     interactingCharacters: [],
                     rumors: [],
+                    metadata: {},
                 });
 
                 await this.informDEObjectUpdated();

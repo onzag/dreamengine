@@ -175,12 +175,26 @@ export async function saveDatabase(id, savesRoot, namespace, scriptId, saveName,
  */
 export async function loadDatabaseFromStore(savesRoot, namespace, scriptId, fileName) {
   const relPath = path.join(namespace, scriptId, fileName + ZIP_EXT);
-  const absPath = path.join(savesRoot, relPath);
+  const resolvedRoot = path.resolve(savesRoot);
+  const absPath = path.resolve(resolvedRoot, relPath);
+  /** @param {string} root @param {string} target */
+  const assertInsideRoot = (root, target) => {
+    const relative = path.relative(root, target);
+    if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      throw new Error("Save file must be inside savesRoot.");
+    }
+  };
+  assertInsideRoot(resolvedRoot, absPath);
   if (!fs.existsSync(absPath)) {
     throw new Error(`Save file does not exist: ${relPath.split(path.sep).join("/")}`);
   }
 
-  const raw = zlib.gunzipSync(fs.readFileSync(absPath));
+  // Resolve symlinks and junctions as well, so an in-root link cannot escape.
+  const realRoot = fs.realpathSync(resolvedRoot);
+  const realPath = fs.realpathSync(absPath);
+  assertInsideRoot(realRoot, realPath);
+
+  const raw = zlib.gunzipSync(fs.readFileSync(realPath));
   const id = randomUUID();
   const tempPath = path.join(os.tmpdir(), `dreamengine-${id}.sqlite`);
   fs.writeFileSync(tempPath, raw);

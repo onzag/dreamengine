@@ -2571,11 +2571,21 @@ declare interface DEItem {
 
 declare interface DESeenItem {
     name: string;
+    id: string;
     amount: number;
-    location: string;
-    locationSlot: string;
     carriedByCharacter: string | null;
     wornByCharacter: string | null;
+    insideOrOnTopItem: {
+        id: string;
+        name: string;
+        relation: "inside" | "on_top";
+        relativePosition?: string | null;
+    } | null;
+}
+
+declare interface DESeenCharacter {
+    name: string;
+    id: string;
 }
 
 declare type DEPosture =
@@ -2595,7 +2605,6 @@ declare type DEPosture =
     "swimming";
 
 declare interface DEStateForCharacter {
-    id: string;
     location: string;
     locationSlot: string;
     states: Array<DEApplyingState>;
@@ -2634,18 +2643,7 @@ declare interface DEStateForCharacter {
      * 
      * These can be subject to memory
      */
-    seenCharacters: Array<string>;
-}
-
-declare interface DEStateForCharacterWithHistoricInformation extends DEStateForCharacter {
-    /**
-     * The ids of characters that were surrounding this character when this state was active, reduced description
-     */
-    surroundingNonStrangers: Array<string>;
-    /**
-     * The ids of characters that were surrounding this character when this state was active, reduced description
-     */
-    surroundingStrangers: Array<string>;
+    seenCharacters: Array<DESeenCharacter>;
 }
 
 declare interface DEItemInteraction {
@@ -2665,10 +2663,6 @@ declare interface DEItemInteraction {
      * States that are applied to the surrounding characters
      */
     appliedStatesEverySurroundingCharacter: Array<string>;
-}
-
-declare interface DEStateForCharacterWithHistory extends DEStateForCharacter {
-    history: Array<DEStateForCharacterWithHistoricInformation>;
 }
 
 declare interface DELocationSlot {
@@ -3327,6 +3321,9 @@ declare interface DEConversationMessage {
      * The characters that are known to be interacting in the message
      */
     interactingCharacters: Array<string>;
+
+    metadata: Record<string, any>;
+
     /**
      * Rumors the character learned in the conversation
      * TODO
@@ -3455,6 +3452,7 @@ declare interface DEConversation {
      * to avoid having to generate them on demand later
      */
     pseudoConversationSummary?: string | null;
+    metadata: Record<string, any>;
 }
 
 declare interface DEStringTemplateInfoCharOnly {
@@ -3717,7 +3715,6 @@ declare interface DEUtils {
     id: {
         itemIdGenerator(itemName: string): string;
         characterIdGenerator(): string;
-        conversationIdGenerator(): string;
     },
     items: {
         newItem(definition: Omit<DEItem, "id">): DEItem;
@@ -3846,8 +3843,9 @@ declare interface DEUtils {
         createVoice(voiceDescription: DEVoiceDescription): DEVoiceDescription;
     },
     conversations: {
-        addMessage(conversationId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { unsafeMode?: boolean } = {}): DEConversationMessage;
-        addMessageIntoTargetConversation(targetCharacterId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { teleportParticipants?: boolean, unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean } = {}): DEConversationMessage;
+        getConversation(conversationId: string): Promise<DEConversation | null>;
+        addMessage(conversationId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { unsafeMode?: boolean } = {}): Promise<DEConversationMessage>;
+        addMessageIntoTargetConversation(targetCharacterId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { teleportParticipants?: boolean, unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean } = {}): Promise<DEConversationMessage>;
         /**
          * Broadcast a message, all characters at a given location (and beyond) will pick it up
          * 
@@ -3858,8 +3856,8 @@ declare interface DEUtils {
          * @param travelDistance 
          * @param travelDistaceType
          */
-        addMessageBroadcast(message: (distance: number) => Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, location: string, travelDistance: number, travelDistaceType: "meters" | "connections"): DEConversationMessage[];
-        newConversation(conversation: Pick<DEConversation, "participants" | "remoteParticipants" | "location" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipants?: boolean, unsafeMode?: boolean } = {}): DEConversation;
+        addMessageBroadcast(message: (distance: number) => Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, location: string, travelDistance: number, travelDistaceType: "meters" | "connections"): Promise<DEConversationMessage[]>;
+        newConversation(conversation: Pick<DEConversation, "participants" | "remoteParticipants" | "location" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipants?: boolean, unsafeMode?: boolean } = {}): Promise<DEConversation>;
     },
     characterInfo: {
         getExternalDescriptionOfCharacter(char: DECompleteCharacterReference, onlyBasics?: boolean, hideCurrentPosture?: boolean): Promise<string>;
@@ -3940,12 +3938,12 @@ declare interface DEUtils {
          * String indicating a location where another character should be at according to the character's knowledge
          * @returns eg. Eldoria, Shadowfen, or empty string if they have no idea
          */
-        lastSaw(povChar: string | DECompleteCharacterReference, char: string | DECompleteCharacterReference): string;
+        lastSaw(povChar: string | DECompleteCharacterReference, char: string | DECompleteCharacterReference): Promise<string>;
         /**
-         * Boolean indicating if the character is a member that got lost after being left behind (known to this member)
+         * Whether the observer has no current or remembered location for the character.
          * @returns true or false
          */
-        hasNoIdeaWhereIs(povChar: string | DECompleteCharacterReference, char: string | DECompleteCharacterReference): boolean;
+        hasNoIdeaWhereIs(povChar: string | DECompleteCharacterReference, char: string | DECompleteCharacterReference): Promise<boolean>;
 
         /**
          * Provides the list of characters that are currently interacting with another character
@@ -4001,11 +3999,12 @@ declare interface DEUtils {
 
         /**
          * Within a conversation specifies if two characters have just started talking to each other, which can be used to trigger first impressions and initial reactions if
-         * combined with strangers or whatnot
+         * combined with strangers or whatnot, note that this doesn't mean that they haven't talked before only that within this conversation
+         * or a previous existing they haven't talked yet to each other, for example if a new character comes into a conversation
          * @param char1 
          * @param char2 
          */
-        justStartedTalkingToEachOther(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
+        justStartedTalkingToEachOther(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): Promise<boolean>;
 
         /**
          * Get the list of social group members for the current character
@@ -4021,7 +4020,7 @@ declare interface DEUtils {
          * Get the list of social group members for the current character, that are not only present but also in a conversation with our character
          * @returns eg. [Thalon, Mira]
          */
-        getPresentConversingSocialGroup(char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
+        getPresentConversingSocialGroup(char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): Promise<string[]>;
         /**
          * Get the difference between the provided list and the present social group members
          * @returns eg. [Arya, Thalon]
@@ -4056,19 +4055,19 @@ declare interface DEUtils {
          * The name of the characters/users/objects that activated the state last
          * @returns eg. ["Aria", "Thalon", "Player", "The Ancient Sword"]
          */
-        getLastStateCausants(char: DECompleteCharacterReference, stateName: string): string[];
+        getLastStateCausants(char: DECompleteCharacterReference, stateName: string): Promise<string[]>;
         /**
          * TODO does this work?
          * The name of the characters only that activated the state last
          * @returns eg. ["Aria", "Thalon", "Player"]
          */
-        getLastStateCharacterCausants(char: DECompleteCharacterReference, stateName: string): string[];
+        getLastStateCharacterCausants(char: DECompleteCharacterReference, stateName: string): Promise<string[]>;
         /**
          * TODO does this work?
          * The name of the characters only that activated the state last
          * @returns eg. ["Aria", "Thalon", "Player"]
          */
-        getLastStateObjectCausants(char: DECompleteCharacterReference, stateName: string): string[];
+        getLastStateObjectCausants(char: DECompleteCharacterReference, stateName: string): Promise<string[]>;
         /**
          * Get the list of active states for the current character
          * @returns eg. [ANGRY, TIRED, HAPPY]
@@ -4093,7 +4092,7 @@ declare interface DEUtils {
          * Get how many inference cycles ago the state was activated for the provided character
          * @returns eg. 3, it will return -1 if the state is not found ever
          */
-        getStateActivationCyclesAgo(char: DECompleteCharacterReference, stateName: string): number;
+        getStateActivationCyclesAgo(char: DECompleteCharacterReference, stateName: string): Promise<number>;
     },
     triggersAndAccumulators: {
         /**
@@ -4246,7 +4245,7 @@ declare interface DEObject {
      * The state of each character in the world, including their history and current states
      */
     stateFor: {
-        [charId: string]: DEStateForCharacterWithHistory;
+        [charId: string]: DEStateForCharacter;
     };
     /**
      * Stability of the simulation, a number from 0 to 1 representing how stable the world is
@@ -4254,13 +4253,6 @@ declare interface DEObject {
      */
     stability: number;
     world: DEWorld;
-    /**
-     * All the conversations that have happened in the world
-     * real or pseudo-conversations
-     */
-    conversations: {
-        [conversationId: string]: DEConversation;
-    };
     /**
      * A list of important events that have happened in the world
      * subject to rumors, depending who got to be aware of it
@@ -4285,10 +4277,6 @@ declare interface DEObject {
      * and help it make decisions about what happens in the world
      */
     worldRules: Record<string, DEWorldRule>;
-    /**
-     * Utility functions for common operations
-     */
-    utils: DEUtils;
     /**
      * Whether the game is over or not, this means the user
      * has reached an ending condition, eg. died, arrested, successful completion, etc...
@@ -4318,7 +4306,6 @@ declare interface DEObject {
         itemId: {
             [itemName: string]: number;
         };
-        conversationId: number;
     };
     /**
      * The current play mode of the game'
@@ -4326,6 +4313,43 @@ declare interface DEObject {
      * TODO implement these
      */
     playMode: "player" | "narrator" | "voice-in-the-head";
+
+
+    /**
+     * Utility functions for common operations
+     */
+    utils: DEUtils;
+    /**
+     * The database of historic information for historic usage
+     */
+    database: DEDatabase;
+}
+
+declare interface DEDatabaseConversationFns {
+    getConversation(conversationId: string): Promise<DEConversation|null>;
+    getConversationMessage(messageId: string): Promise<DEConversationMessage|null>;
+    newConversation(conversation: Omit<DEConversation, "id">): Promise<DEConversation|null>;
+    newConversationMessage(conversationId: string, message: Omit<DEConversationMessage, "id">): Promise<DEConversationMessage|null>;
+    /** Update supplied fields without changing the conversation's ID or messages. */
+    updateConversation(conversationId: string, conversation: Partial<Omit<DEConversation, "id" | "messages">>): Promise<DEConversation|null>;
+    /** Update supplied fields without changing the message's ID or insertion order. */
+    updateConversationMessage(messageId: string, message: Partial<Omit<DEConversationMessage, "id">>): Promise<DEConversationMessage|null>;
+}
+
+declare interface DEDatabaseHistoricStateFns {
+    /** Stored activation age plus snapshots since that state, counting the matching snapshot; -1 if absent. */
+    getHistoricStateActivationCyclesAgo(charId: string, state: string): Promise<number>;
+    storeHistoricState(charId: string, state: DEStateForCharacter): Promise<void>;
+    getFirstHistoricStateWithCharacter(charId: string, otherCharId: string): Promise<DEStateForCharacter|null>;
+    /** Newest first; partial name matching ignores case, accents, punctuation and spacing. */
+    getFirstNHistoricStatesWithCharacterName(charId: string, matches: number, otherCharacterName: string): Promise<DEStateForCharacter[]>;
+    getFirstHistoricStateWithState(charId: string, state: string): Promise<DEStateForCharacter|null>;
+    getFirstHistoricStateWithItem(charId: string, itemId: string): Promise<DEStateForCharacter|null>;
+    /** Newest first; partial name matching ignores case, accents, punctuation and spacing. */
+    getFirstNHistoricStatesWithItemName(charId: string, matches: number, itemName: string): Promise<DEStateForCharacter[]>;
+}
+
+declare interface DEDatabase extends DEDatabaseConversationFns, DEDatabaseHistoricStateFns {
 }
 
 declare type DE = DEObject;

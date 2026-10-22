@@ -270,10 +270,6 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
             return { ok: true };
         },
 
-        async getEngineScriptInfo() {
-            return engine.engineScriptInfo;
-        },
-
         async assumeCharacterIdentity({ charId }) {
             await engine.assumeCharacterIdentity(charId);
             return { ok: true };
