@@ -4148,9 +4148,9 @@ declare interface DEUtils {
         }): DEStringTemplateCharAndCauses;
 
         /**
-     * Formats a list with commas and 'and', do not use this for formatting causants use formatCommaList
-     * @returns eg. Arya, Thalon, and Mira
-     */
+         * Formats a list with commas and 'and', do not use this for formatting causants use formatCommaList
+         * @returns eg. Arya, Thalon, and Mira
+         */
         formatAnd(list: string[]): string;
         /**
          * Formats a list with commas only, do not use this for formatting causants use formatCommaList
@@ -4197,6 +4197,30 @@ declare interface DEUtils {
          * @returns eg. his, hers, theirs
          */
         formatOwnershipPronoun(chars: Array<DECompleteCharacterReference | string>): string;
+        /**
+         * Formats the name of a character
+         * @param char The character whose name is to be formatted
+         * @param inPerspectiveOf The character from whose perspective the name should be formatted, if not provided, it will be formatted in the perspective of the story master (knows everyone's name)
+         * @param options The options for formatting the name, including the type of article to use (default, indefinite, definite)
+         * @returns The formatted name of the character
+         */
+        formatCharacterName(
+            char: DECompleteCharacterReference | string,
+            inPerspectiveOf: DECompleteCharacterReference | string | null,
+            options?: {
+                type?: "default" | "indefinite" | "definite"
+                capitalize?: boolean
+            }
+        ): string;
+        /**
+         * @param item the item to format
+         */
+        formatItemName(item: DEItem, options?: { type?: "default" | "indefinite" | "definite", capitalize?: boolean }): string;
+        /**
+         * The story message to parse
+         * @param message The story message to parse
+         */
+        parseNarration(message: string): Array<DEConversationMessageNarrationFragment>;
     };
 
     ramdom: {

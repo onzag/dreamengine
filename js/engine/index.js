@@ -1127,6 +1127,8 @@ export class DEngine {
                 char: this.deObject.characters[this.deObject.user],
             });
 
+            const narrationParsed = this.deObject.utils.templates.parseNarration(narration);
+
             const conversation = await this.deObject.utils.conversations.newConversation({
                 location: sceneObject.location,
                 participants: expectedParticipants,
@@ -1142,9 +1144,7 @@ export class DEngine {
                 content: [
                     {
                         type: "narration",
-                        fragments: [
-                            narration,
-                        ],
+                        fragments: narrationParsed,
                     },
                 ],
                 characterId: null,

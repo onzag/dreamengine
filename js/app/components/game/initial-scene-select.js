@@ -69,7 +69,8 @@ export class InitialSceneSelect extends HTMLElement {
         for (const sceneName of sceneNames || []) {
             signal.throwIfAborted();
             options[sceneName] = await this.engine.callCharOnlyTemplate({
-                path: ['world', 'scenes', sceneName, 'narration'], characterName: actualUserName,
+                path: ['world', 'scenes', sceneName, 'narration'],
+                characterName: actualUserName,
             });
         }
         signal.throwIfAborted();

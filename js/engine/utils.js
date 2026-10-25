@@ -3,6 +3,7 @@ import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/r
 import { getCharacterVolume, getCharacterWeight } from "./util/weight-and-volume.js";
 import { emotions } from "./util/emotions.js";
 import { DEngine } from "./index.js";
+import { getNameIdentificationForOneCharacterTowardsAnother, getNameIdentificationForOneCharacterTowardsAnotherOnlyName } from "./util/messages.js";
 
 // NOTE: DE.characters, DE.bonds, DE.stateFor are all keyed by character id (character.id), not character name.
 // DESingleBondDescription.towards is a character id.
@@ -1934,6 +1935,34 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     templates: {
+        parseNarration(message) {
+            /** @type {Array<DEConversationMessageNarrationFragment>} */
+            const fragments = [];
+            /** @type {Set<string> | null} */
+            let itemIds = null;
+            let lastIndex = 0;
+
+            // Match the markers emitted by formatCharacterName and formatItemName.
+            // Leave incomplete markers and other angle-bracketed text untouched.
+            for (const match of message.matchAll(/<([^<>:\s]+):([^<>]+)>/g)) {
+                const identifier = match[1];
+                /** @type {DEConversationMessageFragmentIdentifier["foundAs"]} */
+                let foundAs = "item";
+                if (Object.prototype.hasOwnProperty.call(DE.characters, identifier)) {
+                    foundAs = "character";
+                }
+
+                if (match.index > lastIndex) {
+                    fragments.push(message.slice(lastIndex, match.index));
+                }
+                fragments.push({ type: "identifier", identifier, text: match[2], foundAs });
+                lastIndex = match.index + match[0].length;
+            }
+            if (lastIndex < message.length) {
+                fragments.push(message.slice(lastIndex));
+            }
+            return fragments;
+        },
         breakDownCharactersAndCausesTemplate(info) {
             return async (info2) => {
                 let base = typeof info.base === "string" ? info.base : info.base({
@@ -2054,6 +2083,46 @@ export const deEngineUtilsFn = (DE, engine) => ({
         },
         formatOwnershipPronoun(chars) {
             return getPronounHelperLocal(DE, chars, "theirs", "his", "hers", "theirs");
+        },
+        formatCharacterName(char, inPerspectiveOf, options) {
+            const ourChar = resolveCharacter(DE, char);
+            if (!ourChar) {
+                console.warn(`Character reference for ${char} not found when formatting character name`);
+                return "Unknown Character";
+            }
+            const perspectiveChar = (inPerspectiveOf ? resolveCharacter(DE, inPerspectiveOf) : ourChar) || ourChar;
+            let nameGiven = getNameIdentificationForOneCharacterTowardsAnotherOnlyName(DE, perspectiveChar, ourChar);
+            if (nameGiven === ourChar.unknownName) {
+                if (options && options.type === "indefinite") {
+                    if (nameGiven[0].toLowerCase() === "a" || nameGiven[0].toLowerCase() === "e" || nameGiven[0].toLowerCase() === "i" || nameGiven[0].toLowerCase() === "o" || nameGiven[0].toLowerCase() === "u") {
+                        nameGiven = "an " + nameGiven;
+                    } else {
+                        nameGiven = "a " + nameGiven;
+                    }
+                } else if (options && options.type === "definite") {
+                    nameGiven = "the " + nameGiven;
+                }
+            }
+            if (options && options.capitalize) {
+                nameGiven = nameGiven.charAt(0).toUpperCase() + nameGiven.slice(1);
+            }
+            return "<" + ourChar.id + ":" + nameGiven + ">";
+        },
+        formatItemName(item, options) {
+            let nameGiven = item.name;
+            if (options && options.type === "indefinite") {
+                if (nameGiven[0].toLowerCase() === "a" || nameGiven[0].toLowerCase() === "e" || nameGiven[0].toLowerCase() === "i" || nameGiven[0].toLowerCase() === "o" || nameGiven[0].toLowerCase() === "u") {
+                    nameGiven = "an " + nameGiven;
+                } else {
+                    nameGiven = "a " + nameGiven;
+                }
+            } else if (options && options.type === "definite") {
+                nameGiven = "the " + nameGiven;
+            }
+            if (options && options.capitalize) {
+                nameGiven = nameGiven.charAt(0).toUpperCase() + nameGiven.slice(1);
+            }
+            return "<" + item.id + ":" + nameGiven + ">";
         },
     },
 

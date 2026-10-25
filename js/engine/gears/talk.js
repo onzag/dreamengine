@@ -2,7 +2,7 @@ import { DEngine } from "../index.js";
 import { getCharacterCanSee, getSysPromptForCharacter } from "../util/character-info.js";
 import { emotions } from "../util/emotions.js";
 import { createGrammarFromList, generateGrammarForVoice, parseListFromGrammarResponse } from "../util/grammar.js";
-import { convertContentToSimpleList, convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertContentToSimpleList, convertMessagesToSimpleList, getHistoryFragmentForCharacter, getNameIdentificationForOneCharacterTowardsAnother } from "../util/messages.js";
 import { minimizeSoundDescription, minimizeModeDescription } from "../util/voice.js";
 import { mergeVoicesFrom, reweightVoiceForEmotion, selectForcedVoiceEffects } from "../util/voice.js";
 
@@ -21,28 +21,32 @@ export async function talk(engine, character, options) {
         throw new Error("DEngine not initialized");
     } else if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter not initialized");
-    } else if (!engine.deObject.characters[character.name]) {
-        throw new Error(`Character ${character.name} not found in the engine`);
+    } else if (!engine.deObject.characters[character.id]) {
+        throw new Error(`Character ${character.id} not found in the engine`);
+    } else if (!engine.dataManager) {
+        throw new Error("Data manager not initialized");
     }
 
-    const charState = engine.deObject.stateFor[character.name];
+    const charState = engine.deObject.stateFor[character.id];
 
     if (charState.dead) {
-        throw new Error(`Character ${character.name} is dead and cannot talk.`);
+        throw new Error(`Character ${character.id} is dead and cannot talk.`);
     } else if (charState.deadEnded) {
-        throw new Error(`Character ${character.name} is in a dead end scenario and cannot talk.`);
+        throw new Error(`Character ${character.id} is in a dead end scenario and cannot talk.`);
     } else if (!charState.conversationId) {
-        throw new Error(`Character ${character.name} is not currently in a conversation and cannot talk.`);
+        throw new Error(`Character ${character.id} is not currently in a conversation and cannot talk.`);
     }
 
     const conversationId = charState.conversationId;
+
+    const ourCharacterName = getNameIdentificationForOneCharacterTowardsAnother(engine.deObject, character, character);
 
     const addedMessagesForStoryMaster = [];
     let hasDeadEnded = false;
     let hasDied = false;
 
-    const characterSystemPrompt = await getSysPromptForCharacter(engine, character.name);
-    const characterCanSee = await getCharacterCanSee(engine.deObject, character.name);
+    const characterSystemPrompt = await getSysPromptForCharacter(engine, character.id);
+    const characterCanSee = await getCharacterCanSee(engine.deObject, character.id);
 
     let actions = (await Promise.all(characterSystemPrompt.internalDescription.actions.map(async (action) => {
         if (action.action.action) {
@@ -99,7 +103,7 @@ export async function talk(engine, character, options) {
     }
 
     if (deadEndAction) {
-        console.log(`Dead end scenario detected for character ${character.name} with action: ${deadEndAction.text}`);
+        console.log(`Dead end scenario detected for character ${ourCharacterName} with action: ${deadEndAction.text}`);
         if (deadEndAction.action.action.deadEndIsDeath) {
             hasDied = true;
         }
@@ -110,9 +114,9 @@ export async function talk(engine, character, options) {
     let actionsAsText = actions.map((action) => action.text).filter((a) => !!a).join("\n - ");
     if (actionsAsText) {
         if (deadEndAction && deadEndAction.action.action.deadEndIsDeath) {
-            actionsAsText = "# IMPORTANT: The following action will be executed by " + character.name + " and will result in death:\n\n - " + actionsAsText;
+            actionsAsText = "# IMPORTANT: The following action will be executed by " + ourCharacterName + " and will result in death:\n\n - " + actionsAsText;
         } else {
-            actionsAsText = "# IMPORTANT: The following actions must be executed by " + character.name + ":\n\n - " + actionsAsText;
+            actionsAsText = "# IMPORTANT: The following actions must be executed by " + ourCharacterName + ":\n\n - " + actionsAsText;
         }
     }
 
@@ -131,7 +135,7 @@ export async function talk(engine, character, options) {
      */
     let emotionalRange = [];
 
-    let baseVoice = engine.deObject.characters[character.name].voice;
+    let baseVoice = engine.deObject.characters[character.id].voice;
     for (const microVoice of options.microVoices || []) {
         baseVoice = baseVoice ? mergeVoicesFrom(baseVoice, microVoice) : microVoice;
     }
@@ -250,13 +254,13 @@ export async function talk(engine, character, options) {
 
     if (!primaryEmotion) {
         const systemPromptForEmotion = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
-            `You are an assistant that analyzes the emotional state of a character named ${character.name} based on their current situation, active states, and the actions they are about to take.\n` +
+            `You are an assistant that analyzes the emotional state of a character ${ourCharacterName} based on their current situation, active states, and the actions they are about to take.\n` +
             "You must decide which emotions from the list of potential emotions is the character about to primarily feel",
             [
                 "You must answer with a list of emotions that is comma separated, and the first emotion in the list will be the primary emotion that the character is feeling. The rest of the emotions in the list are also part of the emotional range of the character, but are not as strongly felt as the primary emotion.",
             ],
             ([
-                "## " + character.name + "'s Description:\n\n" +
+                "## " + ourCharacterName + "'s Description:\n\n" +
                 characterSystemPrompt.externalDescription,
                 characterSystemPrompt.internalDescription.general,
             ]).join("\n\n"),
@@ -265,7 +269,7 @@ export async function talk(engine, character, options) {
         const lastCycleExtended = await getHistoryFragmentForCharacter(engine, character, {
             includeDebugMessages: false,
             includeRejectedMessages: false,
-            msgLimit: "LAST_CYCLE_EXPANDED",
+            msgLimit: "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_INCLUDING_CHAR_2ND_LAST_MESSAGE",
         });
 
         const emotionsCharacterCantFeel = Object.keys(character.emotions).filter((emotion) =>
@@ -295,7 +299,7 @@ export async function talk(engine, character, options) {
             throw new Error("Inference adapter questioning generator ended unexpectedly while trying to determine primary emotion.");
         }
 
-        const nextQuestion = `Based on the character's situation, active states, and upcoming actions, which emotions from the list of possible emotions is ${character.name} primarily feeling? Please provide a comma separated list with the primary emotion first.`;
+        const nextQuestion = `Based on the character's situation, active states, and upcoming actions, which emotions from the list of possible emotions is ${ourCharacterName} primarily feeling? Please provide a comma separated list with the primary emotion first.`;
 
         const emotionResponse = await generator.next({
             maxCharacters: 100,
@@ -336,19 +340,19 @@ export async function talk(engine, character, options) {
     console.log("Determined emotional range: " + emotionalRange.join(", "));
 
     if (primaryEmotion) {
-        narrativeEffects.push(`'${character.name}' is primarily feeling ${primaryEmotion}`);
+        narrativeEffects.push(`'${character}' is primarily feeling ${primaryEmotion}`);
     }
 
     if (emotionalRange.length > 0) {
-        narrativeEffects.push(`'${character.name}' response emotions should also include ${emotionalRange.join(", ")}`);
+        narrativeEffects.push(`'${character}' response emotions should also include ${emotionalRange.join(", ")}`);
     }
 
     if (options.doNotMove) {
-        narrativeEffects.push(`${character.name} must not walk away or go to another location`);
+        narrativeEffects.push(`${character} must not walk away or go to another location`);
     }
 
     if (baseVoice?.mute && !baseVoice?.description) {
-        narrativeEffects.push(`'${character.name}' is currently mute`);
+        narrativeEffects.push(`'${character}' is currently mute`);
     } else {
         if (baseVoice?.description) {
             const description = typeof baseVoice.description === "string" ? baseVoice.description : await baseVoice.description({
@@ -357,7 +361,7 @@ export async function talk(engine, character, options) {
                 emotion: primaryEmotion,
             });
             if (description) {
-                narrativeEffects.push(`'${character.name}' voice description: ${description}`);
+                narrativeEffects.push(`'${character}' voice description: ${description}`);
             }
         }
     }
@@ -545,58 +549,66 @@ export async function talk(engine, character, options) {
         isRejectedMessage: false,
         isStoryMasterMessage: false,
         perspectiveSummaryIds: {},
-        sender: character.name,
+        characterId: character.id,
+        metadata: {},
+        untimed: true,
         rumors: [],
 
         // TODO
         singleSummary: null,
     }
 
-    const conversationObject = engine.deObject.conversations[charState.conversationId];
+    const conversationObject = await engine.dataManager.getConversation(charState.conversationId);
 
     const participantsThatJustStartedTalkingTo = [];
-    for (const participantName of conversationObject.participants) {
-        if (participantName === character.name) {
-            continue;
-        }
-        if (await engine.getDEObject().utils.bonds.justStartedTalkingToEachOther(character.name, participantName)) {
-            participantsThatJustStartedTalkingTo.push(participantName);
-        }
-    }
-
-    for (const participantName of conversationObject.participants) {
-        const participantCharacterObject = engine.deObject.characters[participantName];
-
-        const theyJustStartedTalkingToCharacter = participantsThatJustStartedTalkingTo.includes(participantName);
-
-        const isHumanoid = participantCharacterObject.speciesType === "humanoid";
-
-        const isBottomNaked = engine.deObject.utils.isBottomNaked(participantName);
-        const isTopNaked = engine.deObject.utils.isTopNaked(participantName);
-        const isFullyNaked = isBottomNaked && isTopNaked;
-
-        const andIsAStranger = engine.deObject.utils.isStrangerTowards(character.name, participantName);
-        const isAStrangerMessage = andIsAStranger ? `, and ${participantName} is a stranger to ${character.name}` : "";
-
-        if (theyJustStartedTalkingToCharacter) {
-            if (isHumanoid && isFullyNaked) {
-                narrativeEffects.push(`Keep in mind that ${participantName} is currently fully naked${isAStrangerMessage}, and ${character.name} MUST react and point that fact.`);
-            } else if (isHumanoid && isBottomNaked) {
-                narrativeEffects.push(`Keep in mind ${participantName} is currently not wearing any pants or underwear${isAStrangerMessage}, and ${character.name} MUST react and point that fact.`);
+    if (conversationObject) {
+        for (const participantName of conversationObject.participants) {
+            if (participantName === character.id) {
+                continue;
+            }
+            if (await engine.getDEObject().utils.bonds.justStartedTalkingToEachOther(character.id, participantName)) {
+                participantsThatJustStartedTalkingTo.push(participantName);
             }
         }
+
+        for (const participantId of conversationObject.participants) {
+            const participantCharacterObject = engine.deObject.characters[participantId];
+
+            const theyJustStartedTalkingToCharacter = participantsThatJustStartedTalkingTo.includes(participantId);
+
+            const isHumanoid = participantCharacterObject.speciesType === "humanoid";
+
+            const isBottomNaked = engine.deObject.utils.characterInfo.isBottomNaked(participantId);
+            const isTopNaked = engine.deObject.utils.characterInfo.isTopNaked(participantId);
+            const isFullyNaked = isBottomNaked && isTopNaked;
+
+            const andIsAStranger = engine.deObject.utils.bonds.isStrangerTowards(character.id, participantId);
+
+            const participantName = getNameIdentificationForOneCharacterTowardsAnother(engine.deObject, character, participantCharacterObject);
+
+            const isAStrangerMessage = andIsAStranger ? `, and ${participantName} is a stranger to ${ourCharacterName}` : "";
+
+            if (theyJustStartedTalkingToCharacter) {
+                if (isHumanoid && isFullyNaked) {
+                    narrativeEffects.push(`Keep in mind that ${participantName} is currently fully naked${isAStrangerMessage}, and ${ourCharacterName} MUST react and point that fact.`);
+                } else if (isHumanoid && isBottomNaked) {
+                    narrativeEffects.push(`Keep in mind ${participantName} is currently not wearing any pants or underwear${isAStrangerMessage}, and ${ourCharacterName} MUST react and point that fact.`);
+                }
+            }
+        }
+
+        await engine.dataManager.newConversationMessage(charState.conversationId, nextMessage);
+
+        engine.triggerConversationMessageUpdate(engine.deObject, {
+            conversationId: charState.conversationId,
+            messageId: nextMessage.id,
+            event: "new-message",
+            obj: nextMessage,
+        });
+
+        
+        await engine.informDEObjectUpdated();
     }
-
-    conversationObject.messages.push(nextMessage);
-
-    engine.triggerConversationMessageUpdate(engine.deObject, {
-        conversationId: charState.conversationId,
-        messageId: nextMessage.id,
-        event: "new-message",
-        obj: nextMessage,
-    });
-
-    await engine.informDEObjectUpdated();
 
     let nextToGenerate = getNextToGenerate();
     let nextToGenerateIsSameAsPreviousButNarrativeAction = false;
@@ -615,7 +627,7 @@ export async function talk(engine, character, options) {
             followingAction = (`${nextToGenerate.narrativeAction}`);
             console.log("Generating next narrative action: " + nextToGenerate.narrativeAction);
         } else if (nextToGenerate.action) {
-            followingAction = (`${character.name} must take the following action next: ${nextToGenerate.action}`);
+            followingAction = (`${ourCharacterName} must take the following action next: ${nextToGenerate.action}`);
             console.log("Generating next " + nextToGenerate.type + (nextToGenerate.action ? ` with action: ${nextToGenerate.action}` : ""));
         }
 
@@ -630,7 +642,7 @@ export async function talk(engine, character, options) {
          */
         const currentBlock = nextIsNarration ? {
             type: "narration",
-            text: "",
+            fragments: [],
             __debug_id: nextMessage.id + "__" + fragmentCount,
         } : {
             type: "dialogue",
@@ -647,7 +659,7 @@ export async function talk(engine, character, options) {
             __debug_id: nextMessage.id + "__" + fragmentCount,
         });
 
-        const grammar = generateGrammarForVoice(engine, baseVoice, character.name, forcedVoiceEffects.forcedMode);
+        const grammar = generateGrammarForVoice(engine, baseVoice, ourCharacterName, forcedVoiceEffects.forcedMode);
 
         const generator = engine.inferenceAdapter.inferNextStoryFragmentFor(
             character,
@@ -682,7 +694,7 @@ export async function talk(engine, character, options) {
         // transitions, so they are treated as structural delimiters here, not decoration.
         let insideNarration = false;
         let insideSound = false;
-        let ignoreFirstNCharactersDialogueOnly = (character.name + ": ").length;
+        let ignoreFirstNCharactersDialogueOnly = (character + ": ").length;
 
         const currentBlockAsDialogue = /** @type {DEConversationMessageDialogue} */ (currentBlock);
 
@@ -882,7 +894,7 @@ export async function talk(engine, character, options) {
             });
         }
 
-        const converted = convertContentToSimpleList([currentBlock], nextMessage.sender, false);
+        const converted = convertContentToSimpleList(engine, [currentBlock], nextMessage.characterId, false);
         converted.forEach((ele) => {
             finalMessages.push(ele.message);
         });
@@ -905,10 +917,10 @@ export async function talk(engine, character, options) {
     console.log("Final generated narration/dialogue: " + totalGeneratedThusFar);
 
     if (deadEndAction) {
-        console.log(`Finalizing dead end action for character ${character.name}: ${deadEndAction.text}`);
+        console.log(`Finalizing dead end action for character ${character}: ${deadEndAction.text}`);
         if (deadEndAction.action.action.deadEndIsDeath) {
-            console.log(`Character ${character.name} has died.`);
-            addedMessagesForStoryMaster.push(`${character.name} has died.`);
+            console.log(`Character ${character} has died.`);
+            addedMessagesForStoryMaster.push(`${character} has died.`);
             charState.dead = true;
         }
         charState.deadEnded = true;
@@ -916,8 +928,8 @@ export async function talk(engine, character, options) {
 
         if (charState.dead) {
             // TODO change the description of the character to reflect they are dead
-            // await updateCharacterDescription(engine, character.name, "dead", "The lifeless body of " + character.name);
-            // keep in mind "CHARACTER_OVERRIDES_" + characterDef.name
+            // await updateCharacterDescription(engine, character, "dead", "The lifeless body of " + character);
+            // keep in mind "CHARACTER_OVERRIDES_" + characterDef
             // so the state can be recovered
         }
 
@@ -930,11 +942,11 @@ export async function talk(engine, character, options) {
              */
             const removeCharFromAnyItemList = (items) => {
                 for (const item of items) {
-                    if (item.containingCharacters.includes(character.name)) {
-                        item.containingCharacters = item.containingCharacters.filter((char) => char !== character.name);
+                    if (item.containingCharacters.includes(character)) {
+                        item.containingCharacters = item.containingCharacters.filter((char) => char !== character);
                     }
-                    if (item.ontopCharacters.includes(character.name)) {
-                        item.ontopCharacters = item.ontopCharacters.filter((char) => char !== character.name);
+                    if (item.ontopCharacters.includes(character)) {
+                        item.ontopCharacters = item.ontopCharacters.filter((char) => char !== character);
                     }
                     removeCharFromAnyItemList(item.containing);
                     removeCharFromAnyItemList(item.ontop);
@@ -952,9 +964,9 @@ export async function talk(engine, character, options) {
         const socialBonds = engine.deObject.bonds;
         for (const charName in socialBonds) {
             const charBonds = socialBonds[charName];
-            const existingBond = charBonds.active.find((bond) => bond.towards === character.name);
+            const existingBond = charBonds.active.find((bond) => bond.towards === character.id);
             if (existingBond) {
-                charBonds.active = charBonds.active.filter((bond) => bond.towards !== character.name);
+                charBonds.active = charBonds.active.filter((bond) => bond.towards !== character.id);
                 charBonds.ex.push(existingBond);
             }
         }

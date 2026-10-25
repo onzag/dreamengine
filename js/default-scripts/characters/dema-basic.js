@@ -119,7 +119,7 @@ engine.exports = {
             script: engine.script,
             clothing: "custom",
             name: "Dema",
-            unknownName: "Unknown Robot",
+            unknownName: "Robot",
             shortDescription: "A human sized anthropomorphic robot with a blue and white color scheme and a reflective visor.",
             shortDescriptionTopNakedAdd: "showing its sleek robotic body.",
             shortDescriptionBottomNakedAdd: "revealing its articulated legs.",

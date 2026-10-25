@@ -41,8 +41,8 @@ export function getNameIdentificationForOneCharacterTowardsAnother(deObject, cha
 /**
  * Provides the name that one character knows another character as, based on their bond and knowledge of each other.
  * @param {DEObject} deObject
- * @param {DECompleteCharacterReference} character
- * @param {DECompleteCharacterReference} otherCharacter
+ * @param {DECompleteCharacterReference} character our character
+ * @param {DECompleteCharacterReference} otherCharacter the character to get the name for, as known by our character
  */
 export function getNameIdentificationForOneCharacterTowardsAnotherOnlyName(deObject, character, otherCharacter) {
     if (character.id === otherCharacter.id) {
@@ -56,11 +56,11 @@ export function getNameIdentificationForOneCharacterTowardsAnotherOnlyName(deObj
 
     const knowsThemAs = (characterBond ? characterBond.knowsAs.find(k => k.primary) || characterBond.knowsAs[0] : null) || null;
     const actualNameKnowsThemAs = knowsThemAs?.nickname ?
-        ((characterBond ? characterBond.knowsAs.find(k => k.name === otherCharacter.name) || characterBond.knowsAs.find((k) => !k.nickname) : null) || null): null;
-    
-        /**
-         * @type {string}
-         */
+        ((characterBond ? characterBond.knowsAs.find(k => k.name === otherCharacter.name) || characterBond.knowsAs.find((k) => !k.nickname) : null) || null) : null;
+
+    /**
+     * @type {string}
+     */
     let finalone;
     if (knowsThemAs) {
         if (actualNameKnowsThemAs) {
@@ -158,7 +158,7 @@ export function renderNarrationFragmentsToText(fragments) {
  *  includeRejectedMessages?: boolean | null,
  *  includeHiddenMessages?: boolean | null,
  *  useExponentialShrinkingSelectiveContextWindowStrategy?: boolean,
- *  enrichedMode?: boolean | null,
+ *  enrichedMode?: boolean,
  * }} options
  * @return {AsyncGenerator<DEObjectMessageGeneratorResult, void, boolean>}
  */
@@ -173,138 +173,179 @@ export async function* getHistoryForCharacter(engine, character, options) {
     }
 
     const characterState = engine.deObject.stateFor[character.name];
-    // newest first
-    const characterStateWithCurrent = [characterState, ...(characterState.history.reverse())];
-
     let currentConversationId = characterState.conversationId;
 
-    let statesAccumulated = new Set();
-    /**
-     * @type {string | null}
-     */
-    let statesAccumulatedAtLocation = null;
-    /**
-     * @type {DETimeDescription | null}
-     */
-    let statesAccumulatedFromTime = null;
-    let lastStateObjectHandled = null;
-    const consumedConversationIds = new Set();
+    while (currentConversationId) {
+        const currentConversationObject = await engine.dataManager?.getConversation(currentConversationId);
 
-    /**
-     * @param {DETimeDescription} fromTime
-     */
-    const consumeAccumulatedStatesAndLocations = (fromTime) => {
-        // because we are looping from newest to oldest, lastConversationStartTime is actually before
-        // thisConversationEndTime
-        // @ts-ignore typescript is wrong, deObject has been null checked at the beginning of the function
-        const prefix = `From ${makeTimestamp(engine.deObject, fromTime)} to ${makeTimestamp(engine.deObject, statesAccumulatedFromTime)}, `;
-        let rest;
-        if (statesAccumulated.size > 0) {
-            rest = ` finds ${engine.getDEObject().utils.templates.formatReflexive([character])} in the following states: `;
-            let statesList = "";
-            statesAccumulated.forEach(s => {
-                if (statesList.length > 0) {
-                    statesList += ", ";
-                }
-                statesList += s.toLowerCase();
-            });
-            rest += statesList;
-            rest += ` while at location: "${statesAccumulatedAtLocation || "unknown location"}".`;
-        } else {
-            rest = ` is at location: "${statesAccumulatedAtLocation || "unknown location"}".`;
+        if (!currentConversationObject) {
+            return;
         }
 
-        statesAccumulated = new Set();
-        statesAccumulatedAtLocation = null;
-        statesAccumulatedFromTime = null;
+        // process the conversation messages
+        const conversationMessages = currentConversationObject.messages.filter(msg => (options.includeRejectedMessages || !msg.isRejectedMessage) && (options.includeDebugMessages || !msg.isDebugMessage) && (options.includeHiddenMessages || !msg.isHiddenMessage) &&
+            (!msg.canOnlyBeSeenByCharacter || msg.canOnlyBeSeenByCharacter === character.id));
 
-        /**
-         * @type {DEConversationMessageNarration}
-         */
-        const narrationMessage = {
-            type: "narration",
-            fragments: [
-                prefix,
+        const conversationLocation = currentConversationObject.location || "an unknown location";
+        const conversationStartTime = currentConversationObject.startTime;
+        const firstMessageIsStoryMaster = conversationMessages.length > 0 && conversationMessages[0].isStoryMasterMessage;
+
+        if ((currentConversationObject.pseudoConversationSummary || currentConversationObject.pseudoConversation) && options.enrichedMode) {
+            if (!currentConversationObject.pseudoConversationSummary) {
+                // generate summary, it doesn't exist yet, but we need to have a conversation for what this
+                // character has been through and been doing
+                // @ts-ignore
+                currentConversationObject.pseudoConversationSummary = await this.pseudoConversationSummaryGenerator(
+                    engine.deObject,
+                    currentConversationObject.participants.map((v) => engine.deObject?.characters[v]),
+                    currentConversationObject,
+                );
+            }
+            const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.id);
+            const timeMark = makeTimestamp(engine.deObject, conversationStartTime);
+
+            /**
+             * @type {Array<DEConversationMessageNarrationFragment>}
+             */
+            const summaryFragments = [
+                (timeMark === "Now" ? "Right Now" : "At " + timeMark) + ", ",
                 {
                     type: "identifier",
                     text: character.name,
                     identifier: character.id,
                     foundAs: "character",
                 },
-                rest,
-            ],
-        };
+                " is at " + conversationLocation + " ",
+            ];
 
-        return {
-            name: "Story Master",
-            characterId: null,
-            content: [
-                narrationMessage,
-            ],
-            id: null,
-            gid: `story-master-states-${character.id}-${fromTime.time}`,
-            conversationId: null,
-            debug: false,
-            rejected: false,
-            storyMaster: true,
-            hidden: false,
-            interactingCharacters: [
-                character.id,
-            ],
-            emotion: null,
-            emotionalRange: null,
-            untimed: true,
-        };
-    };
+            if (participantsExcludingCharacter.length === 0) {
+                summaryFragments.push("on their own");
+            } else {
+                summaryFragments.push("with ");
+                summaryFragments.push(...buildCharacterListNarrationFragments(engine, character, participantsExcludingCharacter));
+            }
 
-    // TODO refactor this, need to figure enrichedMode and useExponentialShrinkingSelectiveContextWindowStrategy
-    for (const state of characterStateWithCurrent) {
-        if (state.conversationId && !consumedConversationIds.has(state.conversationId)) {
-            consumedConversationIds.add(state.conversationId);
-            const currentConversationObject = engine.deObject.conversations[state.conversationId];
+            summaryFragments.push(". The interaction happened as follows:\n\n" + currentConversationObject.pseudoConversationSummary);
 
-            if (!currentConversationId && options.enrichedMode) {
-                // time skipped and now we are into this conversation
-                // calculate time skipped, and specify in which state the character was
-                // maybe they were sleeping, eating, working, etc
-                // who knows what happened
-                const keepgoing = yield consumeAccumulatedStatesAndLocations(state.time);
+            const expectedId = `story-master-${currentConversationId}-summary`;
+            const keepgoing = yield {
+                name: "Story Master",
+                content: [
+                    {
+                        type: "narration",
+                        fragments: summaryFragments,
+                    },
+                ],
+                characterId: null,
+                id: null,
+                conversationId: currentConversationId,
+                debug: false,
+                rejected: false,
+                storyMaster: true,
+                hidden: false,
+                interactingCharacters: currentConversationObject.participants,
+                gid: expectedId,
+                emotion: null,
+                emotionalRange: null,
+                untimed: true,
+            };
+            if (!keepgoing) {
+                return;
+            }
+        } else {
+            for (const message of conversationMessages.reverse()) {
+                if (message.characterId && options.excludeFrom && options.excludeFrom.includes(message.characterId)) {
+                    continue;
+                }
 
+                const otherCharInfo = message.characterId ? engine.getDEObject().characters[message.characterId] : null;
+                const knownName = message.isStoryMasterMessage ? "Story Master" : (!otherCharInfo ? "<" + message.characterId + ":Unknown Entity>" : getNameIdentificationForOneCharacterTowardsAnother(engine.getDEObject(), character, otherCharInfo));
+
+                const keepgoing = yield ({
+                    name: knownName,
+                    // no change if the message is from the character themselves, surely they know all the information they used to create that message
+                    content: message.characterId === character.id ? message.content : message.content.map((messageNarrationOrDialogue) => {
+                        if (messageNarrationOrDialogue.type === "narration") {
+                            return {
+                                ...messageNarrationOrDialogue,
+                                fragments: messageNarrationOrDialogue.fragments.map((fragment) => {
+                                    if (typeof fragment === "string" || (fragment.type === "identifier" && fragment.foundAs !== "character")) {
+                                        return fragment;
+                                    } else {
+                                        const charKnownAs = getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine.getDEObject(), character, engine.getDEObject().characters[fragment.identifier]);
+                                        // already similar enough, don't change it
+                                        if (fragment.text.toLowerCase().includes(charKnownAs.toLowerCase())) {
+                                            return fragment;
+                                        }
+                                        return {
+                                            ...fragment,
+                                            text: charKnownAs,
+                                        };
+                                    }
+                                })
+                            };
+                        } else {
+                            return {
+                                ...messageNarrationOrDialogue,
+                                fragments: messageNarrationOrDialogue.fragments.map((fragment) => {
+                                    if (fragment.type === "narration") {
+                                        return {
+                                            ...fragment,
+                                            fragments: fragment.fragments.map((subFragment) => {
+                                                if (typeof subFragment === "string" || (subFragment.type === "identifier" && subFragment.foundAs !== "character")) {
+                                                    return subFragment;
+                                                } else {
+                                                    const charKnownAs = getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine.getDEObject(), character, engine.getDEObject().characters[subFragment.identifier]);
+                                                    if (subFragment.text.toLowerCase().includes(charKnownAs.toLowerCase())) {
+                                                        return subFragment;
+                                                    }
+                                                    return {
+                                                        ...subFragment,
+                                                        text: charKnownAs,
+                                                    };
+                                                }
+                                            })
+                                        };
+                                    } else {
+                                        return fragment;
+                                    }
+                                }),
+                            };
+                        }
+                    }),
+                    id: message.id,
+                    characterId: message.characterId,
+                    conversationId: currentConversationId,
+                    debug: message.isDebugMessage,
+                    rejected: message.isRejectedMessage,
+                    storyMaster: message.isStoryMasterMessage,
+                    hidden: message.isHiddenMessage,
+                    interactingCharacters: message.interactingCharacters || [],
+                    gid: message.id,
+                    emotion: message.emotion,
+                    emotionalRange: message.emotionalRange,
+                    untimed: message.untimed || false,
+                });
                 if (!keepgoing) {
                     return;
                 }
             }
 
-            // process the conversation messages
-            const conversationMessages = currentConversationObject.messages.filter(msg => (options.includeRejectedMessages || !msg.isRejectedMessage) && (options.includeDebugMessages || !msg.isDebugMessage) && (options.includeHiddenMessages || !msg.isHiddenMessage) &&
-                (!msg.canOnlyBeSeenByCharacter || msg.canOnlyBeSeenByCharacter === character.id));
-
-            const conversationLocation = currentConversationObject.location || "an unknown location";
-            const conversationStartTime = currentConversationObject.startTime;
-            const firstMessageIsStoryMaster = conversationMessages.length > 0 && conversationMessages[0].isStoryMasterMessage;
-
-            if ((currentConversationObject.pseudoConversationSummary || currentConversationObject.pseudoConversation) && options.enrichedMode) {
-                if (!currentConversationObject.pseudoConversationSummary) {
-                    // generate summary, it doesn't exist yet, but we need to have a conversation for what this
-                    // character has been through and been doing
-                    // @ts-ignore
-                    currentConversationObject.pseudoConversationSummary = await this.pseudoConversationSummaryGenerator(
-                        engine.deObject,
-                        currentConversationObject.participants.map((v) => engine.deObject?.characters[v]),
-                        currentConversationObject,
-                    );
-                }
+            if (!firstMessageIsStoryMaster && options.enrichedMode) {
                 const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.id);
                 const timeMark = makeTimestamp(engine.deObject, conversationStartTime);
+                const timeMarkDetailed = timeMark === "Now" ? "right now" : "at " + timeMark;
+
+                const characterName = getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine.deObject, character, character);
 
                 /**
                  * @type {Array<DEConversationMessageNarrationFragment>}
                  */
-                const summaryFragments = [
-                    (timeMark === "Now" ? "Right Now" : "At " + timeMark) + ", ",
+                const interactionFragments = [
+                    "The following interaction took place " + timeMarkDetailed + ", ",
                     {
                         type: "identifier",
-                        text: character.name,
+                        text: characterName,
                         identifier: character.id,
                         foundAs: "character",
                     },
@@ -312,32 +353,31 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 ];
 
                 if (participantsExcludingCharacter.length === 0) {
-                    summaryFragments.push("on their own");
+                    interactionFragments.push("on their own");
                 } else {
-                    summaryFragments.push("with ");
-                    summaryFragments.push(...buildCharacterListNarrationFragments(engine, character, participantsExcludingCharacter));
+                    interactionFragments.push("with ");
+                    interactionFragments.push(...buildCharacterListNarrationFragments(engine, character, participantsExcludingCharacter));
                 }
 
-                summaryFragments.push(". The interaction happened as follows:\n\n" + currentConversationObject.pseudoConversationSummary);
+                interactionFragments.push(".");
 
-                const expectedId = `story-master-${state.conversationId}-summary`;
                 const keepgoing = yield {
                     name: "Story Master",
                     content: [
                         {
                             type: "narration",
-                            fragments: summaryFragments,
+                            fragments: interactionFragments,
                         },
                     ],
-                    characterId: null,
                     id: null,
-                    conversationId: state.conversationId,
+                    characterId: null,
+                    conversationId: currentConversationId,
                     debug: false,
                     rejected: false,
                     storyMaster: true,
                     hidden: false,
                     interactingCharacters: currentConversationObject.participants,
-                    gid: expectedId,
+                    gid: `story-master-${currentConversationId}-interaction-info`,
                     emotion: null,
                     emotionalRange: null,
                     untimed: true,
@@ -345,129 +385,28 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 if (!keepgoing) {
                     return;
                 }
-            } else {
-                for (const message of conversationMessages.reverse()) {
-                    if (message.characterId && options.excludeFrom && options.excludeFrom.includes(message.characterId)) {
-                        continue;
-                    }
-
-                    const otherCharInfo = message.characterId ? engine.getDEObject().characters[message.characterId] : null;
-                    const knownName = message.isStoryMasterMessage ? "Story Master" : (!otherCharInfo ? "<" + message.characterId + ":Unknown Entity>" : getNameIdentificationForOneCharacterTowardsAnother(engine.getDEObject(), character, otherCharInfo));
-                    
-                    const keepgoing = yield ({
-                        name: knownName,
-                        content: message.content,
-                        id: message.id,
-                        characterId: message.characterId,
-                        conversationId: state.conversationId,
-                        debug: message.isDebugMessage,
-                        rejected: message.isRejectedMessage,
-                        storyMaster: message.isStoryMasterMessage,
-                        hidden: message.isHiddenMessage,
-                        interactingCharacters: message.interactingCharacters || [],
-                        gid: message.id,
-                        emotion: message.emotion,
-                        emotionalRange: message.emotionalRange,
-                        untimed: message.untimed || false,
-                    });
-                    if (!keepgoing) {
-                        return;
-                    }
-                }
-
-                if (!firstMessageIsStoryMaster && options.enrichedMode) {
-                    const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.id);
-                    const timeMark = makeTimestamp(engine.deObject, conversationStartTime);
-                    const timeMarkDetailed = timeMark === "Now" ? "right now" : "at " + timeMark;
-
-                    /**
-                     * @type {Array<DEConversationMessageNarrationFragment>}
-                     */
-                    const interactionFragments = [
-                        "The following interaction took place " + timeMarkDetailed + ", ",
-                        {
-                            type: "identifier",
-                            text: character.name,
-                            identifier: character.id,
-                            foundAs: "character",
-                        },
-                        " is at " + conversationLocation + " ",
-                    ];
-
-                    if (participantsExcludingCharacter.length === 0) {
-                        interactionFragments.push("on their own");
-                    } else {
-                        interactionFragments.push("with ");
-                        interactionFragments.push(...buildCharacterListNarrationFragments(engine, character, participantsExcludingCharacter));
-                    }
-
-                    interactionFragments.push(".");
-
-                    const keepgoing = yield {
-                        name: "Story Master",
-                        content: [
-                            {
-                                type: "narration",
-                                fragments: interactionFragments,
-                            },
-                        ],
-                        id: null,
-                        characterId: null,
-                        conversationId: state.conversationId,
-                        debug: false,
-                        rejected: false,
-                        storyMaster: true,
-                        hidden: false,
-                        interactingCharacters: currentConversationObject.participants,
-                        gid: `story-master-${state.conversationId}-interaction-info`,
-                        emotion: null,
-                        emotionalRange: null,
-                        untimed: true,
-                    };
-                    if (!keepgoing) {
-                        return;
-                    }
-                }
             }
-
-            currentConversationId = state.conversationId;
-        } else if (!state.conversationId) {
-            currentConversationId = null;
-            if (statesAccumulatedAtLocation && statesAccumulatedAtLocation !== state.location && options.enrichedMode) {
-                // location changed, consume accumulated states
-                const keepgoing = yield consumeAccumulatedStatesAndLocations(state.time);
-                if (!keepgoing) {
-                    return;
-                }
-            } else {
-                statesAccumulatedAtLocation = state.location;
-                statesAccumulatedFromTime = state.time;
-            }
-            state.states.map(s => s.state).forEach(s => {
-                statesAccumulated.add(s);
-            })
-            // time skip until next conversation found
         }
-        lastStateObjectHandled = state;
-    }
 
-    // consume any remaining accumulated states
-    if ((statesAccumulated.size > 0 || statesAccumulatedAtLocation) && lastStateObjectHandled && options.enrichedMode) {
-        const keepgoing = yield consumeAccumulatedStatesAndLocations(lastStateObjectHandled.time);
-        if (!keepgoing) {
-            return;
-        }
+        currentConversationId = currentConversationObject.previousConversationIdsPerParticipant?.[character.id] || null;
     }
 }
 
 /**
  * @param {Array<DEConversationMessageNarration | DEConversationMessageDialogue>} content
- * @param {string} author
+ * @param {string} name
+ * @param {string|null} characterId
  * @param {boolean} storyMaster
+ * @returns {Array<string>}
  */
-export function convertContentToSimpleList(content, author, storyMaster) {
+export function convertContentToSimpleList(
+    content,
+    name,
+    characterId,
+    storyMaster,
+) {
     /**
-     * @type {Array<{author: string, message: string, storyMaster: boolean}>}
+     * @type {Array<string>}
      */
     const finalList = [];
     for (const contentPart of content) {
@@ -481,11 +420,7 @@ export function convertContentToSimpleList(content, author, storyMaster) {
                 }
             }
             message += "*";
-            finalList.push({
-                author: storyMaster ? "Story Master" : author,
-                message,
-                storyMaster: storyMaster,
-            });
+            finalList.push(message);
         } else if (contentPart.type === "dialogue") {
             // Reconstruct the authored format: spoken words are plain, action-beat narration
             // goes back inside asterisks, and voice/sound tags back inside square brackets.
@@ -518,21 +453,26 @@ export function convertContentToSimpleList(content, author, storyMaster) {
                     }
                 }
             }
-            finalList.push({
-                author: author,
-                message: author + ": " + pieces.join(" "),
-                storyMaster: storyMaster,
-            });
+            finalList.push(storyMaster ? ("Story Master: " + pieces.join(" ")) : ("<" + characterId + ":" + name + ">: " + pieces.join(" ")));
         }
     }
     return finalList;
 }
 
 /**
- * @param {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>, author: string, storyMaster: boolean, id: string | null, conversationId: string | null}>} messages 
+ * @param {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>, name: string, storyMaster: boolean, characterId: string | null, conversationId: string | null}>} messages
+ * @returns {Array<{message: string, author: string, storyMaster: boolean}>}
  */
 export function convertMessagesToSimpleList(messages) {
-    const accumulatedLists = messages.map(msg => convertContentToSimpleList(msg.content, msg.author, msg.storyMaster));
+    const accumulatedLists = messages.map(msg => {
+        return convertContentToSimpleList(msg.content, msg.name, msg.characterId, msg.storyMaster).map(message => {
+            return {
+                message,
+                author: msg.name,
+                storyMaster: msg.storyMaster,
+            };
+        })
+    });
     return accumulatedLists.flat();
 }
 

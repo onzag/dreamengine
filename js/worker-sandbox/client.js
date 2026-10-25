@@ -24,6 +24,8 @@ export class EngineWorkerClient {
     #pending = new Map();
     /** @type {number} */
     #nextId = 0;
+    /** @type {Set<() => void>} */
+    #deObjectUpdatedListeners = new Set();
 
     // ── Event callbacks (set by consumer) ───────────────────────────
     /** @type {(() => void) | null} */
@@ -115,6 +117,7 @@ export class EngineWorkerClient {
                         break;
                     case "deObjectUpdated":
                         this.onDEObjectUpdated?.();
+                        for (const listener of this.#deObjectUpdatedListeners) listener();
                         break;
                     case "cycleInform":
                         this.onCycleInform?.(msg.data.level, msg.data.message);
@@ -321,6 +324,16 @@ export class EngineWorkerClient {
      * @returns {Promise<any>}
      */
     queryDEObject(args) { return this.#call("queryDEObject", args); }
+
+    /**
+     * Subscribe without replacing the legacy onDEObjectUpdated callback.
+     * @param {() => void} listener
+     * @returns {() => void} Unsubscribe when the consumer disconnects.
+     */
+    addDEObjectUpdatedListener(listener) {
+        this.#deObjectUpdatedListeners.add(listener);
+        return () => { this.#deObjectUpdatedListeners.delete(listener); };
+    }
 
     /**
      * Forcefully set a value of a portion of the deObject

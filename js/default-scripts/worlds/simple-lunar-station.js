@@ -22,6 +22,7 @@ engine.exports = {
     onSceneStarted(DE, scene) {
         // TODO remove this testing stuff
         DE.utils.conversations.addMessageIntoTargetConversation(DE.user, {
+            metadata: {},
             canOnlyBeSeenByCharacter: null,
             content: [
                 {
@@ -82,22 +83,33 @@ engine.exports = {
             narration: (info) => {
                 const others = DE.utils.world.allWorldCharactersButUser();
                 if (!others || others.length === 0) {
-                    return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. The entire station is empty and quiet, allowing ${info.char.name} to explore their surroundings in solitude.`;
+                    return `${DE.utils.templates.formatCharacterName(info.char, info.char)} is a visitor to the Lunar Station, eager to explore this small outpost in space. The entire station is empty and quiet, allowing ${DE.utils.templates.formatCharacterName(info.char, info.char)} to explore their surroundings in solitude.`;
                 }
 
                 const dema = others.find((c) => c.name === "Dema");
                 const visitors = others.filter((c) => c.name !== "Dema");
 
                 if (dema && visitors.length === 0) {
-                    return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. The robot Dema, keeper of the station, is currently awaiting ${DE.utils.templates.formatPossessive([info.char.name])} arrival in the common area near the airlock, as Dema is responsible for welcoming visitors and assisting them with their needs during their stay at the station.`;
+                    return `${DE.utils.templates.formatCharacterName(info.char, info.char)} is a visitor to the Lunar Station, eager to explore this small outpost in space. ${DE.utils.templates.formatCharacterName(dema, info.char, {
+                        capitalize: true,
+                        type: "indefinite",
+                    })}, keeper of the station, is currently awaiting ${DE.utils.templates.formatPossessive([info.char])} arrival in the common area near the airlock, as ${DE.utils.templates.formatCharacterName(dema, info.char, {
+                        capitalize: false,
+                        type: "definite",
+                    })} is responsible for welcoming visitors and assisting them with their needs during their stay at the station.`;
                 }
 
-                if (!dema && visitors.length > 0) {
-                    return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet ${DE.utils.templates.formatPronoun([info.char.name])} didn't expect to find ${DE.utils.templates.formatPluralOrSingular(visitors, "other visitors", "another visitor")} here. As it happens, ${DE.utils.templates.formatAnd(visitors.map((n) => n.name))} ${DE.utils.templates.formatVerbToBe(visitors)} also visiting the station at this time, and they find themselves gathered in the common area near the airlock.`;
+                if (dema && visitors.length > 0) {
+                    return `${DE.utils.templates.formatCharacterName(info.char, info.char)} is a visitor to the Lunar Station, eager to explore this small outpost in space. ${DE.utils.templates.formatCharacterName(dema, info.char, {
+                        capitalize: true,
+                        type: "indefinite",
+                    })} , the station's keeper, is there in the common area near the airlock to welcome ${DE.utils.templates.formatPossessive([info.char])} arrival. As it turns out, ${visitors.length === 1 ? "another visitor" : "other visitors"} ${DE.utils.templates.formatVerbToBe(visitors)} also visiting the station at this time, and they all find themselves gathered together in the common area under ${DE.utils.templates.formatCharacterName(dema, info.char, {
+                        capitalize: false,
+                        type: "definite",
+                    })}'s watchful eye.`;
                 }
-
-                // Dema + other visitors
-                return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. Dema, the station's keeper, is there in the common area near the airlock to welcome ${DE.utils.templates.formatPossessive([info.char.name])} arrival. As it turns out, ${DE.utils.templates.formatAnd(visitors.map((n) => n.name))} ${DE.utils.templates.formatVerbToBe(visitors)} also visiting the station at this time, and they all find themselves gathered together in the common area under Dema's watchful eye.`;
+                
+                return `${DE.utils.templates.formatCharacterName(info.char, info.char)} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet ${visitors.length === 1 ? "another visitor" : "other visitors"} ${DE.utils.templates.formatVerbToBe(visitors)} also visiting the station at this time, and they find themselves gathered in the common area near the airlock.`;
             },
             charactersStart: true,
             engagedCharacters: () => DE.utils.world.allWorldCharactersButUser(),

@@ -149,12 +149,14 @@ export class GameOverlay extends HTMLElement {
     /** @param {{ sceneName: string | null, alreadySelected: boolean }} result */
     async onInitialSceneSelected(result) {
         if (result.sceneName && !result.alreadySelected) {
-            // TODO uncomment this
-            // await window.ENGINE_WORKER_CLIENT.startScene({ sceneName: result.sceneName });
+            await window.ENGINE_WORKER_CLIENT.startScene({ sceneName: result.sceneName });
         }
         if (!this.isConnected) return;
         const view = document.createElement('app-game-view');
         view.addEventListener('wake-up', () => this.onExitClick());
+        view.addEventListener('ready', async event => {
+            
+        });
         this.root.querySelector('.game-content')?.replaceChildren(view);
         this.initialized = true;
         this.dispatchEvent(new CustomEvent('ready', { detail: result }));
