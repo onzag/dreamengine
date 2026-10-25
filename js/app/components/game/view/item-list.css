@@ -1,0 +1,9 @@
+.item-list { list-style: none; padding: 0; margin: 1vh 0 0; display: grid; gap: .8vh; }
+.item-row { display: flex; align-items: center; gap: 1vh; font-size: .9em; min-width: 0; }
+.item-icon { display: grid; place-items: center; width: 3.2vh; height: 3.2vh; min-width: 22px; min-height: 22px; flex-shrink: 0; border: 1px solid var(--border); border-radius: .5vh; background: #ffffff08; font-size: 1.1em; }
+.item-text { min-width: 0; overflow-wrap: anywhere; }
+.item-text small { display: block; margin-top: .2vh; color: var(--muted); font-size: .85em; }
+.item-count { margin-left: auto; color: var(--muted); white-space: nowrap; }
+.item-contents { margin: .7vh 0 .3vh 1.6vh; padding-left: 2.6vh; border-left: 1px solid var(--border); }
+.item-relation { color: var(--accent); font-size: .75em; letter-spacing: .04em; }
+.item-contents .item-list { margin-top: .5vh; }

@@ -113,10 +113,6 @@ function numericId(value, prefix) {
 export class SQLiteBridge extends BaseDataManager {
     // Share one queue so conversation and history transactions cannot overlap.
     #operations = Promise.resolve();
-    /** @type {string | null} */
-    #conversationDatabaseId = null;
-    /** @type {string | null} */
-    #historicDatabaseId = null;
 
     /**
      * @template T
@@ -134,77 +130,78 @@ export class SQLiteBridge extends BaseDataManager {
         return result;
     }
 
-    /**
-     * @template T
-     * @param {(id: string) => Promise<T>} operation
-     * @returns {Promise<T>}
-     */
-    withConversationTables(operation) {
-        return this.withDatabase(async (id) => {
-            if (this.#conversationDatabaseId !== id) {
-                await this.databaseController.runQuery(id, `
-                    CREATE TABLE IF NOT EXISTS engine_conversations (
+    /** Create every table and index before engine operations begin. */
+    async newDatabase() {
+        await super.newDatabase();
+        try {
+            await this.withTransaction(async (id) => {
+                const statements = [
+                    `CREATE TABLE IF NOT EXISTS engine_data (
+                        key TEXT PRIMARY KEY NOT NULL,
+                        value TEXT NOT NULL
+                    )`,
+                    `CREATE TABLE IF NOT EXISTS engine_conversations (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         ${columnDefinitions(conversationFields)}
-                    )
-                `);
-                await this.databaseController.runQuery(id, `
-                    CREATE TABLE IF NOT EXISTS engine_conversation_messages (
+                    )`,
+                    `CREATE TABLE IF NOT EXISTS engine_conversation_messages (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         conversation_id INTEGER NOT NULL REFERENCES engine_conversations(id),
                         ${columnDefinitions(messageFields)}
-                    )
-                `);
-                await this.databaseController.runQuery(id, `
-                    CREATE INDEX IF NOT EXISTS engine_messages_by_conversation
-                    ON engine_conversation_messages (conversation_id, id)
-                `);
-                this.#conversationDatabaseId = id;
-            }
-            return operation(id);
-        });
-    }
-
-    /**
-     * @template T
-     * @param {(id: string) => Promise<T>} operation
-     * @returns {Promise<T>}
-     */
-    withHistoricTables(operation) {
-        return this.withDatabase(async (id) => {
-            if (this.#historicDatabaseId !== id) {
-                await this.databaseController.runQuery(id, `
-                    CREATE TABLE IF NOT EXISTS engine_historic_states (
+                    )`,
+                    `CREATE INDEX IF NOT EXISTS engine_messages_by_conversation
+                        ON engine_conversation_messages (conversation_id, id)`,
+                    `CREATE TABLE IF NOT EXISTS engine_historic_states (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         charId TEXT NOT NULL,
                         ${columnDefinitions(historicStateFields)}
-                    )
-                `);
-                await this.databaseController.runQuery(id, `
-                    CREATE INDEX IF NOT EXISTS engine_history_by_character
-                    ON engine_historic_states (charId, id)
-                `);
+                    )`,
+                    `CREATE INDEX IF NOT EXISTS engine_history_by_character
+                        ON engine_historic_states (charId, id)`,
+                ];
                 for (const [table, column] of [
                     ["engine_historic_seen_characters", "character_id"],
                     ["engine_historic_seen_items", "item_id"],
                     ["engine_historic_applied_states", "state"],
                 ]) {
-                    await this.databaseController.runQuery(id, `
-                        CREATE TABLE IF NOT EXISTS ${table} (
+                    statements.push(
+                        `CREATE TABLE IF NOT EXISTS ${table} (
                             historic_state_id INTEGER NOT NULL REFERENCES engine_historic_states(id),
                             ${column} TEXT NOT NULL,
                             name TEXT,
                             search_name TEXT
-                        )
-                    `);
-                    await this.databaseController.runQuery(id, `
-                        CREATE INDEX IF NOT EXISTS ${table}_lookup
-                        ON ${table} (historic_state_id, ${column})
-                    `);
+                        )`,
+                        `CREATE INDEX IF NOT EXISTS ${table}_lookup
+                            ON ${table} (historic_state_id, ${column})`,
+                    );
                 }
-                this.#historicDatabaseId = id;
+                for (const sql of statements) {
+                    await this.databaseController.runQuery(id, sql);
+                }
+            });
+        } catch (error) {
+            await this.closeCurrentDatabase();
+            throw error;
+        }
+    }
+
+    /**
+     * Serialize a transaction together with other database operations.
+     * @template T
+     * @param {(id: string) => Promise<T>} operation
+     * @returns {Promise<T>}
+     */
+    withTransaction(operation) {
+        return this.withDatabase(async (id) => {
+            await this.databaseController.runQuery(id, "BEGIN TRANSACTION");
+            try {
+                const result = await operation(id);
+                await this.databaseController.runQuery(id, "COMMIT");
+                return result;
+            } catch (error) {
+                await this.databaseController.runQuery(id, "ROLLBACK");
+                throw error;
             }
-            return operation(id);
         });
     }
 
@@ -216,28 +213,21 @@ export class SQLiteBridge extends BaseDataManager {
             [character.id, character.name, normalizeHistoricName(character.name)]);
         const items = state.seenItems.map(item => [item.id, item.name, normalizeHistoricName(item.name)]);
         const states = state.states.map(applied => [applied.state, null, null]);
-        return this.withHistoricTables(async (id) => {
-            await this.databaseController.runQuery(id, "BEGIN TRANSACTION");
-            try {
-                const rows = await this.databaseController.runQuery(id, `
-                    INSERT INTO engine_historic_states (charId, ${Object.keys(historicStateFields).join(", ")})
-                    VALUES (?, ${values.map(() => "?").join(", ")}) RETURNING id
-                `, [charId, ...values]);
-                for (const [table, column, entries] of [
-                    ["engine_historic_seen_characters", "character_id", characters],
-                    ["engine_historic_seen_items", "item_id", items],
-                    ["engine_historic_applied_states", "state", states],
-                ]) {
-                    await this.databaseController.runQuery(id, `
-                        INSERT INTO ${table} (historic_state_id, ${column}, name, search_name)
-                        SELECT ?, json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]')
-                        FROM json_each(?)
-                    `, [rows[0].id, JSON.stringify(entries)]);
-                }
-                await this.databaseController.runQuery(id, "COMMIT");
-            } catch (error) {
-                await this.databaseController.runQuery(id, "ROLLBACK");
-                throw error;
+        return this.withTransaction(async (id) => {
+            const rows = await this.databaseController.runQuery(id, `
+                INSERT INTO engine_historic_states (charId, ${Object.keys(historicStateFields).join(", ")})
+                VALUES (?, ${values.map(() => "?").join(", ")}) RETURNING id
+            `, [charId, ...values]);
+            for (const [table, column, entries] of [
+                ["engine_historic_seen_characters", "character_id", characters],
+                ["engine_historic_seen_items", "item_id", items],
+                ["engine_historic_applied_states", "state", states],
+            ]) {
+                await this.databaseController.runQuery(id, `
+                    INSERT INTO ${table} (historic_state_id, ${column}, name, search_name)
+                    SELECT ?, json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]')
+                    FROM json_each(?)
+                `, [rows[0].id, JSON.stringify(entries)]);
             }
         });
     }
@@ -261,7 +251,7 @@ export class SQLiteBridge extends BaseDataManager {
             state: ["engine_historic_applied_states", "state"],
         }[kind];
         const search = byName ? normalizeHistoricName(value) : value;
-        return this.withHistoricTables(async (id) => {
+        return this.withDatabase(async (id) => {
             if (matches === 0 || (byName && !search)) return [];
             const rows = await this.databaseController.runQuery(id, `
                 SELECT history.* FROM engine_historic_states AS history
@@ -277,7 +267,7 @@ export class SQLiteBridge extends BaseDataManager {
 
     /** @param {string} charId @param {string} state @returns {Promise<number>} */
     async getHistoricStateActivationCyclesAgo(charId, state) {
-        return this.withHistoricTables(async (id) => {
+        return this.withDatabase(async (id) => {
             const rows = await this.databaseController.runQuery(id, `
                 WITH latest AS (
                     SELECT history.id, history.states FROM engine_historic_states AS history
@@ -324,7 +314,7 @@ export class SQLiteBridge extends BaseDataManager {
 
     /** @param {string} conversationId @returns {Promise<DEConversation | null>} */
     async getConversation(conversationId) {
-        return this.withConversationTables(async (id) => {
+        return this.withDatabase(async (id) => {
             const rows = await this.databaseController.runQuery(id,
                 "SELECT * FROM engine_conversations WHERE id = ?", [numericId(conversationId, "C")]);
             if (!rows.length) return null;
@@ -341,7 +331,7 @@ export class SQLiteBridge extends BaseDataManager {
 
     /** @param {string} messageId @returns {Promise<DEConversationMessage | null>} */
     async getConversationMessage(messageId) {
-        return this.withConversationTables(async (id) => {
+        return this.withDatabase(async (id) => {
             const rows = await this.databaseController.runQuery(id,
                 "SELECT * FROM engine_conversation_messages WHERE id = ?", [numericId(messageId, "M")]);
             return rows.length ? readFields(messageFields, rows[0], "M") : null;
@@ -356,23 +346,16 @@ export class SQLiteBridge extends BaseDataManager {
     async newConversation(conversation) {
         const values = fieldValues(conversationFields, conversation);
         const initialMessages = conversation.messages.map(message => fieldValues(messageFields, message));
-        return this.withConversationTables(async (id) => {
-            await this.databaseController.runQuery(id, "BEGIN TRANSACTION");
-            try {
-                const rows = await this.databaseController.runQuery(id, `
-                    INSERT INTO engine_conversations (${Object.keys(conversationFields).join(", ")})
-                    VALUES (${values.map(() => "?").join(", ")}) RETURNING *
-                `, values);
-                const messages = [];
-                for (const messageValues of initialMessages) {
-                    messages.push(await this.insertMessage(id, rows[0].id, messageValues));
-                }
-                await this.databaseController.runQuery(id, "COMMIT");
-                return { ...readFields(conversationFields, rows[0], "C"), messages };
-            } catch (error) {
-                await this.databaseController.runQuery(id, "ROLLBACK");
-                throw error;
+        return this.withTransaction(async (id) => {
+            const rows = await this.databaseController.runQuery(id, `
+                INSERT INTO engine_conversations (${Object.keys(conversationFields).join(", ")})
+                VALUES (${values.map(() => "?").join(", ")}) RETURNING *
+            `, values);
+            const messages = [];
+            for (const messageValues of initialMessages) {
+                messages.push(await this.insertMessage(id, rows[0].id, messageValues));
             }
+            return { ...readFields(conversationFields, rows[0], "C"), messages };
         });
     }
 
@@ -384,7 +367,7 @@ export class SQLiteBridge extends BaseDataManager {
      */
     async newConversationMessage(conversationId, message) {
         const values = fieldValues(messageFields, message);
-        return this.withConversationTables(id =>
+        return this.withDatabase(id =>
             this.insertMessage(id, numericId(conversationId, "C"), values));
     }
 
@@ -414,7 +397,7 @@ export class SQLiteBridge extends BaseDataManager {
             .filter(([name, value]) => Object.prototype.hasOwnProperty.call(conversationFields, name) && value !== undefined)
             .map(([name]) => [name, conversationFields[name]]));
         const values = fieldValues(fields, conversation);
-        return this.withConversationTables(async (id) => {
+        return this.withDatabase(async (id) => {
             const query = values.length ? `
                 UPDATE engine_conversations
                 SET ${Object.keys(fields).map(name => `${name} = ?`).join(", ")}
@@ -445,7 +428,7 @@ export class SQLiteBridge extends BaseDataManager {
             .filter(([name, value]) => Object.prototype.hasOwnProperty.call(messageFields, name) && value !== undefined)
             .map(([name]) => [name, messageFields[name]]));
         const values = fieldValues(fields, message);
-        return this.withConversationTables(async (id) => {
+        return this.withDatabase(async (id) => {
             const query = values.length ? `
                 UPDATE engine_conversation_messages
                 SET ${Object.keys(fields).map(name => `${name} = ?`).join(", ")}
@@ -458,35 +441,16 @@ export class SQLiteBridge extends BaseDataManager {
     }
 
     /**
-     * Create the JSON store on demand for both new and previously saved databases.
-     * @returns {Promise<string>}
-     */
-    async ensureDataTable() {
-        const id = this.currentDatabaseId;
-        if (!id) {
-            throw new Error("No database is currently loaded.");
-        }
-        await this.databaseController.runQuery(id, `
-            CREATE TABLE IF NOT EXISTS engine_data (
-                key TEXT PRIMARY KEY NOT NULL,
-                value TEXT NOT NULL
-            )
-        `);
-        return id;
-    }
-
-    /**
      * @param {string} key
      * @param {any} value
      * @returns {Promise<void>}
      */
     async setJSONValue(key, value) {
         const json = JSON.stringify(value);
-        const id = await this.ensureDataTable();
-        await this.databaseController.runQuery(id, `
+        await this.withDatabase(id => this.databaseController.runQuery(id, `
             INSERT INTO engine_data (key, value) VALUES (?, ?)
             ON CONFLICT(key) DO UPDATE SET value = excluded.value
-        `, [key, json]);
+        `, [key, json]));
     }
 
     /**
@@ -494,10 +458,11 @@ export class SQLiteBridge extends BaseDataManager {
      * @returns {Promise<any>}
      */
     async getJSONValue(key) {
-        const id = await this.ensureDataTable();
-        const rows = await this.databaseController.runQuery(id,
-            "SELECT value FROM engine_data WHERE key = ?", [key]);
-        return rows.length ? JSON.parse(rows[0].value) : null;
+        return this.withDatabase(async (id) => {
+            const rows = await this.databaseController.runQuery(id,
+                "SELECT value FROM engine_data WHERE key = ?", [key]);
+            return rows.length ? JSON.parse(rows[0].value) : null;
+        });
     }
 
     /** @param {DEObject} deObject @returns {Promise<void>} */

@@ -65,6 +65,9 @@ function getIndexDb(savesRoot) {
 export function newDatabase() {
   const id = randomUUID();
   const tempPath = path.join(os.tmpdir(), `dreamengine-${id}.sqlite`);
+
+  console.log(`Creating new database at ${tempPath}`);
+
   const db = new Database(tempPath);
   sqliteVec.load(db);
   db.pragma("journal_mode = WAL");

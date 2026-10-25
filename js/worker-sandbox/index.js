@@ -497,8 +497,8 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
              * @returns  {any}
              */
             function cloneFiltered(obj, currentDepth) {
-                if (obj === null || typeof obj !== "object") return obj;
                 if (typeof obj === "function") return undefined;
+                if (obj === null || typeof obj !== "object") return obj;
 
                 if (Array.isArray(obj)) {
                     if (hasDepth && currentDepth >= depth) return `[Array(${obj.length})]`;

@@ -1,0 +1,8 @@
+﻿@import './shared.css';
+:host { display: block; }
+section { padding: 1.2vh 1.6vh; }
+header { color: var(--ink); font-size: 1em; margin-bottom: .8vh; }
+dl { display: flex; flex-wrap: wrap; gap: 1vh 2.5vh; margin: 0; }
+dt { color: var(--muted); font-size: .85em; margin-bottom: .3vh; }
+dd { margin: 0; color: var(--accent); font-variant-numeric: tabular-nums; }
+dd span { opacity: .65; font-size: .8em; }

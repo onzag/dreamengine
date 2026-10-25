@@ -1,0 +1,9 @@
+﻿@import './shared.css';
+:host { display: flex; }
+button { display: flex; align-items: center; justify-content: space-between; gap: 1.2vh; min-height: var(--control-height); padding: .7vh 1.5vh; }
+.trigger { width: 100%; anchor-name: --game-menu; }
+[popover] { position: fixed; position-anchor: --game-menu; inset: auto; top: anchor(bottom); left: anchor(left); margin: .8vh 0 0; min-width: 20vh; padding: .6vh; color: var(--ink); }
+[popover] button { width: 100%; border: 0; border-radius: .5vh; background: transparent; text-align: left; }
+button:hover:not(:disabled) { background-color: rgba(80, 130, 180, .35); }
+.wake-up { color: #f4dada; }
+@supports not (top: anchor(bottom)) { [popover] { top: calc(var(--edge) + var(--control-height)); left: var(--edge); } }

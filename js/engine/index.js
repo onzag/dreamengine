@@ -578,6 +578,8 @@ export class DEngine {
             database: this.dataManager.getDatabaseForDEObject(),
         };
 
+        await this.dataManager.newDatabase();
+
         // @ts-ignore
         this.deObject.utils = deEngineUtilsFn(this.deObject, this);
 

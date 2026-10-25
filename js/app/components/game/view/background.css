@@ -1,0 +1,3 @@
+﻿:host { display: block; overflow: hidden; background: #172a33; }
+img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+:host::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(transparent 50%, rgba(8, 21, 23, .2)); }

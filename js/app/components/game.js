@@ -1,5 +1,6 @@
 import { InitialSceneSelect } from './game/initial-scene-select.js';
-import { initializeNewGame } from './game/initialize.js';
+import { initializeNewGame, initializeSavedGame } from './game/initialize.js';
+import './game/view.js';
 import { playConfirmSound, playHoverSound, stopAllAmbiencesAndStartNewOne } from '../sound.js';
 import './dialog.js';
 
@@ -54,12 +55,10 @@ export class GameOverlay extends HTMLElement {
         }
         this.root.querySelector('.game-root')?.appendChild(selector);
         try {
-            if (this.getAttribute('save-id')) {
-                throw new Error('The engine does not yet support initializing from SQLite saves.');
-            }
-            const introMessages = await this.getIntroMessages();
+            const loadingSave = !!this.getAttribute('save-id');
+            const introMessages = loadingSave ? [] : await this.getIntroMessages();
             if (!this.isConnected) return;
-            const ready = initializeNewGame(this);
+            const ready = loadingSave ? initializeSavedGame(this) : initializeNewGame(this);
             this.setupPromise = ready;
             this.startInitialThemeSong(ready, selector.revealStarted);
             const result = await selector.select({ ready, introMessages });
@@ -149,12 +148,14 @@ export class GameOverlay extends HTMLElement {
 
     /** @param {{ sceneName: string | null, alreadySelected: boolean }} result */
     async onInitialSceneSelected(result) {
-        // The controller owns what follows selection. Gameplay UI can be mounted
-        // here as it is extracted from game-old.
         if (result.sceneName && !result.alreadySelected) {
-            await window.ENGINE_WORKER_CLIENT.startScene({ sceneName: result.sceneName });
+            // TODO uncomment this
+            // await window.ENGINE_WORKER_CLIENT.startScene({ sceneName: result.sceneName });
         }
         if (!this.isConnected) return;
+        const view = document.createElement('app-game-view');
+        view.addEventListener('wake-up', () => this.onExitClick());
+        this.root.querySelector('.game-content')?.replaceChildren(view);
         this.initialized = true;
         this.dispatchEvent(new CustomEvent('ready', { detail: result }));
     }

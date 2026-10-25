@@ -15,8 +15,8 @@
 }
 
 .game-content {
-    position: relative;
-    padding: 4vh 4vw;
+    position: absolute;
+    inset: 0;
 }
 
 .game-exit {

@@ -18,7 +18,7 @@ export class BaseDataManager {
         this.currentDatabaseId = null;
     }
 
-    async initializeDatabaseFor() {
+    async newDatabase() {
         if (this.currentDatabaseId) {
             throw new Error("A database is already loaded. Close it before creating a new one.");
         }

@@ -1,0 +1,15 @@
+﻿@import './shared.css';
+dialog { width: min(94vw, 150vh); max-height: 88dvh; padding: 2.5vh; color: var(--ink); overflow: auto; }
+dialog::backdrop { background: rgba(10, 25, 50, .18); backdrop-filter: blur(1vh); -webkit-backdrop-filter: blur(1vh); }
+header { display: flex; align-items: center; justify-content: space-between; gap: 2vh; padding-bottom: 1.8vh; border-bottom: 1px solid var(--border); }
+p { font: inherit; font-size: .8em; color: var(--accent); letter-spacing: .1em; margin: 0 0 .5vh; }
+h1 { font: inherit; font-size: 1.5em; margin: 0; }
+button { background: #ffffff08; border: 1px solid var(--border); border-radius: var(--radius); padding: .8vh 1.4vh; white-space: nowrap; }
+button:hover { background: #ffffff15; }
+kbd { font: inherit; font-size: .8em; margin-left: 1vh; color: var(--accent); }
+.columns { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 2.5vh; margin: 2vh 0; }
+h2 { display: flex; justify-content: space-between; align-items: baseline; gap: 1vh; font: inherit; font-size: 1.2em; margin: 0 0 1.5vh; }
+h2 span { font: inherit; font-size: .7em; color: var(--muted); }
+.slots { display: grid; gap: 1vh; }
+footer { border-top: 1px solid var(--border); padding-top: 1.5vh; color: var(--muted); font-size: .8em; line-height: 1.5; }
+@media (max-width: 760px) { .columns { grid-template-columns: 1fr; gap: 2vh; } header { align-items: flex-start; } kbd { display: block; margin: .5vh 0 0; } }

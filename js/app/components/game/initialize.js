@@ -1,3 +1,13 @@
+/** Restore the saved engine state, including its script order and player settings.
+ * @param {HTMLElement} game
+ */
+export async function initializeSavedGame(game) {
+    await window.ENGINE_WORKER_CLIENT.jsEngineClearExecutionOrder();
+    await window.ENGINE_WORKER_CLIENT.initializeFromStoredState({
+        loadId: [game.getAttribute('world-namespace'), game.getAttribute('world-id'), game.getAttribute('save-id')].join('/'),
+    });
+}
+
 /**
  * Initialize a new world using setup attributes supplied by app-play.
  * Kept apart from the game controller and scene-selection presentation.
@@ -136,21 +146,13 @@ export async function initializeNewGame(game) {
 
     // Only selected exposed characters join the party, even when their script adds others.
     const scriptGivenId = game.getAttribute('character-script-given-id') || '';
-    const characters = partyCharacters.length > 0 || !isSelfInsert
-        ? Object.values(await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters'] })) : [];
     if (partyCharacters.length > 0) {
         for (const partyId of new Set(partyCharacters)) {
-            const character = characters.find(c => c.scriptGivenId === partyId);
-            if (!partyId || !character) {
-                throw new Error(`Selected party character ${partyId || '(missing scriptGivenId)'} was not created.`);
-            }
-            await window.ENGINE_WORKER_CLIENT.addCharacterToParty({ charId: character.id });
+            await window.ENGINE_WORKER_CLIENT.addCharacterToPartyByScriptGivenId({ charScriptGivenId: partyId });
         }
     }
 
     if (!isSelfInsert) {
-        const character = characters.find(c => c.scriptGivenId === scriptGivenId);
-        if (!scriptGivenId || !character) throw new Error(`Selected identity ${scriptGivenId || '(missing scriptGivenId)'} was not created.`);
-        await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ charId: character.id });
+        await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentityByScriptGivenId({ charScriptGivenId: scriptGivenId });
     }
 }

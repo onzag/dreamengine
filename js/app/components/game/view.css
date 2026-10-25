@@ -1,0 +1,36 @@
+﻿@import './view/shared.css';
+:host {
+    display: block;
+    height: 100%;
+    font-family: inherit;
+    font-size: max(12px, 1.7vh);
+    --ink: #eaf3ff;
+    --muted: #bdcfe1;
+    --accent: #c9e2ff;
+    --border: rgba(180, 210, 240, .32);
+    --radius: .9vh;
+    --edge: 2vh;
+    --control-height: 4.5vh;
+    color: var(--ink);
+}
+.container {
+    position: relative;
+    height: 100%;
+    padding: var(--edge);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 1vh 2vh;
+    overflow: hidden;
+    isolation: isolate;
+    background: #111f23;
+}
+app-game-background { position: absolute; inset: 0; z-index: -1; }
+app-game-stats { display: block; min-width: 0; }
+.sidebar { grid-area: 1 / 1; display: grid; gap: 1vh; width: min(35vh, 100%); max-height: 45vh; overflow: auto; align-self: start; }
+.toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: .8vh; }
+.story { grid-area: 3 / 1 / 4 / -1; min-height: 0; max-height: 44vh; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: .8vh; }
+.items-toggle { display: flex; align-items: center; justify-content: space-between; gap: 1.2vh; min-height: var(--control-height); padding: .7vh 1.5vh; }
+kbd { font: inherit; font-size: .8em; color: var(--accent); border: 1px solid var(--border); border-radius: .4vh; padding: .1vh .5vh; }
+.items-toggle:hover { background-color: rgba(80, 130, 180, .35); }
+@media (max-width: 580px) { .sidebar { width: min(35vh, calc(100% - 12vh)); } }
