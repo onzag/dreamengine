@@ -1,3 +1,3 @@
 ﻿:host { display: block; overflow: hidden; background: #172a33; }
-img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; filter: blur(1vh); }
 :host::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(transparent 50%, rgba(8, 21, 23, .2)); }

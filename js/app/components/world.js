@@ -47,6 +47,7 @@ class WorldOverlay extends HTMLElement {
         this.root.querySelector("app-overlay").addEventListener('cancel', () => {
             playCancelSound();
             setTempSoundDisable();
+            this.dispatchEvent(new CustomEvent('close'));
             this.remove();
         });
 
@@ -94,7 +95,7 @@ class WorldOverlay extends HTMLElement {
                     input-placeholder="e.g. my-scripts"
                     id="namespace-input"
                     aria-key="s"
-                    ${lastNamespace ? `input-default-value="${lastNamespace}"` : ''}
+                    ${lastNamespace ? `input-default-value="${escapeHTML(lastNamespace)}"` : ''}
                 ></app-overlay-input>
             `;
 
@@ -103,20 +104,27 @@ class WorldOverlay extends HTMLElement {
 
             dialog.addEventListener('confirm', async () => {
                 // @ts-ignore
-                const name = nameInput?.getValue?.() || '';
+                const name = (nameInput?.getValue?.() || '').trim();
                 // @ts-ignore
-                const namespace = namespaceInput?.getValue?.() || '';
-
-                if (!name || !namespace) {
-                    return;
-                }
+                const namespace = (namespaceInput?.getValue?.() || '').trim();
 
                 try {
-                    await window.API.newScriptFile(namespace, name, "//@placeholder\n\nengine.exports = {type: \"world\", metadata: {asset: \"assets/" + namespace + "/" + name + "/image\"}};");
+                    if (!name) {
+                        throw new Error('Please enter a world name.');
+                    }
+                    if (!namespace) {
+                        throw new Error('Please enter a namespace.');
+                    }
+                    const assetPath = `assets/${namespace}/${name}/image`;
+                    const exports = { type: 'world', metadata: { asset: assetPath } };
+                    await window.API.newScriptFile(namespace, name, `//@placeholder\n\nengine.exports = ${JSON.stringify(exports)};`);
+                    // Register the world before rendering or returning to the menu;
+                    // filesystem watcher notifications arrive asynchronously.
+                    await window.JS_ENGINE_UPDATE(namespace, name);
                     localStorage.setItem('lastWorldNamespace', namespace);
                     this.currentWorldId = name;
                     this.currentWorldNamespace = namespace;
-                    this.currentWorldAssetPath = `assets/${namespace}/${name}/image`;
+                    this.currentWorldAssetPath = assetPath;
                     playConfirmSound();
                 } catch (err) {
                     console.error('Failed to create script file:', err);

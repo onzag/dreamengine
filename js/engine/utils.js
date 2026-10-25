@@ -747,7 +747,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
             // message.sender is a character id
             if (
                 (
-                    !message.characterId || (
+                    (!message.characterId && !message.isStoryMasterMessage) ||
+                    (
+                        message.characterId &&
                         !conversationObject.participants.includes(message.characterId) &&
                         !(
                             conversationObject.remoteParticipants &&
@@ -756,7 +758,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         !options.unsafeMode &&
                         !message.isStoryMasterMessage
                     )
-                )) {
+                    )) {
                 throw new Error(`Sender ${message.characterId} is not a participant nor a remote participant of conversation ${conversationId}`);
             }
 

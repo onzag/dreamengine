@@ -110,15 +110,17 @@ class CharacterOverlay extends HTMLElement {
 
             dialog.addEventListener('confirm', async () => {
                 // @ts-ignore
-                const name = nameInput?.getValue?.() || '';
+                const name = (nameInput?.getValue?.() || '').trim();
                 // @ts-ignore
-                const namespace = namespaceInput?.getValue?.() || '';
-
-                if (!name || !namespace) {
-                    return;
-                }
+                const namespace = (namespaceInput?.getValue?.() || '').trim();
 
                 try {
+                    if (!name) {
+                        throw new Error('Please enter a character name.');
+                    }
+                    if (!namespace) {
+                        throw new Error('Please enter a namespace.');
+                    }
                     await window.API.newScriptFile(namespace, name, "//@placeholder\n\nengine.exports = {type: \"characters\"}");
                     await window.JS_ENGINE_UPDATE(namespace, name);
                     localStorage.setItem('lastCharacterNamespace', namespace);

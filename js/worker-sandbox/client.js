@@ -348,10 +348,18 @@ export class EngineWorkerClient {
      * 
      * @param {object} args
      * @param {string|string[]} args.path - path of template to call on the worker
-     * @param {string} args.characterName - name of character to call template on 
+     * @param {string} args.characterName - name of character to call template on
+     * @param {boolean} [args.stripIdentifierIds] - whether to strip identifier IDs from the resulting string (default: false)
      * @returns {Promise<string>} The resulting string from the template
      */
-    callCharOnlyTemplate(args) { return this.#call("callCharOnlyTemplate", args); }
+    callCharOnlyTemplate(args) {
+        let result = this.#call("callCharOnlyTemplate", args);
+        if (args.stripIdentifierIds) {
+            // strip all the <id:label> identifiers and replace them with just the label
+            result = result.then((str) => str.replace(/<[^:>]+:([^>]+)>/g, "$1"));
+        }
+        return result;
+    }
 
     /**
      * 

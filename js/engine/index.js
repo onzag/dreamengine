@@ -772,6 +772,7 @@ export class DEngine {
                     // adding a char state for this character by default
                     const futureLocation = this.pickRandomLocationForCharacter(character);
                     this.deObject.stateFor[charId] = {
+                        hp: 100,
                         carrying: [],
                         carryingCharactersDirectly: [],
                         conversationId: null,
@@ -968,6 +969,7 @@ export class DEngine {
         };
 
         this.deObject.stateFor[character.id] = {
+            hp: 100,
             dead: false,
             deadEnded: false,
             deadEndReason: null,

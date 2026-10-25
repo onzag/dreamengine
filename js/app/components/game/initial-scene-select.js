@@ -10,7 +10,6 @@ export class InitialSceneSelect extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
-        this.engine = window.ENGINE_WORKER_CLIENT;
         this.controller = new AbortController();
         /** @type {() => void} */
         this.finishIntro = () => {};
@@ -58,19 +57,20 @@ export class InitialSceneSelect extends HTMLElement {
         const { ok, error } = await initialization;
         signal.throwIfAborted();
         if (!ok) throw error;
-        const selectedScene = await this.engine.queryDEObject({ path: ['world', 'selectedScene'] });
+        const selectedScene = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['world', 'selectedScene'] });
         signal.throwIfAborted();
         if (selectedScene) return { sceneName: selectedScene, alreadySelected: true };
 
-        const actualUserName = await this.engine.queryDEObject({ path: ['user'] });
-        const sceneNames = await this.engine.queryDEObject({ path: ['world', 'initialScenes'] });
+        const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['user'] });
+        const sceneNames = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['world', 'initialScenes'] });
         /** @type {Record<string, string>} */
         const options = {};
         for (const sceneName of sceneNames || []) {
             signal.throwIfAborted();
-            options[sceneName] = await this.engine.callCharOnlyTemplate({
+            options[sceneName] = await window.ENGINE_WORKER_CLIENT.callCharOnlyTemplate({
                 path: ['world', 'scenes', sceneName, 'narration'],
                 characterName: actualUserName,
+                stripIdentifierIds: true,
             });
         }
         signal.throwIfAborted();

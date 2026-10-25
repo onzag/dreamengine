@@ -2605,6 +2605,10 @@ declare type DEPosture =
     "swimming";
 
 declare interface DEStateForCharacter {
+    /**
+     * TODO implement this, it is the health points of the character, if it reaches 0 the character is dead
+     */
+    hp: number;
     location: string;
     locationSlot: string;
     states: Array<DEApplyingState>;

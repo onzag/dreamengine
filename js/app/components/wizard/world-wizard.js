@@ -25,6 +25,7 @@ export class WorldWizard extends CardTypeWizard {
                 { src: './sounds/dream-world.mp3', fadeDurationMs: 1000, volume: 3 },
                 { src: './sounds/rem-with-fade.mp3', fadeDurationMs: 1000, volume: 1 },
                 { src: './sounds/critter.mp3', fadeDurationMs: 1000, volume: 1.5 },
+                { src: './sounds/5-degrees-to-summit.mp3', fadeDurationMs: 1000, volume: 1 },
             ],
         ) }], 1000);
     }
