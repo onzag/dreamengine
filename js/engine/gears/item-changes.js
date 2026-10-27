@@ -1,7 +1,7 @@
 import { DEngine } from "../index.js";
 import { getBeingCarriedByCharacter, getCharacterExactLocation, getExternalDescriptionOfCharacter } from "../util/character-info.js";
 import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
-import { getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, isAlreadyPlural, isSingularOfPlural, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath, utilItemCount } from "../util/weight-and-volume.js";
+import { getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath } from "../util/weight-and-volume.js";
 import { yesNoGrammar, isYes } from "../util/grammar.js";
 import { getFullItemListAtLocation } from "../util/items.js";
 import { debug } from "../debug.js";

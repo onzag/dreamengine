@@ -393,3 +393,327 @@ export function getFullItemListAtLocation(engine, locationName) {
     }
     return items;
 }
+
+const irregularPlurals = {
+    // Inanimate objects/items only
+    "axis": "axes",
+    "basis": "bases",
+    "cactus": "cacti",
+    "focus": "foci",
+    "fungus": "fungi",
+    "nucleus": "nuclei",
+    "syllabus": "syllabi",
+    "analysis": "analyses",
+    "diagnosis": "diagnoses",
+    "oasis": "oases",
+    "thesis": "theses",
+    "crisis": "crises",
+    "phenomenon": "phenomena",
+    "criterion": "criteria",
+    "datum": "data",
+    "index": "indices",
+    "appendix": "appendices",
+    "bacterium": "bacteria",
+    "medium": "media",
+    "radius": "radii",
+    "formula": "formulae",
+    "vertebra": "vertebrae",
+    "curriculum": "curricula",
+    "aircraft": "aircraft",
+    "species": "species",
+    "fish": "fish",
+    "sheep": "sheep",
+    "deer": "deer",
+    "dice": "dice",
+    "die": "dice",
+    "leaf": "leaves",
+    "loaf": "loaves",
+    "knife": "knives",
+    "life": "lives",
+    "wife": "wives",
+    "self": "selves",
+    "wolf": "wolves",
+    "calf": "calves",
+    "elf": "elves",
+    "scarf": "scarves",
+    "hoof": "hooves",
+    "tomato": "tomatoes",
+    "potato": "potatoes",
+    "torpedo": "torpedoes",
+    "veto": "vetoes",
+    "echo": "echoes",
+    "hero": "heroes",
+    "zero": "zeroes"
+};
+
+/**
+ * @param {DEObject} deObject
+ * @param {string|null} locationToCheckOneOfAKind
+ * @param {boolean} oneOfAKind
+ * @param {string|null} owner
+ * @param {number} amount 
+ * @param {string} itemName
+ * @param {string} itemId
+ * @param {boolean} [capitalize] whether to capitalize the first letter of the item, this is used for example when the item is at the beginning of a sentence, so we want to make sure the message looks good
+ * @param {boolean} [forceThe] whether to force "the" in front of the item, this is used for example when we want to refer to a specific item that we know is present, so we want to make sure the message reflects that, even if there is only one of that item, for example "the apple" instead of just "an apple"
+ */
+export function utilItemCount(deObject, locationToCheckOneOfAKind, oneOfAKind, owner, amount, itemName, itemId, capitalize = false, forceThe = false) {
+    const itemTrimmedLower = itemName.trim().toLowerCase();
+    const itemIsAlreadyPlural = isAlreadyPlural(itemTrimmedLower);
+    const itemIsSingularOfPlural = isSingularOfPlural(itemTrimmedLower);
+
+    let toReturn = "";
+    if (amount === 1 && itemTrimmedLower.startsWith("the ") && !owner) {
+        toReturn = itemName;
+    } else if (amount === 1 && owner) {
+        if (forceThe) {
+            toReturn = `the ${itemName} of ${owner}`;
+        } else {
+            toReturn = `${owner}'s ${itemName}`;
+        }
+    } else if (amount === 1) {
+        if (itemIsSingularOfPlural) {
+            // "pair of glasses" -> "the pair of glasses" or "a pair of glasses"
+            const isOneOfAKind = oneOfAKind || (!locationToCheckOneOfAKind ? false : checkItemIsOneOfAKindAtLocation(deObject, locationToCheckOneOfAKind, itemName, itemId));
+            if (forceThe || isOneOfAKind) {
+                toReturn = `the ${itemName}`;
+            } else {
+                toReturn = `a ${itemName}`;
+            }
+        } else if (itemIsAlreadyPlural) {
+            // "glasses" -> "the glasses" (can't say "a glasses")
+            toReturn = `the ${itemName}`;
+        } else {
+            const isOneOfAKind = oneOfAKind || (!locationToCheckOneOfAKind ? false : checkItemIsOneOfAKindAtLocation(deObject, locationToCheckOneOfAKind, itemName, itemId));
+            if (forceThe || isOneOfAKind) {
+                toReturn = `the ${itemName}`;
+            } else if (itemTrimmedLower.startsWith("a")) {
+                toReturn = `an ${itemName}`;
+            } else {
+                toReturn = `a ${itemName}`;
+            }
+        }
+    } else {
+        if (itemIsAlreadyPlural) {
+            // Already plural, don't add suffix: "2 glasses" not "2 glasseses"
+            if (!owner) {
+                toReturn = `${forceThe ? "the " : ""}${amount} ${itemName}`;
+            } else if (forceThe) {
+                toReturn = `the ${amount} ${itemName} of ${owner}`;
+            } else {
+                toReturn = `${owner}'s ${amount} ${itemName}`;
+            }
+        } else if (itemIsSingularOfPlural) {
+            // "pair of glasses" -> "2 pairs of glasses"
+            const spaceIdx = itemName.indexOf(' ');
+            const unitWord = spaceIdx !== -1 ? itemName.slice(0, spaceIdx) : itemName;
+            const rest = spaceIdx !== -1 ? itemName.slice(spaceIdx) : '';
+            const unitWordLower = unitWord.toLowerCase();
+            let pluralUnit;
+            if (unitWordLower.endsWith("ch") || unitWordLower.endsWith("sh") || unitWordLower.endsWith("x") || unitWordLower.endsWith("z") || unitWordLower.endsWith("s")) {
+                pluralUnit = unitWord + "es";
+            } else if (unitWordLower.endsWith("y") && !["a", "e", "i", "o", "u"].includes(unitWordLower.slice(-2, -1))) {
+                pluralUnit = unitWord.slice(0, -1) + "ies";
+            } else {
+                pluralUnit = unitWord + "s";
+            }
+            const pluralized = pluralUnit + rest;
+            if (!owner) {
+                toReturn = `${forceThe ? "the " : ""}${amount} ${pluralized}`;
+            } else if (forceThe) {
+                toReturn = `the ${amount} ${pluralized} of ${owner}`;
+            } else {
+                toReturn = `${owner}'s ${amount} ${pluralized}`;
+            }
+        } else {
+            // Try to pluralize using irregulars first
+            const lastWord = itemTrimmedLower.split(" ").slice(-1)[0];
+            if (!owner) {
+                // @ts-ignore
+                if (irregularPlurals[lastWord]) {
+                    // Replace only the last word with its irregular plural
+                    const words = itemName.split(" ");
+                    // @ts-ignore
+                    words[words.length - 1] = irregularPlurals[lastWord];
+                    toReturn = `${forceThe ? "the " : ""}${amount} ${words.join(" ")}`;
+                } else if (lastWord.endsWith("s") || lastWord.endsWith("x") || lastWord.endsWith("z") || lastWord.endsWith("ch") || lastWord.endsWith("sh")) {
+                    toReturn = `${forceThe ? "the " : ""}${amount} ${itemName}es`;
+                } else if (lastWord.endsWith("y") && !["a", "e", "i", "o", "u"].includes(lastWord.slice(-2, -1))) {
+                    toReturn = `${forceThe ? "the " : ""}${amount} ${itemName.slice(0, -1)}ies`;
+                } else {
+                    toReturn = `${forceThe ? "the " : ""}${amount} ${itemName}s`;
+                }
+            } else {
+                if (forceThe) {
+                    // @ts-ignore
+                    if (irregularPlurals[lastWord]) {
+                        // Replace only the last word with its irregular plural
+                        const words = itemName.split(" ");
+                        // @ts-ignore
+                        words[words.length - 1] = irregularPlurals[lastWord];
+                        toReturn = `the ${amount} ${words.join(" ")} of ${owner}`;
+                    } else if (lastWord.endsWith("s") || lastWord.endsWith("x") || lastWord.endsWith("z") || lastWord.endsWith("ch") || lastWord.endsWith("sh")) {
+                        toReturn = `the ${amount} ${itemName}es of ${owner}`;
+                    } else if (lastWord.endsWith("y") && !["a", "e", "i", "o", "u"].includes(lastWord.slice(-2, -1))) {
+                        toReturn = `the ${amount} ${itemName.slice(0, -1)}ies of ${owner}`;
+                    } else {
+                        toReturn = `the ${amount} ${itemName}s of ${owner}`;
+                    }
+                } else {
+                    // @ts-ignore
+                    if (irregularPlurals[lastWord]) {
+                        // Replace only the last word with its irregular plural
+                        const words = itemName.split(" ");
+                        // @ts-ignore
+                        words[words.length - 1] = irregularPlurals[lastWord];
+                        toReturn = `${owner}'s ${amount} ${words.join(" ")}`;
+                    } else if (lastWord.endsWith("s") || lastWord.endsWith("x") || lastWord.endsWith("z") || lastWord.endsWith("ch") || lastWord.endsWith("sh")) {
+                        toReturn = `${owner}'s ${amount} ${itemName}es`;
+                    } else if (lastWord.endsWith("y") && !["a", "e", "i", "o", "u"].includes(lastWord.slice(-2, -1))) {
+                        toReturn = `${owner}'s ${amount} ${itemName.slice(0, -1)}ies`;
+                    } else {
+                        toReturn = `${owner}'s ${amount} ${itemName}s`;
+                    }
+                }
+            }
+        }
+    }
+    if (capitalize) {
+        toReturn = toReturn.charAt(0).toUpperCase() + toReturn.slice(1);
+    }
+    return toReturn;
+}
+
+// Words that are inherently plural (pluralia tantum) - they don't change form for plural
+const alreadyPluralNouns = new Set([
+    "glasses", "sunglasses", "eyeglasses", "scissors", "pants", "trousers", "shorts",
+    "jeans", "pliers", "tongs", "tweezers", "binoculars", "goggles", "shears",
+    "leggings", "stockings", "tights", "clippers", "forceps", "bellows",
+    "remains", "ruins", "ashes", "embers", "debris", "dregs", "suds",
+    "clothes", "riches", "goods", "belongings", "surroundings", "stairs",
+    "handcuffs", "shackles", "knickers", "briefs", "boxers", "pajamas",
+    "overalls", "dungarees", "chaps", "suspenders", "braces", "fragments",
+]);
+
+// Patterns that indicate the name is a singular expression wrapping a plural noun
+// e.g. "a pair of glasses", "a dozen eggs", "a set of keys"
+const singularOfPluralPrefixes = [
+    "pair of ", "set of ", "bunch of ", "pack of ", "bundle of ",
+    "dozen ", "dozen of ", "handful of ", "stack of ", "pile of ",
+    "box of ", "bag of ", "crate of ", "barrel of ", "basket of ",
+    "collection of ", "group of ", "batch of ", "cluster of ",
+    "roll of ", "spool of ", "jar of ", "can of ", "bottle of ",
+    "tube of ", "piece of ", "slab of ", "chunk of ", "strip of ",
+    "sheet of ", "bolt of ", "length of ", "string of ", "strand of ",
+];
+
+/**
+ * Checks if the last word of an item name is already a plural noun (pluralia tantum).
+ * e.g. "reading glasses" -> true, "red scissors" -> true, "sword" -> false
+ * @param {string} itemNameLower - lowercased item name
+ * @returns {boolean}
+ */
+export function isAlreadyPlural(itemNameLower) {
+    const lastWord = itemNameLower.split(" ").slice(-1)[0];
+    return alreadyPluralNouns.has(lastWord);
+}
+
+/**
+ * Checks if an item name is a singular expression wrapping a plural noun.
+ * e.g. "a pair of glasses" -> true, "a dozen eggs" -> true, "sword" -> false
+ * @param {string} itemNameLower - lowercased item name
+ * @returns {boolean}
+ */
+export function isSingularOfPlural(itemNameLower) {
+    return singularOfPluralPrefixes.some(prefix => itemNameLower.startsWith(prefix));
+}
+
+/**
+ * 
+ * @param {DEObject} deObject
+ * @param {string} location
+ * @param {string} itemName
+ * @param {string} itemId
+ * @returns {boolean} true if the item is one of a kind at the location, false otherwise
+ */
+export function checkItemIsOneOfAKindAtLocation(deObject, location, itemName, itemId) {
+    let foundAnother = false
+    const itemTrimmedLower = itemName.trim().toLowerCase();
+
+    /**
+     * @param {DEItem[]} itemList 
+     */
+    const countInList = (itemList) => {
+        for (const itemInList of itemList) {
+            // @ts-ignore TODO whaT?
+            if (itemInList._moved_to) {
+                continue; // skip items that have been moved, as they are not really present in the location anymore
+            }
+            if (itemInList.name.trim().toLowerCase() === itemTrimmedLower && itemInList.id !== itemId) {
+                foundAnother = true;
+                return;
+            } else if (itemInList.name.trim().toLowerCase().includes(itemTrimmedLower) && itemInList.id !== itemId) {
+                // we also check if the item name includes the item we are looking for, this is just to increase the chances of finding
+                foundAnother = true;
+                return;
+            }
+            if (foundAnother) {
+                return;
+            }
+            countInList(itemInList.containing);
+            if (foundAnother) {
+                return;
+            }
+            countInList(itemInList.ontop);
+            if (foundAnother) {
+                return;
+            }
+        }
+    }
+
+    if (foundAnother) {
+        return false;
+    }
+
+    const allCharactersToCheck = [];
+    for (const charName in deObject.characters) {
+        const charState = deObject.stateFor[charName];
+        if (charState.location === location) {
+            allCharactersToCheck.push(charName);
+        }
+    }
+    for (const charName of allCharactersToCheck) {
+        const characterState = deObject.stateFor[charName];
+        countInList(characterState.carrying);
+        if (foundAnother) {
+            return false;
+        }
+        countInList(characterState.wearing);
+        if (foundAnother) {
+            return false;
+        }
+    }
+    for (const [slotName, slot] of Object.entries(deObject.world.locations[location].slots)) {
+        countInList(slot.items);
+        if (foundAnother) {
+            return false;
+        }
+    }
+
+    return !foundAnother;
+}
+
+/**
+ * @param {DEObject} deObject
+ * @param {string} itemName
+ * @param {string} itemId
+ * @returns {boolean}
+ */
+export function checkItemIsOneOfAKindAtWorld(deObject, itemName, itemId) {
+    for (const locationName in deObject.world.locations) {
+        if (checkItemIsOneOfAKindAtLocation(deObject, locationName, itemName, itemId) === false) {
+            return false;
+        }
+    }
+    return true;
+}

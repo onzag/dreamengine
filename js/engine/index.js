@@ -157,6 +157,7 @@ export function repairPotentialUserWithDefaults(character) {
         tier: character.tier || "galactic",
         tierValue: typeof character.tierValue === "number" ? character.tierValue : 100,
         weightKg: typeof character.weightKg === "number" ? character.weightKg : 70,
+        blindness: character.blindness === "full" || character.blindness === "partial-good" || character.blindness === "partial-bad" || character.blindness === "no" ? character.blindness : "no",
     });
 }
 
@@ -281,6 +282,7 @@ export function createCharacterFromUser(user) {
             modes: [],
             sounds: [],
         },
+        blindness: user.blindness || "no",
     }
 }
 

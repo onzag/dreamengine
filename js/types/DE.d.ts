@@ -183,6 +183,10 @@ declare interface DEMinimalCharacterReference {
      * List of groups or social categories that this characters belongs to
      */
     groupBelonging: string[];
+    /**
+     * TODO implement blindness properly
+     */
+    blindness: "partial-good" | "partial-bad" | "full" | "no";
 }
 
 declare interface DEActionPromptInjection<TemplateType> {
@@ -2203,7 +2207,7 @@ declare interface DEBondDescription {
 }
 
 declare interface DEStateCauseCausantCharacter {
-    name: string;
+    id: string;
     type: "character";
     /**
      * A number from 0 to 1 that represents how likely is the character that was targeted by this state to accept an apology from this causant character
@@ -2213,6 +2217,7 @@ declare interface DEStateCauseCausantCharacter {
 }
 
 declare interface DEStateCauseCausantObject {
+    id: string;
     name: string;
     type: "object";
 }
@@ -2377,6 +2382,10 @@ declare interface DEItem {
      * The name of the item, this is what the character will refer to when talking about it, and what the character will use to identify it in their inventory or when interacting with it
      */
     name: string;
+    /**
+     * Whether this item is one of a kind, meaning that there is only one of this item in the world
+     */
+    oneOfAKind?: boolean;
     /**
      * A relative position to the parent item that it is on top or containing, or relative to the character that is carrying it, for example, a backpack may be on the back of the character, or a phone may be in the character's pocket, this is useful for determining where the item is located in relation to other items or characters
      * the position should be simple, eg, "on the back", "in the pocket", "on the head", "in the hand", etc...
@@ -3848,6 +3857,7 @@ declare interface DEUtils {
     },
     conversations: {
         getConversation(conversationId: string): Promise<DEConversation | null>;
+        getAllConversationsAtLocation(locationId: string): Promise<{conversations: DEConversation[], leftoverCharacters: string[], foundCharacters: string[]}>; // leftoverCharacters are characters that are at the location but not in any conversation
         addMessage(conversationId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { unsafeMode?: boolean } = {}): Promise<DEConversationMessage>;
         addMessageIntoTargetConversation(targetCharacterId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { teleportParticipants?: boolean, unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean } = {}): Promise<DEConversationMessage>;
         /**
@@ -3864,7 +3874,7 @@ declare interface DEUtils {
         newConversation(conversation: Pick<DEConversation, "participants" | "remoteParticipants" | "location" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipants?: boolean, unsafeMode?: boolean } = {}): Promise<DEConversation>;
     },
     characterInfo: {
-        getExternalDescriptionOfCharacter(char: DECompleteCharacterReference, onlyBasics?: boolean, hideCurrentPosture?: boolean): Promise<string>;
+        getExternalDescriptionOfCharacter(char: DECompleteCharacterReference, inPerspectiveOf: DECompleteCharacterReference, onlyBasics?: boolean, hideCurrentPosture?: boolean): Promise<string>;
 
         isWithinAttractionGroupFor(option: "male" | "female" | "ambiguous", char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
 
@@ -3948,11 +3958,6 @@ declare interface DEUtils {
          * @returns true or false
          */
         hasNoIdeaWhereIs(povChar: string | DECompleteCharacterReference, char: string | DECompleteCharacterReference): Promise<boolean>;
-
-        /**
-         * Provides the list of characters that are currently interacting with another character
-         */
-        getCurrentlyInteractingCharacters(char: DECompleteCharacterReference | string): string[];
     },
     bonds: {
         isStrangerTowards(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
@@ -4213,13 +4218,16 @@ declare interface DEUtils {
             inPerspectiveOf: DECompleteCharacterReference | string | null,
             options?: {
                 type?: "default" | "indefinite" | "definite"
-                capitalize?: boolean
+                capitalize?: boolean,
+                justName?: boolean,
             }
         ): string;
         /**
          * @param item the item to format
+         * @param options the options for formatting the item name, including the type of article to use (default, definite) and whether to capitalize the first letter, only definite is supported because the default form uses definite or indefinite depending on the item uniqueness
+         * @returns the formatted name of the item
          */
-        formatItemName(item: DEItem, options?: { type?: "default" | "indefinite" | "definite", capitalize?: boolean }): string;
+        formatItemName(item: DEItem, inPerspectiveOf: DECompleteCharacterReference | string | null, options?: { type?: "default" | "definite", capitalize?: boolean }): string;
         /**
          * The story message to parse
          * @param message The story message to parse

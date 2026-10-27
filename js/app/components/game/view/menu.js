@@ -22,7 +22,6 @@ export class GameMenu extends HTMLElement {
         root.querySelector('.wake-up')?.addEventListener('click', () => {
             options.hidePopover();
             trigger.focus();
-            playConfirmSound();
             this.dispatchEvent(new CustomEvent('wake-up', { bubbles: true, composed: true }));
         });
     }

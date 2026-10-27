@@ -1,3 +1,4 @@
+import { debug } from "../debug.js";
 import { DEngine } from "../index.js";
 import { getCharacterCanSee, getSysPromptForCharacter } from "../util/character-info.js";
 import { emotions } from "../util/emotions.js";
@@ -25,6 +26,21 @@ export async function talk(engine, character, options) {
         throw new Error(`Character ${character.id} not found in the engine`);
     } else if (!engine.dataManager) {
         throw new Error("Data manager not initialized");
+    }
+
+    if (!debug.ENABLED_TALK) {
+        return {
+            addedMessagesForStoryMaster: [],
+            hasDeadEnded: false,
+            hasDied: false,
+            /** @type {DEEmotionNames} */
+            // @ts-ignore
+            primaryEmotion: null,
+            /** @type {DEEmotionNames[]} */
+            // @ts-ignore
+            emotionalRange: [],
+            message: "",
+        };
     }
 
     const charState = engine.deObject.stateFor[character.id];

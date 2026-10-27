@@ -8,9 +8,11 @@ const debug = {
     ENABLED_POSTURE_CHANGE: true,
     ENABLED_ITEM_CHANGE: true,
     ENABLED_FEASIBILITY_CHECK: true,
+    ENABLED_TALK: true,
 };
 
 // Comment out the following lines to disable specific debug features
+debug.ENABLED_TALK = false;
 debug.ENABLED_BOND_CHANGE = false;
 debug.ENABLED_TIME_FORWARD = false;
 debug.ENABLED_TRIGGERS = false;

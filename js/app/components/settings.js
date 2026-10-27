@@ -296,6 +296,13 @@ class Settings extends HTMLElement {
                     input-type="number"
                     input-is-percentage="true"
                 ></app-overlay-input>
+                <app-overlay-select
+                    label="Blindness"
+                    title="A value representing how blind your character is. Higher means more blind. This will affect deeply the perceptive capabilities of your character"
+                    input-data-location="user.blindness"
+                    input-options='["no", "partial-good", "partial-bad", "full"]'
+                    input-default-value="no"
+                ></app-overlay-select>
                 <app-overlay-input
                     label="Attractiveness"
                     title="A value representing how attractive your character is. Higher means more attractive and more likely to be approached by other characters and have romantic interactions."

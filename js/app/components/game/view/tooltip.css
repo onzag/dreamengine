@@ -1,0 +1,29 @@
+@import './shared.css';
+:host { display: inline-flex; position: relative; min-width: 0; max-width: 100%; }
+.tip {
+    /* The popover top layer escapes overflow, transforms and glass backdrops. */
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    box-sizing: border-box;
+    width: max-content;
+    max-width: min(34vh, calc(100vw - 2vh));
+    padding: .8vh 1vh;
+    border: 1px solid rgba(190, 220, 255, .5);
+    border-radius: .55vh;
+    background: rgba(9, 20, 39, .96);
+    box-shadow: 0 .5vh 1.4vh rgba(0, 0, 0, .35);
+    color: #edf6ff;
+    font-family: inherit;
+    font-size: 2vh;
+    line-height: 1.4;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    opacity: 1;
+    transition: opacity .15s;
+}
+.tip::backdrop { background: transparent; pointer-events: none; }
+@starting-style { .tip:popover-open { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .tip { transition: none; } }

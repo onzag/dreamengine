@@ -1,5 +1,5 @@
 ﻿@import './shared.css';
 :host { display: block; min-height: 0; }
-section { height: 100%; overflow: auto; padding: 1.5vh 2vh; }
-p { font: inherit; line-height: 1.55; margin: 0 0 .8vh; text-shadow: 0 1px 3px #0009; }
+section { padding: 1.5vh 2vh; }
+p { font: inherit; line-height: 1.55; margin: 0 0 .8vh; text-shadow: 0 1px 3px #0009; font-size: 2.5vh; }
 p:last-child { margin-bottom: 0; }

@@ -11,7 +11,7 @@ export class ItemsOverlay extends HTMLElement {
         this.root.innerHTML = `
             <link rel="stylesheet" href="${new URL('./items-overlay.css', import.meta.url).href}">
             <dialog class="glass" aria-labelledby="items-title" aria-describedby="items-note">
-                <header><div><p>Take a look around</p><h1 id="items-title">Belongings & vicinity</h1></div><button type="button" autofocus>Close <kbd>Tab / Esc</kbd></button></header>
+                <header><div><p>Take a look around</p><h1 id="items-title">Surroundings </h1></div><button type="button" autofocus>Close <kbd>Tab / Esc</kbd></button></header>
                 <div class="columns">
                     <section aria-labelledby="vicinity-title"><h2 id="vicinity-title">Vicinity <span>Nearby places</span></h2><div class="slots"><app-location-items-slot-view slot-label="Slot A" variant="a"></app-location-items-slot-view><app-location-items-slot-view slot-label="Slot B" variant="b"></app-location-items-slot-view><app-location-items-slot-view slot-label="Slot C" variant="c"></app-location-items-slot-view></div></section>
                     <section aria-labelledby="character-title"><h2 id="character-title">Character <span>On your person</span></h2><app-character-items-view></app-character-items-view></section>

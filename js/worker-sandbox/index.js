@@ -386,17 +386,17 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
             return { ok: true };
         },
 
-        async callCharOnlyTemplate({ path, characterName }) {
+        async callCharOnlyTemplate({ path, characterId }) {
             const template = await handlers.queryDEObject({ path, _returnFunctions: true });
 
             if (typeof template === "string") {
                 return template; // simple string template, return as-is without calling
             }
 
-            const char = engine.getDEObject().characters[characterName];
+            const char = engine.getDEObject().characters[characterId];
 
             if (!char) {
-                throw new Error(`Character '${characterName}' not found in DE object`);
+                throw new Error(`Character '${characterId}' not found in DE object`);
             }
 
             return await template({
@@ -404,16 +404,35 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
             });
         },
 
-        async callCharAndOtherTemplate({ path, characterName, otherName }) {
+        async callCharAndCausesTemplate({ path, characterId, causes }) {
             const template = await handlers.queryDEObject({ path, _returnFunctions: true });
 
             if (typeof template === "string") {
                 return template; // simple string template, return as-is without calling
             }
 
-            const char = engine.getDEObject().characters[characterName];
-            const other = engine.getDEObject().characters[otherName];
-            const otherFamilyRelationship = char.familyTies[otherName];
+            const char = engine.getDEObject().characters[characterId];
+
+            if (!char) {
+                throw new Error(`Character '${characterId}' not found in DE object`);
+            }
+
+            return await template({
+                char,
+                causes,
+            });
+        },
+
+        async callCharAndOtherTemplate({ path, characterId, otherId }) {
+            const template = await handlers.queryDEObject({ path, _returnFunctions: true });
+
+            if (typeof template === "string") {
+                return template; // simple string template, return as-is without calling
+            }
+
+            const char = engine.getDEObject().characters[characterId];
+            const other = engine.getDEObject().characters[otherId];
+            const otherFamilyRelationship = char.familyTies[otherId];
             const de = engine.getDEObject();
             const otherRelationship = await getRelationship(de, char, other);
             return await template({
@@ -433,12 +452,13 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
          * @param {string | string[]} [args.path]  - e.g. "characters.Alice" or ["world","locations"]
          * @param {string[]}          [args.pick]  - if set, only these keys are kept
          * @param {string[]}          [args.skip]  - if set, these keys are excluded (ignored when pick is provided)
-         * @param {boolean|Array<string|number|boolean|{char: string}>} [args.call]  - call the function, as a function, if found, usually meant for calling utilities
+         * @param {boolean|Array<string|number|boolean|{__type: "char", value: string}|{__type: "object", value: any}>} [args.call]  - call the function, as a function, if found, usually meant for calling utilities
          * @param {number}            [args.depth] - max depth to recurse (0 = shallow / keys only). undefined = full depth
          * @param {boolean}           [args._returnFunctions] - internal, returns functions without complaining of lack of call
+         * @param {boolean}           [args.returnExistingFunctionsAsBoolean] - if true, functions are returned as `true` instead of being filtered out
          * @return {Promise<any>} The filtered sub-object at the target path
          */
-        async queryDEObject({ path, pick, skip, depth, call, _returnFunctions }) {
+        async queryDEObject({ path, pick, skip, depth, call, returnExistingFunctionsAsBoolean, _returnFunctions }) {
             const de = engine.getDEObject();
 
             // ── navigate to the requested sub-object ────────────────
@@ -465,8 +485,10 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
                         target = await target();
                     } else if (Array.isArray(call)) {
                         target = await target(...call.map(arg => {
-                            if (typeof arg === "object" && arg !== null && "char" in arg) {
-                                return engine.getDEObject().characters[arg.char];
+                            if (typeof arg === "object" && arg.__type === "char" && arg !== null && "value" in arg) {
+                                return engine.getDEObject().characters[arg.value];
+                            } else if (typeof arg === "object" && arg.__type === "object" && arg !== null) {
+                                return arg.value;
                             }
                             return arg;
                         }));
@@ -556,11 +578,20 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
 
             const result = {};
             for (const k of Object.keys(target)) {
-                if (typeof target[k] === "function") continue;
                 if (pickSet && !pickSet.has(k)) continue;
                 if (skipSet && skipSet.has(k)) continue;
-                // @ts-ignore
-                result[k] = cloneFiltered(target[k], 1);
+                if (typeof target[k] === "function") {
+                    if (_returnFunctions) {
+                        // @ts-ignore
+                        result[k] = target[k];
+                    } else if (returnExistingFunctionsAsBoolean) {
+                        // @ts-ignore
+                        result[k] = true;
+                    }
+                } else {
+                    // @ts-ignore
+                    result[k] = cloneFiltered(target[k], 1);
+                }
             }
 
             return result;

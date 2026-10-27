@@ -143,7 +143,7 @@ class AssetImage extends HTMLElement {
                     height: 100%;
                     overflow: hidden;
                     border-radius: 10%;
-                    border: 1vh solid white;
+                    border: var(--asset-image-border-width, 1vh) solid white;
                     box-shadow: 0 0 1vh rgba(0, 0, 0, 0.5);
                     box-sizing: border-box;
                     background-color: transparent;

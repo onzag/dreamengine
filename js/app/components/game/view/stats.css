@@ -1,8 +1,23 @@
 ﻿@import './shared.css';
 :host { display: block; }
-section { padding: 1.2vh 1.6vh; }
-header { color: var(--ink); font-size: 1em; margin-bottom: .8vh; }
-dl { display: flex; flex-wrap: wrap; gap: 1vh 2.5vh; margin: 0; }
-dt { color: var(--muted); font-size: .85em; margin-bottom: .3vh; }
-dd { margin: 0; color: var(--accent); font-variant-numeric: tabular-nums; }
-dd span { opacity: .65; font-size: .8em; }
+section.glass { display: flex; flex-direction: column; align-items: stretch; padding: 1.2vh 1.6vh; }
+header { display: flex; flex-direction: column; align-items: flex-start; gap: .55vh; width: 100%; margin-bottom: 1.3vh; }
+.portrait { --asset-image-border-width: .2vh; width: 15vh; height: 15vh; flex: 0 0 auto; }
+.portrait-tooltip { width: 15vh; height: 15vh; }
+h1 { width: 100%; margin: 0; color: var(--ink); font-size: 3vh; line-height: 1.1; text-align: left; }
+.world-details { display: grid; grid-template-columns: minmax(0, 1fr); gap: .8vh; width: 100%; margin: 0; }
+.weather-row { grid-column: auto; }
+dt { color: var(--muted); font-size: 2vh; margin-bottom: .28vh; }
+dd { margin: 0; color: var(--accent); font-size: 2.4vh; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.states { width: 100%; border-top: 1px solid var(--border); margin-top: 1vh; padding-top: .9vh; }
+.state-list { display: flex; flex-wrap: wrap; gap: .6vh; width: 100%; }
+.state-chip { --state-chip-background: rgba(15, 52, 91, .92); --state-chip-border: rgba(116, 185, 239, .62); position: relative; display: inline-flex; align-items: center; max-width: 100%; min-height: 3.2vh; padding: 1vh 2vh; border: 1px solid var(--state-chip-border); border-radius: 1vh; background: var(--state-chip-background); color: var(--ink); font-size: .9em; line-height: 1.2; overflow: hidden; overflow-wrap: anywhere; }
+.state-chip[data-color-scheme="somewhat"] { --state-chip-background: rgba(43, 88, 128, .8); --state-chip-border: rgba(154, 207, 245, .55); }
+.state-chip[data-color-scheme="standard"] { --state-chip-background: rgba(15, 52, 91, .92); --state-chip-border: rgba(116, 185, 239, .62); }
+.state-chip[data-color-scheme="very"] { --state-chip-background: rgba(101, 76, 15, .94); --state-chip-border: rgba(249, 209, 92, .7); }
+.state-chip[data-color-scheme="overwhelming"] { --state-chip-background: rgba(108, 26, 30, .95); --state-chip-border: rgba(255, 124, 124, .72); }
+.state-chip.relieving { background: linear-gradient(180deg, rgba(173, 231, 255, .22), transparent 65%), var(--state-chip-background); }
+.state-chip.relieving::after { content: ''; position: absolute; inset: -120% 0 auto; height: 120%; background: linear-gradient(180deg, transparent, rgba(220, 250, 255, .38), transparent); animation: relief-descend 1.8s ease-in-out infinite; pointer-events: none; }
+.state-chip small { align-self: flex-start; position: absolute; top: .05vh; left: 50%; transform: translateX(-50%); color: #d8f5ff; font-size: .55em; letter-spacing: .06em; text-transform: uppercase; z-index: 1; }
+.state-chip.relieving > span { z-index: 1; }
+@keyframes relief-descend { to { transform: translateY(210%); } }

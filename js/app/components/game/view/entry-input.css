@@ -1,8 +1,0 @@
-﻿@import './shared.css';
-:host { display: block; min-width: 0; }
-.field { display: flex; align-items: center; min-height: var(--control-height); }
-textarea { flex: 1; min-width: 0; width: 100%; resize: none; padding: 1vh 2vh; border: 0; border-radius: var(--radius); background: transparent; color: var(--ink); font: inherit; line-height: 1.5; }
-textarea::placeholder { color: var(--muted); }
-textarea:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
-button { display: grid; place-items: center; align-self: stretch; width: 5vh; min-width: 32px; padding: .8vh; border: 0; border-left: 1px solid var(--border); background: transparent; }
-svg { width: 2.2vh; height: 2.2vh; min-width: 14px; min-height: 14px; }

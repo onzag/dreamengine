@@ -4,6 +4,7 @@
 *::-webkit-scrollbar-track { background: rgba(100, 0, 200, .3); }
 *::-webkit-scrollbar-thumb { background: rgba(50, 0, 100, .8); border: 1px solid #ccc; border-radius: 6px; }
 *::-webkit-scrollbar-thumb:hover { background: rgba(70, 0, 140, .9); }
+:host, :host * { text-shadow: 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black !important; }
 .glass {
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -11,6 +12,13 @@
     backdrop-filter: blur(2vh) saturate(155%);
     -webkit-backdrop-filter: blur(2vh) saturate(155%);
     box-shadow: inset 0 1px 0 #e0eeff24, 0 .5vh 2vh #07162b26;
+}
+.black-glass {
+    border: 1px solid rgba(255, 255, 255, .12);
+    background: linear-gradient(135deg, rgba(0, 0, 0, .12), rgba(0, 0, 0, .06)), rgba(0, 0, 0, .24);
+    backdrop-filter: blur(2vh) saturate(155%);
+    -webkit-backdrop-filter: blur(2vh) saturate(155%);
+    box-shadow: inset 0 1px 0 #ffffff24, 0 .5vh 2vh #00000026;
 }
 button { font: inherit; color: var(--ink); cursor: pointer; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -17,6 +17,14 @@
 .game-content {
     position: absolute;
     inset: 0;
+    z-index: 0;
+}
+
+.game-setup {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: #2c426b;
 }
 
 .game-exit {

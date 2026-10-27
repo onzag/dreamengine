@@ -27,17 +27,21 @@ export class Background extends HTMLElement {
         const version = ++this.updateVersion;
         try {
             const location = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['world', 'currentLocation'] });
+            const locationSlot = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['world', 'currentLocationSlot'] });
             if (!this.isConnected || version !== this.updateVersion) return;
-            const asset = location ? await window.ENGINE_WORKER_CLIENT.queryDEObject({
+            const assetLocationSlot = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ['world', 'locations', location, "slots", locationSlot, 'metadata', 'asset'],
+            });
+            const assetToUse = assetLocationSlot ? assetLocationSlot : await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ['world', 'locations', location, 'metadata', 'asset'],
-            }) : null;
+            });
             if (!this.isConnected || version !== this.updateVersion) return;
 
             let src = this.defaultBackground;
-            if (typeof asset === 'string' && asset) {
-                const isSystemAsset = asset.startsWith('@');
+            if (typeof assetToUse === 'string' && assetToUse) {
+                const isSystemAsset = assetToUse.startsWith('@');
                 const base = isSystemAsset ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
-                src = `${base}/${isSystemAsset ? asset.slice(1) : asset}`;
+                src = `${base}/${isSystemAsset ? assetToUse.slice(1) : assetToUse}`;
             } else {
                 console.warn('No background found', location);
             }

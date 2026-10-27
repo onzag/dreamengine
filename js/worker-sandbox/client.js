@@ -320,7 +320,8 @@ export class EngineWorkerClient {
      * @param {string[]}          [args.pick]  - only return these keys at the target
      * @param {string[]}          [args.skip]  - exclude these keys at the target (ignored when pick is set)
      * @param {number}            [args.depth] - max depth to recurse (0 = keys only)
-     * @param {boolean|Array<string|number|boolean|{char: string}>} [args.call] - whether to call functions at the target, either a blanket boolean or an array of arguments (default: false)
+     * @param {boolean|Array<string|number|boolean|{__type: "char", value: string}|{__type: "object", value: any}>} [args.call] - whether to call functions at the target, either a blanket boolean or an array of arguments (default: false)
+     * @param {boolean}           [args.returnExistingFunctionsAsBoolean] - if true, functions are returned as `true` instead of being filtered out
      * @returns {Promise<any>}
      */
     queryDEObject(args) { return this.#call("queryDEObject", args); }
@@ -348,7 +349,7 @@ export class EngineWorkerClient {
      * 
      * @param {object} args
      * @param {string|string[]} args.path - path of template to call on the worker
-     * @param {string} args.characterName - name of character to call template on
+     * @param {string} args.characterId - id of character to call template on
      * @param {boolean} [args.stripIdentifierIds] - whether to strip identifier IDs from the resulting string (default: false)
      * @returns {Promise<string>} The resulting string from the template
      */
@@ -365,11 +366,21 @@ export class EngineWorkerClient {
      * 
      * @param {object} args
      * @param {string|string[]} args.path - path of template to call on the worker
-     * @param {string} args.characterName - name of character to call template on
-     * @param {string} args.otherName - name of other character to call template on
+     * @param {string} args.characterId - id of character to call template on
+     * @param {string} args.otherId - id of other character to call template on
      * @returns {Promise<string>} The resulting string from the template
      */
     callCharAndOtherTemplate(args) { return this.#call("callCharAndOtherTemplate", args); }
+
+    /**
+     * 
+     * @param {object} args
+     * @param {string|string[]} args.path - path of template to call on the worker
+     * @param {string} args.characterId - id of character to call template on
+     * @param {DEStateCause[]} args.causes - array of causes to format for the character
+     * @returns {Promise<string>} The resulting string from the template
+     */
+    callCharAndCausesTemplate(args) { return this.#call("callCharAndCausesTemplate", args); }
 
     /**
      * 

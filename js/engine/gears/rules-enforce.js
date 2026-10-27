@@ -44,13 +44,13 @@ export default async function testWorldRulesOn(engine, character) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
-    const characterState = engine.deObject.stateFor[character.name];
+    const characterState = engine.deObject.stateFor[character.id];
     if (!characterState) {
-        throw new Error(`Character state for ${character.name} not found.`);
+        throw new Error(`Character state for ${character.id} not found.`);
     }
-    const characterObj = engine.deObject.characters[character.name];
+    const characterObj = engine.deObject.characters[character.id];
     if (!characterObj) {
-        throw new Error(`Character object for ${character.name} not found.`);
+        throw new Error(`Character object for ${character.id} not found.`);
     }
     if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter not initialized, cannot validate world rules");
@@ -60,12 +60,12 @@ export default async function testWorldRulesOn(engine, character) {
         return { passed: true, reason: null, addedMessagesForStoryMaster: [] };
     }
 
-    const charState = engine.deObject.stateFor[character.name];
+    const charState = engine.deObject.stateFor[character.id];
 
-    const isUser = character.name === engine.deObject.user;
+    const isUser = character.id === engine.deObject.user;
 
     if (engine.disabledWorldRules && isUser) {
-        console.warn(`World rules testing is disabled, skipping world rules test for character ${character.name}.`);
+        console.warn(`World rules testing is disabled, skipping world rules test for character ${character.id}.`);
         return { passed: true, reason: null, addedMessagesForStoryMaster: [] };
     }
 
@@ -85,9 +85,9 @@ export default async function testWorldRulesOn(engine, character) {
      * @type {Array<{name: string, description: string}>}
      */
     const characters = [];
-    const characterSurroundInfo = getSurroundingCharacters(engine.deObject, character.name);
+    const characterSurroundInfo = getSurroundingCharacters(engine.deObject, character.id);
     for (const characterName of characterSurroundInfo.totalStrangers) {
-        if (characterName === character.name) {
+        if (characterName === character.id) {
             continue;
         }
         const characterInfo = engine.deObject.characters[characterName];
@@ -96,7 +96,7 @@ export default async function testWorldRulesOn(engine, character) {
         }
     }
     for (const characterName of characterSurroundInfo.nonStrangers) {
-        if (characterName === character.name) {
+        if (characterName === character.id) {
             continue;
         }
         const characterInfo = engine.deObject.characters[characterName];

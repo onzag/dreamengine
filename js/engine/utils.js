@@ -1,9 +1,10 @@
-import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter, getCurrentlyInteractingCharacters } from "./util/character-info.js";
+import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter } from "./util/character-info.js";
 import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/random.js";
 import { getCharacterVolume, getCharacterWeight } from "./util/weight-and-volume.js";
 import { emotions } from "./util/emotions.js";
 import { DEngine } from "./index.js";
 import { getNameIdentificationForOneCharacterTowardsAnother, getNameIdentificationForOneCharacterTowardsAnotherOnlyName } from "./util/messages.js";
+import { utilItemCount } from "./util/items.js";
 
 // NOTE: DE.characters, DE.bonds, DE.stateFor are all keyed by character id (character.id), not character name.
 // DESingleBondDescription.towards is a character id.
@@ -533,6 +534,24 @@ export const deEngineUtilsFn = (DE, engine) => ({
         getConversation: async function (conversationId) {
             return DE.database.getConversation(conversationId);
         },
+        getAllConversationsAtLocation: async function (locationName) {
+            const allCharactersAtLocation = DE.utils.world.allCharactersAtLocation(locationName);
+            const allConversationIds = new Set();
+            for (const character of allCharactersAtLocation) {
+                const charState = DE.stateFor[character.id];
+                if (charState && charState.conversationId) {
+                    allConversationIds.add(charState.conversationId);
+                }
+            }
+            const conversations = (await Promise.all(Array.from(allConversationIds).map(id => DE.database.getConversation(id)))).filter(c => c !== null);
+            const foundCharacters = allCharactersAtLocation.map(character => character.id);
+            const groupedCharacters = new Set(conversations.flatMap(c => [...c.participants, ...c.remoteParticipants]));
+            return {
+                conversations,
+                foundCharacters,
+                leftoverCharacters: foundCharacters.filter(id => !groupedCharacters.has(id)),
+            };
+        },
         async newConversation(conversation, options = {}) {
             const participants = conversation.participants;
             const remoteParticipants = conversation.remoteParticipants;
@@ -744,11 +763,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 throw new Error(`Conversation with ID ${conversationId} not found`);
             }
 
-            // message.sender is a character id
             if (
                 (
-                    (!message.characterId && !message.isStoryMasterMessage) ||
-                    (
+                    
                         message.characterId &&
                         !conversationObject.participants.includes(message.characterId) &&
                         !(
@@ -757,8 +774,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         ) &&
                         !options.unsafeMode &&
                         !message.isStoryMasterMessage
-                    )
-                    )) {
+                    
+                )
+            ) {
                 throw new Error(`Sender ${message.characterId} is not a participant nor a remote participant of conversation ${conversationId}`);
             }
 
@@ -933,8 +951,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     characterInfo: {
-        getExternalDescriptionOfCharacter(char, onlyBasics, hideCurrentPosture) {
-            return getExternalDescriptionOfCharacter(DE, char.id, onlyBasics, hideCurrentPosture);
+        getExternalDescriptionOfCharacter(char, inPerspectiveOf, onlyBasics, hideCurrentPosture) {
+            return getExternalDescriptionOfCharacter(DE, char.id, inPerspectiveOf.id, onlyBasics, hideCurrentPosture);
         },
         isWithinAttractionGroupFor(opt, char1, char2) {
             const char1Ref = resolveCharacter(DE, char1);
@@ -1235,14 +1253,6 @@ export const deEngineUtilsFn = (DE, engine) => ({
             }
 
             return !(await DE.utils.characterInfo.lastSaw(povRef, charRef));
-        },
-        getCurrentlyInteractingCharacters(char) {
-            const charRef = resolveCharacter(DE, char);
-            if (!charRef) {
-                console.warn(`Character reference for ${char} not found when checking currently interacting characters`);
-                return [];
-            }
-            return getCurrentlyInteractingCharacters(DE, charRef.id);
         },
     },
 
@@ -1757,7 +1767,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (shiftAmount > 0) {
                 if (activeState.causes && causes) {
                     for (const causeToAdd of causes) {
-                        const existingSameCause = activeState.causes.find(c => c.causant && c.causant.name === causeToAdd.causant?.name && c.causant?.type === causeToAdd.causant?.type && c.description === causeToAdd.description);
+                        const existingSameCause = activeState.causes.find(c => c.causant && c.causant.id === causeToAdd.causant?.id && c.causant?.type === causeToAdd.causant?.type && c.description === causeToAdd.description);
                         if (existingSameCause) {
                             if (existingSameCause.causant && existingSameCause.causant.type === "character") {
                                 const apologizableRate = (causeToAdd.causant?.type === "character" && causeToAdd.causant?.apologizable) || 0;
@@ -1774,7 +1784,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 }
             } else if (causes && activeState.causes) {
                 for (const causeToRemove of causes) {
-                    activeState.causes = activeState.causes.filter(c => !(c.causant && causeToRemove.causant && c.causant.name === causeToRemove.causant.name && c.causant.type === causeToRemove.causant.type && c.description === causeToRemove.description));
+                    activeState.causes = activeState.causes.filter(c => !(c.causant && causeToRemove.causant && c.causant.id === causeToRemove.causant.id && c.causant.type === causeToRemove.causant.type && c.description === causeToRemove.description));
                 }
             }
 
@@ -1815,7 +1825,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             }
 
             if (activeState.causes) {
-                const existingSameCause = activeState.causes.find(c => c.causant && c.causant.name === cause.causant?.name && c.causant?.type === cause.causant?.type && c.description === cause.description);
+                const existingSameCause = activeState.causes.find(c => c.causant && c.causant.id === cause.causant?.id && c.causant?.type === cause.causant?.type && c.description === cause.description);
                 if (existingSameCause) {
                     if (existingSameCause.causant && existingSameCause.causant.type === "character") {
                         const apologizableRate = (cause.causant?.type === "character" && cause.causant?.apologizable) || 0;
@@ -1846,7 +1856,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 return;
             }
             if (activeState.causes) {
-                activeState.causes = activeState.causes.filter(c => !(c.causant && cause && c.causant.name === cause.causant?.name && c.causant.type === cause.causant?.type && c.description === cause.description));
+                activeState.causes = activeState.causes.filter(c => !(c.causant && cause && c.causant.id === cause.causant?.id && c.causant.type === cause.causant?.type && c.description === cause.description));
                 if (activeState.causes.length === 0) {
                     activeState.causes = null;
                 }
@@ -1868,17 +1878,17 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 return;
             }
             if (activeState.causes) {
-                activeState.causes = activeState.causes.filter(c => !(c.causant && c.causant.name === causant && c.causant.type === causantType));
+                activeState.causes = activeState.causes.filter(c => !(c.causant && c.causant.id === causant && c.causant.type === causantType));
             }
         },
         async getLastStateCausants(char, stateName) {
-            return removeDuplicatesHelper((await getCausantsHelperLocal(DE, char, stateName)).map(c => c.name));
+            return removeDuplicatesHelper((await getCausantsHelperLocal(DE, char, stateName)).map(c => c.id));
         },
         async getLastStateCharacterCausants(char, stateName) {
-            return removeDuplicatesHelper((await getCausantsHelperLocal(DE, char, stateName)).filter(c => c.type === "character").map(c => c.name));
+            return removeDuplicatesHelper((await getCausantsHelperLocal(DE, char, stateName)).filter(c => c.type === "character").map(c => c.id));
         },
         async getLastStateObjectCausants(char, stateName) {
-            return (await getCausantsHelperLocal(DE, char, stateName)).filter(c => c.type === "object").map(c => c.name);
+            return (await getCausantsHelperLocal(DE, char, stateName)).filter(c => c.type === "object").map(c => c.id);
         },
         getStates(char) {
             return DE.stateFor[char.id].states.map(s => s.state);
@@ -1979,12 +1989,12 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     info2.causes.forEach(cause => {
                         if (cause.causant) {
                             // cause.causant.name stores the causant identifier (character id in the new system)
-                            if (!causesPerCausant[cause.causant.name]) {
-                                causesPerCausant[cause.causant.name] = [];
+                            if (!causesPerCausant[cause.causant.id]) {
+                                causesPerCausant[cause.causant.id] = [];
                             }
-                            causesPerCausant[cause.causant.name].push(cause.description);
-                            if (!causants.includes(cause.causant.name)) {
-                                causants.push(cause.causant.name);
+                            causesPerCausant[cause.causant.id].push(cause.description);
+                            if (!causants.includes(cause.causant.id)) {
+                                causants.push(cause.causant.id);
                             }
                         }
                     });
@@ -2108,22 +2118,13 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (options && options.capitalize) {
                 nameGiven = nameGiven.charAt(0).toUpperCase() + nameGiven.slice(1);
             }
+            if (options && options.justName) {
+                return nameGiven;
+            }
             return "<" + ourChar.id + ":" + nameGiven + ">";
         },
-        formatItemName(item, options) {
-            let nameGiven = item.name;
-            if (options && options.type === "indefinite") {
-                if (nameGiven[0].toLowerCase() === "a" || nameGiven[0].toLowerCase() === "e" || nameGiven[0].toLowerCase() === "i" || nameGiven[0].toLowerCase() === "o" || nameGiven[0].toLowerCase() === "u") {
-                    nameGiven = "an " + nameGiven;
-                } else {
-                    nameGiven = "a " + nameGiven;
-                }
-            } else if (options && options.type === "definite") {
-                nameGiven = "the " + nameGiven;
-            }
-            if (options && options.capitalize) {
-                nameGiven = nameGiven.charAt(0).toUpperCase() + nameGiven.slice(1);
-            }
+        formatItemName(item, inPerspectiveOf, options) {
+            const nameGiven = utilItemCount(DE, null, item.oneOfAKind || false, item.owner, 1, item.name, item.id, options?.capitalize, options?.type === "definite");
             return "<" + item.id + ":" + nameGiven + ">";
         },
     },

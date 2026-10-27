@@ -1,5 +1,5 @@
 import { DEngine } from "../index.js";
-import { makeTimestamp, getNameIdentificationForOneCharacterTowardsAnother } from "./messages.js";
+import { makeTimestamp, getNameIdentificationForOneCharacterTowardsAnother, getNameIdentificationForOneCharacterTowardsAnotherOnlyName } from "./messages.js";
 import { getItemsContiguousDescription } from "./items.js";
 import { getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage } from "./weight-and-volume.js";
 import { getWeatherSystemForLocationAndWeather } from "./world.js";
@@ -364,32 +364,6 @@ export function getSurroundingCharacters(deObject, characterId) {
  * @param {DEObject} deObject 
  * @param {string} characterId 
  */
-export function getCurrentlyInteractingCharacters(deObject, characterId) {
-    // find the current conversation the character is engaging at
-    const charState = deObject.stateFor[characterId];
-
-    if (!charState) {
-        throw new Error(`Character ${characterId} not found in engine state.`);
-    }
-
-    const convId = charState.conversationId;
-
-    if (!convId) {
-        return [];
-    }
-
-    const conversation = deObject.conversations[convId];
-    if (!conversation) {
-        return [];
-    }
-
-    return conversation.participants.filter(participant => participant !== characterId);
-}
-
-/**
- * @param {DEObject} deObject 
- * @param {string} characterId 
- */
 export function getPowerLevel(deObject, characterId) {
     const character = deObject.characters[characterId];
     if (!character) {
@@ -578,14 +552,13 @@ export function getApparentPowerLevelFromCharacter(character) {
 
 /**
  * @param {DEObject} deObject 
- * @param {string} characterId 
+ * @param {string} characterId
+ * @param {string} inPerspectiveOfCharacterId
  * @param {boolean} onlyBasics
  * @param {boolean} hideCurrentPosture
  * @returns {Promise<string>}
- * 
- * TODOREFORMAT
  */
-export async function getExternalDescriptionOfCharacter(deObject, characterId, onlyBasics = false, hideCurrentPosture = false) {
+export async function getExternalDescriptionOfCharacter(deObject, characterId, inPerspectiveOfCharacterId, onlyBasics = false, hideCurrentPosture = false) {
     const character = deObject.characters[characterId];
     if (!character) {
         throw new Error(`Character ${characterId} not found.`);
@@ -594,141 +567,250 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, o
     if (!characterState) {
         throw new Error(`Character state for ${characterId} not found.`);
     }
-    let finalDescription = character.shortDescription;
-    if (!finalDescription.endsWith(".")) {
-        finalDescription += ".";
+
+
+    const inPerspectiveCharacter = deObject.characters[inPerspectiveOfCharacterId];
+
+    if (!inPerspectiveCharacter) {
+        throw new Error(`Character ${inPerspectiveOfCharacterId} not found.`);
     }
 
-    let maxStateDominance = 0;
-    for (const state of characterState.states) {
-        const stateInfo = character.stateDefinitions[state.state];
-        let dominanceOfThisState = stateInfo.dominance;
-        if (state.relieving && typeof stateInfo.dominanceAfterRelief === "number") {
-            dominanceOfThisState = stateInfo.dominanceAfterRelief;
-        }
-        if (dominanceOfThisState > maxStateDominance) {
-            maxStateDominance = dominanceOfThisState;
-        }
+    let inPerspectiveCharacterBlindness = inPerspectiveCharacter.blindness || "no";
+    if (inPerspectiveOfCharacterId === characterId) {
+        // force a character to not be blind to themselves, even if they are blind, for the purposes of this function.
+        inPerspectiveCharacterBlindness = "no";
     }
 
-    for (const state of characterState.states) {
-        const stateInfo = character.stateDefinitions[state.state];
+    /**
+     * number from 0 to 1, regarding how perceptive the character is
+     */
+    const inPerspectiveCharacterPerception = inPerspectiveCharacter.perception;
 
-        let dominanceOfThisState = stateInfo.dominance;
-        if (state.relieving && typeof stateInfo.dominanceAfterRelief === "number") {
-            dominanceOfThisState = stateInfo.dominanceAfterRelief;
-        }
+    const inPerspectiveCharacterName = getNameIdentificationForOneCharacterTowardsAnotherOnlyName(deObject, inPerspectiveCharacter, inPerspectiveCharacter);
 
-        if (dominanceOfThisState < maxStateDominance && stateInfo.doNotIgnoreDominanceWhenInjectingExternalDescription) {
-            continue;
-        }
+    const characterGender = character.gender;
+    const characterSpecies = character.species;
+    let characterSpeciesType = character.speciesType;
 
-        let toAdd = "";
-        if (stateInfo.relieving) {
-            if (stateInfo.relievingGeneralCharacterExternalDescriptionInjection) {
-                if (typeof stateInfo.relievingGeneralCharacterExternalDescriptionInjection === "string") {
-                    toAdd = stateInfo.relievingGeneralCharacterExternalDescriptionInjection;
-                } else {
-                    toAdd = await stateInfo.relievingGeneralCharacterExternalDescriptionInjection({
-                        char: character,
-                        causes: state.causes,
-                    });
-                }
+    const sameSpeciesAsPerspective = characterSpecies === inPerspectiveCharacter.species;
+
+    const characterSpeciesFromPerspective = sameSpeciesAsPerspective ? characterSpecies : "fellow " + characterSpecies;
+
+    const descriptionsOfSpeciesType = {
+        "humanoid": "a humanoid creature",
+        "feral": "a feral creature or beast",
+        "animal": "an animal",
+    }
+
+    let finalDescription = "";
+    let shouldIncludeStatefulDescriptions = true;
+    let canSenseTheyAreNaked = true;
+    let canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry = true;
+    if (inPerspectiveCharacterBlindness === "full") {
+        shouldIncludeStatefulDescriptions = false;
+        canSenseTheyAreNaked = false;
+        canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry = false;
+
+        if (inPerspectiveCharacterPerception < 0.5) {
+            finalDescription = inPerspectiveCharacterName + " is completely blind and cannot see them.";
+        } else if (inPerspectiveCharacterPerception < 0.75 && !sameSpeciesAsPerspective) {
+            // If the character is partially perceptive and the character is not the same species, they can sense the species but not the gender or type.
+            if (characterSpecies === "human") {
+                finalDescription = inPerspectiveCharacterName + " is completely blind, but senses they are a " + characterSpeciesFromPerspective + ".";
+            } else {
+                finalDescription = inPerspectiveCharacterName + " is completely blind, but senses they are a " + characterSpeciesFromPerspective + ", " + (descriptionsOfSpeciesType[characterSpeciesType] || "") + ".";
             }
         } else {
-            if (stateInfo.generalCharacterExternalDescriptionInjection) {
-                if (typeof stateInfo.generalCharacterExternalDescriptionInjection === "string") {
-                    toAdd = stateInfo.generalCharacterExternalDescriptionInjection;
-                } else {
-                    toAdd = await stateInfo.generalCharacterExternalDescriptionInjection({
-                        char: character,
-                        causes: state.causes,
-                    });
+            if (characterSpecies === "human") {
+                finalDescription = inPerspectiveCharacterName + " is completely blind, but senses they are a " + characterSpeciesFromPerspective + " of " + characterGender + " gender.";
+            } else {
+                finalDescription = inPerspectiveCharacterName + " is completely blind, but senses they are a " + characterSpeciesFromPerspective + ", " + (descriptionsOfSpeciesType[characterSpeciesType] || "") + " of " + characterGender + " gender.";
+            }
+        }
+    } else if (inPerspectiveCharacterBlindness === "partial-bad") {
+        if (inPerspectiveCharacterPerception < 0.5) {
+            shouldIncludeStatefulDescriptions = false;
+            canSenseTheyAreNaked = false;
+            canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry = false;
+            finalDescription = inPerspectiveCharacterName + " vision is severely impaired and cannot see them clearly only figuring out they are a " + characterSpeciesFromPerspective + ".";
+        } else if (inPerspectiveCharacterPerception < 0.75) {
+            shouldIncludeStatefulDescriptions = false;
+            canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry = false;
+            if (characterSpecies === "human") {
+                finalDescription = inPerspectiveCharacterName + " vision is severely impaired, but they can make out some details, figuring out they are a " + characterSpeciesFromPerspective + " of " + characterGender + " gender.";
+            } else {
+                finalDescription = inPerspectiveCharacterName + " vision is severely impaired, but they can make out some details, figuring out they are a " + characterSpeciesFromPerspective + ", " + (descriptionsOfSpeciesType[characterSpeciesType] || "") + " of " + characterGender + " gender.";
+            }
+        } else {
+            // their perception is high enough that they can make out the standard short description of the character in all details, even if they are partially blind.
+            finalDescription = character.shortDescription;
+            if (!finalDescription.endsWith(".")) {
+                finalDescription += ".";
+            }
+        }
+
+        // partial-good is too good of a vision in this design, so it is treated the same as no blindness.
+    } else {
+        finalDescription = character.shortDescription;
+        if (!finalDescription.endsWith(".")) {
+            finalDescription += ".";
+        }
+    }
+
+    if (shouldIncludeStatefulDescriptions) {
+        let maxStateDominance = 0;
+        for (const state of characterState.states) {
+            const stateInfo = character.stateDefinitions[state.state];
+            let dominanceOfThisState = stateInfo.dominance;
+            if (state.relieving && typeof stateInfo.dominanceAfterRelief === "number") {
+                dominanceOfThisState = stateInfo.dominanceAfterRelief;
+            }
+            if (dominanceOfThisState > maxStateDominance) {
+                maxStateDominance = dominanceOfThisState;
+            }
+        }
+
+        for (const state of characterState.states) {
+            const stateInfo = character.stateDefinitions[state.state];
+
+            let dominanceOfThisState = stateInfo.dominance;
+            if (state.relieving && typeof stateInfo.dominanceAfterRelief === "number") {
+                dominanceOfThisState = stateInfo.dominanceAfterRelief;
+            }
+
+            if (dominanceOfThisState < maxStateDominance && stateInfo.doNotIgnoreDominanceWhenInjectingExternalDescription) {
+                continue;
+            }
+
+            let toAdd = "";
+            if (stateInfo.relieving) {
+                if (stateInfo.relievingGeneralCharacterExternalDescriptionInjection) {
+                    if (typeof stateInfo.relievingGeneralCharacterExternalDescriptionInjection === "string") {
+                        toAdd = stateInfo.relievingGeneralCharacterExternalDescriptionInjection;
+                    } else {
+                        toAdd = await stateInfo.relievingGeneralCharacterExternalDescriptionInjection({
+                            char: character,
+                            causes: state.causes,
+                        });
+                    }
+                }
+            } else {
+                if (stateInfo.generalCharacterExternalDescriptionInjection) {
+                    if (typeof stateInfo.generalCharacterExternalDescriptionInjection === "string") {
+                        toAdd = stateInfo.generalCharacterExternalDescriptionInjection;
+                    } else {
+                        toAdd = await stateInfo.generalCharacterExternalDescriptionInjection({
+                            char: character,
+                            causes: state.causes,
+                        });
+                    }
                 }
             }
-        }
 
 
-        toAdd = toAdd.trim();
-        if (toAdd) {
-            if (!toAdd.endsWith(".")) {
-                toAdd += ".";
+            toAdd = toAdd.trim();
+            if (toAdd) {
+                if (!toAdd.endsWith(".")) {
+                    toAdd += ".";
+                }
+                finalDescription += " " + toAdd;
             }
-            finalDescription += " " + toAdd;
         }
     }
 
-    const topNaked = isTopNaked(deObject, characterId);
-    const bottomNaked = isBottomNaked(deObject, characterId);
+    if (canSenseTheyAreNaked) {
+        const topNaked = isTopNaked(deObject, characterId);
+        const bottomNaked = isBottomNaked(deObject, characterId);
 
-    if (topNaked && character.shortDescriptionTopNakedAdd) {
-        const lowercaseFirstLetter = character.shortDescriptionTopNakedAdd.charAt(0).toLowerCase();
-        const restOfString = character.shortDescriptionTopNakedAdd.slice(1);
-        finalDescription += ` Not wearing any clothes on the upper body, ${lowercaseFirstLetter + restOfString}`;
-        if (!finalDescription.endsWith(".")) {
-            finalDescription += ".";
-        }
-    } else if (topNaked) {
-        finalDescription += ` Not wearing any clothes on the upper body.`;
-    }
-
-    if (bottomNaked && character.shortDescriptionBottomNakedAdd) {
-        const lowercaseFirstLetter = character.shortDescriptionBottomNakedAdd.charAt(0).toLowerCase();
-        const restOfString = character.shortDescriptionBottomNakedAdd.slice(1);
-        finalDescription += ` Not wearing any clothes on the lower body, ${lowercaseFirstLetter + restOfString}`;
-        if (!finalDescription.endsWith(".")) {
-            finalDescription += ".";
-        }
-    } else if (bottomNaked) {
-        finalDescription += ` Not wearing any clothes on the lower body.`;
-    }
-    
-    const hasItemsCoveringBottomNakenessThatAreNotUnderwear = characterState.wearing.some(item => item.wearableProperties && item.wearableProperties.coversBottomNakedness && !item.wearableProperties.underwear);
-    const hasItemsCoveringTopNakenessThatAreNotUnderwear = characterState.wearing.some(item => item.wearableProperties && item.wearableProperties.coversTopNakedness && !item.wearableProperties.underwear);
-
-    if (characterState.wearing.length > 0) {
-        const visibleWornItems = characterState.wearing.filter(item => {
-            if (!item.wearableProperties) {
-                return false;
+        if (topNaked && character.shortDescriptionTopNakedAdd) {
+            const lowercaseFirstLetter = character.shortDescriptionTopNakedAdd.charAt(0).toLowerCase();
+            const restOfString = character.shortDescriptionTopNakedAdd.slice(1);
+            finalDescription += ` Not wearing any clothes on the upper body, ${lowercaseFirstLetter + restOfString}`;
+            if (!finalDescription.endsWith(".")) {
+                finalDescription += ".";
             }
+        } else if (topNaked) {
+            finalDescription += ` Not wearing any clothes on the upper body.`;
+        }
 
-            if (!item.wearableProperties.underwear) {
-                return true;
+        if (bottomNaked && character.shortDescriptionBottomNakedAdd) {
+            const lowercaseFirstLetter = character.shortDescriptionBottomNakedAdd.charAt(0).toLowerCase();
+            const restOfString = character.shortDescriptionBottomNakedAdd.slice(1);
+            finalDescription += ` Not wearing any clothes on the lower body, ${lowercaseFirstLetter + restOfString}`;
+            if (!finalDescription.endsWith(".")) {
+                finalDescription += ".";
             }
+        } else if (bottomNaked) {
+            finalDescription += ` Not wearing any clothes on the lower body.`;
+        }
 
-            const isVisibleAtBottom = item.wearableProperties.coversBottomNakedness && !hasItemsCoveringBottomNakenessThatAreNotUnderwear;
-            const isVisibleAtTop = item.wearableProperties.coversTopNakedness && !hasItemsCoveringTopNakenessThatAreNotUnderwear;
+        const hasItemsCoveringBottomNakenessThatAreNotUnderwear = characterState.wearing.some(item => item.wearableProperties && item.wearableProperties.coversBottomNakedness && !item.wearableProperties.underwear);
+        const hasItemsCoveringTopNakenessThatAreNotUnderwear = characterState.wearing.some(item => item.wearableProperties && item.wearableProperties.coversTopNakedness && !item.wearableProperties.underwear);
 
-            return isVisibleAtBottom || isVisibleAtTop;
-        });
-        finalDescription += " Wearing " + deObject.utils.templates.formatAnd(visibleWornItems.map(item => "<" + item.id + ":" + item.name + "> " + item.description + " (" + getWearableFitment(deObject, item, characterId).fitment + ")")) + ".";
-    } else {
-        finalDescription += " Completely naked, without clothes or accessories.";
+        if (characterState.wearing.length > 0) {
+            if (canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry) {
+                const visibleWornItems = characterState.wearing.filter(item => {
+                    if (!item.wearableProperties) {
+                        return false;
+                    }
+
+                    if (!item.wearableProperties.underwear) {
+                        return true;
+                    }
+
+                    const isVisibleAtBottom = item.wearableProperties.coversBottomNakedness && !hasItemsCoveringBottomNakenessThatAreNotUnderwear;
+                    const isVisibleAtTop = item.wearableProperties.coversTopNakedness && !hasItemsCoveringTopNakenessThatAreNotUnderwear;
+
+                    return isVisibleAtBottom || isVisibleAtTop;
+                });
+                finalDescription += " Wearing " + deObject.utils.templates.formatAnd(visibleWornItems.map(item => deObject.utils.templates.formatItemName(item) + " - " + item.description + " (" + getWearableFitment(deObject, item, characterId).fitment + ")")) + ".";
+            } else {
+                finalDescription += " Wearing some clothes and accessories, but cannot make out the details of what they are wearing.";
+            }
+        } else {
+            finalDescription += " Completely naked, without clothes or accessories.";
+        }
     }
 
     const characterExactLocation = getCharacterExactLocation(deObject, characterId);
 
     if (!onlyBasics) {
         if (characterState.carrying.length > 0) {
-            finalDescription += " Carrying " + deObject.utils.templates.formatAnd(characterState.carrying.map(item => "<" + item.id + ":" + item.name + "> " + item.description)) + ".";
+            if (canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry) {
+                finalDescription += " Carrying " + deObject.utils.templates.formatAnd(characterState.carrying.map(item => deObject.utils.templates.formatItemName(item) + " - " + item.description)) + ".";
+            } else {
+                if (inPerspectiveCharacterBlindness === "full" || inPerspectiveCharacterBlindness === "partial-bad") {
+                    finalDescription += " Appears to be carrying some items, but cannot make out the details of what it is.";
+                } else {
+                    finalDescription += " Carrying some items, but cannot make out the details of what they are.";
+                }
+            }
         } else {
-            finalDescription += " Not carrying any items.";
+            if (canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry) {
+                finalDescription += " Not carrying any items.";
+            } else {
+                // nothing.
+            }
         }
 
         if (characterExactLocation.beingCarriedBy) {
-            finalDescription += ` Being carried by ${characterExactLocation.beingCarriedBy}.`;
+            if (canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry) {
+                finalDescription += ` Being carried by ${characterExactLocation.beingCarriedBy}.`;
+            } else {
+                finalDescription += ` Being carried by someone, but cannot make out the details of who it is.`;
+            }
         }
 
         const carriedCharacters = getListOfCarriedCharactersByCharacter(deObject, characterId);
         if (carriedCharacters.length > 0) {
             finalDescription += ` Carrying characters: ` + deObject.utils.templates.formatAnd(carriedCharacters.map((v) => {
                 const carriedChar = deObject.characters[v.carriedId];
-                return getNameIdentificationForOneCharacterTowardsAnother(deObject, character, carriedChar);
+                return getNameIdentificationForOneCharacterTowardsAnother(deObject, inPerspectiveCharacter, carriedChar);
             })) + ".";
         }
     }
 
-    finalDescription += " " + getExternalDescriptionOfCharacterPostureOnly(deObject, characterId, hideCurrentPosture);
+    finalDescription += " " + getExternalDescriptionOfCharacterPostureOnly(deObject, characterId, inPerspectiveOfCharacterId, hideCurrentPosture);
 
     return finalDescription;
 }
@@ -736,10 +818,11 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, o
 /**
  * @param {DEObject} deObject 
  * @param {string} characterId 
+ * @param {string} inPerspectiveOfCharacterId
  * @param {boolean} hideCurrentPosture
  * @returns {string}
  */
-export function getExternalDescriptionOfCharacterPostureOnly(deObject, characterId, hideCurrentPosture = false) {
+export function getExternalDescriptionOfCharacterPostureOnly(deObject, characterId, inPerspectiveOfCharacterId, hideCurrentPosture = false) {
     const character = deObject.characters[characterId];
     if (!character) {
         throw new Error(`Character ${characterId} not found.`);
@@ -764,11 +847,15 @@ export function getExternalDescriptionOfCharacterPostureOnly(deObject, character
     } else if (characterExactLocation.itemPathEnd === "containingCharacters" && characterExactLocation.itemPath) {
         postureAppliedOnDescription = locationPathToMessage(deObject, characterId, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
     }
-
+    1
+    const inPerspectiveOfCharacterName = deObject.utils.templates.formatCharacterName(character, inPerspectiveOfCharacterId, {
+        capitalize: true,
+        type: "definite",
+    });
     if (!hideCurrentPosture) {
-        return character.name + " is " + postureToText(characterState.posture) + " " + postureAppliedOnDescription + ".";
+        return inPerspectiveOfCharacterName + " is " + postureToText(characterState.posture) + " " + postureAppliedOnDescription + ".";
     } else {
-        return character.name + " is " + postureAppliedOnDescription + ".";
+        return inPerspectiveOfCharacterName + " is " + postureAppliedOnDescription + ".";
     }
 }
 
@@ -2029,7 +2116,7 @@ export async function getSysPromptForCharacter(engine, characterId) {
         throw new Error(`No state found for character "${characterId}".`);
     }
 
-    const externalDescription = await getExternalDescriptionOfCharacter(engine.deObject, characterId, true);
+    const externalDescription = await getExternalDescriptionOfCharacter(engine.deObject, characterId, characterId, true);
     const internalDescription = await getInternalDescriptionOfCharacter(engine.deObject, characterId);
 
     /**
@@ -2571,10 +2658,10 @@ export async function getRelationship(deObject, character, towards) {
     } else if (activeBond.relationshipNameOverride) {
         relationshipNameResult = await activeBond.relationshipNameOverride({ char: character, other: towards, otherFamilyRelation: familyRelationship, otherRelationship: null });
     }
-    
+
     if (!relationshipNameResult && bondDecl.relationshipName) {
         relationshipNameResult = typeof bondDecl.relationshipName === "string" ? bondDecl.relationshipName : await bondDecl.relationshipName({ char: character, other: towards, otherFamilyRelation: familyRelationship, otherRelationship: null });
     }
-    
+
     return relationshipNameResult;
 }

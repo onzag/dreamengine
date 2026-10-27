@@ -1,9 +1,10 @@
 ﻿import './view/background.js';
 import './view/stats.js';
+import './view/character-surrounding-view.js';
 import './view/message-view.js';
-import './view/entry-input.js';
 import './view/items-overlay.js';
 import './view/menu.js';
+import { playHoverSound } from '../../sound.js';
 
 /** Presentation shell. Engine turns and live data will be connected later. */
 export class GameView extends HTMLElement {
@@ -20,13 +21,13 @@ export class GameView extends HTMLElement {
                 <div class="sidebar">
                     <div class="toolbar">
                         <app-game-menu></app-game-menu>
-                        <button class="items-toggle glass" type="button" aria-haspopup="dialog" aria-expanded="false">Belongings <kbd>Tab</kbd></button>
+                        <button class="items-toggle glass" type="button" aria-haspopup="dialog" aria-expanded="false" id="surroundings">Surroundings <kbd>Tab</kbd></button>
                     </div>
                     <app-game-stats></app-game-stats>
                 </div>
+                <app-game-character-surrounding-view demo></app-game-character-surrounding-view>
                 <div class="story">
                     <app-game-message-view></app-game-message-view>
-                    <app-game-entry-input></app-game-entry-input>
                 </div>
             </div>
             <app-game-items-overlay></app-game-items-overlay>`;
@@ -39,6 +40,7 @@ export class GameView extends HTMLElement {
             container.inert = overlay.open;
         });
         this.controller = new AbortController();
+        button.addEventListener("mouseenter", () => playHoverSound());
         window.addEventListener('keydown', event => {
             if (event.defaultPrevented || event.repeat || event.altKey || event.ctrlKey || event.metaKey || document.querySelector('app-dialog')) return;
             if (event.key === 'Tab' && !event.shiftKey) {

@@ -23,14 +23,16 @@ export class GameOverlay extends HTMLElement {
             <link rel="stylesheet" href="${new URL('./game.css', import.meta.url).href}">
             <main class="game-root">
                 <div class="game-content"></div>
-                <button class="game-exit" type="button" aria-label="Exit game" hidden>
-                    <svg viewBox="0 0 24 24" width="2.2vh" height="2.2vh" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                        <polyline points="16 17 21 12 16 7"></polyline>
-                        <line x1="21" y1="12" x2="9" y2="12"></line>
-                    </svg>
-                    <span>Wake up</span>
-                </button>
+                <div class="game-setup">
+                    <button class="game-exit" type="button" aria-label="Exit game" hidden>
+                        <svg viewBox="0 0 24 24" width="2.2vh" height="2.2vh" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                        <span>Wake up</span>
+                    </button>
+                </div>
             </main>`;
         const exit = this.root.querySelector('.game-exit');
         exit?.addEventListener('mouseenter', playHoverSound);
@@ -53,7 +55,8 @@ export class GameOverlay extends HTMLElement {
         for (const name of ['world-namespace', 'world-id']) {
             selector.setAttribute(name, this.getAttribute(name) || '');
         }
-        this.root.querySelector('.game-root')?.appendChild(selector);
+        const setup = /** @type {HTMLElement} */ (this.root.querySelector('.game-setup'));
+        setup.appendChild(selector);
         try {
             const loadingSave = !!this.getAttribute('save-id');
             const introMessages = loadingSave ? [] : await this.getIntroMessages();
@@ -63,13 +66,25 @@ export class GameOverlay extends HTMLElement {
             this.startInitialThemeSong(ready, selector.revealStarted);
             const result = await selector.select({ ready, introMessages });
             if (!this.isConnected) return;
-            this.setSetupPhase('ready');
-            selector.remove();
+            setup.inert = true;
             await this.onInitialSceneSelected(result);
+            // Keep the existing screen over the mounted view while its styles
+            // and background load, then reveal it without exposing the root.
+            await new Promise(resolve => setTimeout(resolve, 100));
+            if (!this.isConnected) return;
+            const fade = setup.animate([{ opacity: 1 }, { opacity: 0 }], {
+                duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1000,
+                easing: 'ease-in-out',
+                fill: 'forwards',
+            });
+            await fade.finished;
+            if (!this.isConnected) return;
+            this.setSetupPhase('ready');
+            setup.remove();
         } catch (error) {
             if (!this.isConnected) return;
             this.setSetupPhase('error');
-            selector.remove();
+            setup.remove();
             const message = document.createElement('p');
             message.setAttribute('role', 'alert');
             message.textContent = error instanceof Error ? error.message : String(error);

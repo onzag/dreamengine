@@ -69,7 +69,7 @@ export class InitialSceneSelect extends HTMLElement {
             signal.throwIfAborted();
             options[sceneName] = await window.ENGINE_WORKER_CLIENT.callCharOnlyTemplate({
                 path: ['world', 'scenes', sceneName, 'narration'],
-                characterName: actualUserName,
+                characterId: actualUserName,
                 stripIdentifierIds: true,
             });
         }
