@@ -1276,16 +1276,10 @@ class OverlayButton extends HTMLElement {
     render() {
         this.root.innerHTML = `
       <style>
+        @import url('${new URL('./overlay-button-shape.css', import.meta.url).href}');
         .overlay-button {
-            padding: 2vh 4vh;
-            font-size: 3vh;
-            cursor: pointer;
-            border: solid 2px #ccc;
-            border-radius: 0.5vh;
+            border-color: #ccc;
             background-color: rgba(255,255,255, 0.1);
-            text-align: center;
-            user-select: none;
-            display: inline-block;
         }
         .overlay-button:hover {
             color: #FF6B6B;

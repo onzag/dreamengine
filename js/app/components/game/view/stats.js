@@ -3,7 +3,30 @@ import './tooltip.js';
 
 /** @typedef {'somewhat'|'standard'|'very'|'overwhelming'} StatsChipColorScheme */
 /** @typedef {{ id: string, label: string, description: string, dominance: number, relieving: boolean, colorScheme: StatsChipColorScheme, causes: string[] }} StatsDisplayState */
-/** @typedef {{ userName: string, externalDescription: string, profileImage: string, location: string, locationSlot: string, dateTime: string, weather: string, states: StatsDisplayState[] }} StatsDisplayData */
+/** @typedef {{ id: string, label: string, description: string }} StatsInformationTag */
+/** @typedef {{ userName: string, externalDescription: string, profileImage: string, location: string, locationSlot: string, dateTime: string, weather: string, states: StatsDisplayState[], informationTags: StatsInformationTag[] }} StatsDisplayData */
+
+/** Character traits are separate from intensity/dominance-based states.
+ * @param {(Pick<DECompleteCharacterReference, 'blindness'|'autism'> & {voice?: Pick<DEVoiceDescription, 'mute'>|null})|null} character
+ * @returns {StatsInformationTag[]}
+ */
+export function getCharacterInformationTags(character) {
+    /** @type {StatsInformationTag[]} */
+    const tags = [];
+    if (character?.blindness === 'full') {
+        tags.push({ id: 'blindness', label: 'Totally blind', description: 'Has no vision.' });
+    } else if (character?.blindness === 'partial-good' || character?.blindness === 'partial-bad') {
+        tags.push({ id: 'blindness', label: 'Partially blind', description: 'Has partially impaired vision.' });
+    }
+    if (character?.voice?.mute === true) {
+        tags.push({ id: 'mute', label: 'Mute', description: 'Cannot speak.' });
+    }
+    if (character && character.autism >= .25) {
+        const label = character.autism >= .75 ? 'Highly autistic' : character.autism >= .5 ? 'Autistic' : 'Slightly autistic';
+        tags.push({ id: 'autism', label, description: `This character is ${label.toLowerCase()}.` });
+    }
+    return tags;
+}
 
 /** A ready-to-use fixture: `stats.setDisplayData(STATS_DISPLAY_DATA_EXAMPLE)`. */
 // export const STATS_DISPLAY_DATA_EXAMPLE = {
@@ -57,7 +80,7 @@ export class Stats extends HTMLElement {
         this.root.innerHTML = `<link rel="stylesheet" href="${new URL('./stats.css', import.meta.url).href}">
             <section class="glass" aria-label="Character status"><header><h1 class="user-name"></h1><app-game-tooltip class="portrait-tooltip" align-with="bottom"><app-world-image class="portrait" image-url="" default-image="./images/default-profile.png" aria-hidden="true"></app-world-image></app-game-tooltip></header>
             <dl class="world-details"><div><dd class="location"></dd></div><div><dd class="date-time"></dd></div><div class="weather-row"><dd class="weather"></dd></div></dl>
-            <section class="states" aria-label="Current states"><div class="state-list"></div></section></section>`;
+            <section class="states" aria-label="Character information and current states"><div class="state-list"></div></section></section>`;
         this.unsubscribe = window.ENGINE_WORKER_CLIENT?.addDEObjectUpdatedListener(() => { void this.updateStats(); }) || null;
         void this.updateStats();
     }
@@ -82,10 +105,11 @@ export class Stats extends HTMLElement {
     /** @returns {Promise<StatsDisplayData>} */
     async getDisplayData() {
         const userId = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['user'] });
-        const [character, characterState, currentTime] = await Promise.all([
-            window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', userId], pick: ['name'] }),
+        const [character, characterState, currentTime, voice] = await Promise.all([
+            window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', userId], pick: ['name', 'blindness', 'autism'] }),
             window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['stateFor', userId], pick: ['location', 'locationSlot', 'states'] }),
             window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['currentTime', 'time'] }),
+            window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', userId, 'voice'], pick: ['mute'] }),
         ]);
         const location = characterState?.location || await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['world', 'currentLocation'] }) || '';
         const [weather, profileImage, externalDescription, states] = await Promise.all([
@@ -108,6 +132,7 @@ export class Stats extends HTMLElement {
             dateTime,
             weather: weather || '',
             states,
+            informationTags: getCharacterInformationTags(character ? { ...character, voice } : null),
         };
     }
 
@@ -207,7 +232,20 @@ export class Stats extends HTMLElement {
         if (portraitTooltip) portraitTooltip.setAttribute('text', data.externalDescription || '');
         const list = this.root.querySelector('.state-list');
         if (!list) return;
-        list.replaceChildren(...data.states.map(state => {
+        const informationTags = data.informationTags || [];
+        const informationChips = informationTags.map(tag => {
+            const tooltip = document.createElement('app-game-tooltip');
+            tooltip.setAttribute('align-with', 'bottom');
+            tooltip.setAttribute('text', tag.description);
+            const chip = document.createElement('span');
+            chip.className = 'information-chip';
+            chip.dataset.traitId = tag.id;
+            chip.tabIndex = 0;
+            chip.textContent = tag.label;
+            tooltip.append(chip);
+            return tooltip;
+        });
+        list.replaceChildren(...informationChips, ...data.states.map(state => {
             const tooltip = document.createElement('app-game-tooltip');
             tooltip.setAttribute('align-with', 'bottom');
             tooltip.setAttribute('text', [state.description, state.causes.length ? `Caused by ${state.causes.join(', ')}` : ''].filter(Boolean).join('\n\n'));
@@ -222,7 +260,7 @@ export class Stats extends HTMLElement {
          * @type {HTMLDivElement | null}
          */
         const states = this.root.querySelector('.states');
-        if (states) states.hidden = !data.states.length;
+        if (states) states.hidden = !data.states.length && !informationTags.length;
     }
 }
 customElements.define('app-game-stats', Stats);

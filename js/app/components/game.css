@@ -1,3 +1,5 @@
+@import './overlay-button-shape.css';
+
 :host {
     position: fixed;
     inset: 0;
@@ -35,11 +37,6 @@
     display: inline-flex;
     align-items: center;
     gap: 0.9vh;
-    padding: 1.1vh 2.2vh;
-    font-size: 1.9vh;
-    letter-spacing: 0.06em;
-    font-family: inherit;
-    border-radius: 1vh;
     cursor: pointer;
     backdrop-filter: blur(6px) saturate(140%);
     -webkit-backdrop-filter: blur(6px) saturate(140%);
@@ -47,7 +44,7 @@
     transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.12s ease;
     color: #f4dada;
     background: rgba(120, 30, 40, 0.35);
-    border: 1px solid rgba(220, 140, 140, 0.45);
+    border-color: rgba(220, 140, 140, 0.45);
 }
 
 .game-exit:hover, .game-exit:focus-visible {

@@ -1,16 +1,17 @@
 ﻿@import './shared.css';
 :host { display: block; }
-section.glass { display: flex; flex-direction: column; align-items: stretch; padding: 1.2vh 1.6vh; }
+section.glass { display: flex; flex-direction: column; align-items: stretch; padding: 2vh; }
 header { display: flex; flex-direction: column; align-items: flex-start; gap: .55vh; width: 100%; margin-bottom: 1.3vh; }
 .portrait { --asset-image-border-width: .2vh; width: 15vh; height: 15vh; flex: 0 0 auto; }
 .portrait-tooltip { width: 15vh; height: 15vh; }
-h1 { width: 100%; margin: 0; color: var(--ink); font-size: 3vh; line-height: 1.1; text-align: left; }
-.world-details { display: grid; grid-template-columns: minmax(0, 1fr); gap: .8vh; width: 100%; margin: 0; }
+h1 { width: 100%; margin: 0; color: var(--ink); font-size: 3vh; line-height: 1.1; text-align: left; padding-bottom: 1vh; font-weight: 400; }
+.world-details { display: grid; grid-template-columns: minmax(0, 1fr); gap: .8vh; width: 100%; margin: 0; padding-top: 1vh; }
 .weather-row { grid-column: auto; }
 dt { color: var(--muted); font-size: 2vh; margin-bottom: .28vh; }
-dd { margin: 0; color: var(--accent); font-size: 2.4vh; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+dd { margin: 0; color: var(--accent); font-size: 2vh; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .states { width: 100%; border-top: 1px solid var(--border); margin-top: 1vh; padding-top: .9vh; }
 .state-list { display: flex; flex-wrap: wrap; gap: .6vh; width: 100%; }
+.information-chip { display: inline-flex; align-items: center; max-width: 100%; min-height: 3.2vh; padding: 1vh 2vh; border: .15vh dashed rgba(202, 181, 235, .8); border-radius: 2vh; background: rgba(53, 38, 73, .94); color: var(--ink); font-size: 2vh; line-height: 1.2; overflow-wrap: anywhere; }
 .state-chip { --state-chip-background: rgba(15, 52, 91, .92); --state-chip-border: rgba(116, 185, 239, .62); position: relative; display: inline-flex; align-items: center; max-width: 100%; min-height: 3.2vh; padding: 1vh 2vh; border: 1px solid var(--state-chip-border); border-radius: 1vh; background: var(--state-chip-background); color: var(--ink); font-size: .9em; line-height: 1.2; overflow: hidden; overflow-wrap: anywhere; }
 .state-chip[data-color-scheme="somewhat"] { --state-chip-background: rgba(43, 88, 128, .8); --state-chip-border: rgba(154, 207, 245, .55); }
 .state-chip[data-color-scheme="standard"] { --state-chip-background: rgba(15, 52, 91, .92); --state-chip-border: rgba(116, 185, 239, .62); }

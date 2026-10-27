@@ -105,7 +105,7 @@ export class InitialSceneSelect extends HTMLElement {
             <div class="game-scene-picker-title">How does the dream begin?</div>
             <div class="game-scene-picker-list"></div>
             <div class="game-scene-picker-footer">
-                <button class="game-scene-picker-begin" type="button" disabled>Begin</button>
+                <button class="game-scene-picker-begin game-action-button" type="button" disabled>Begin</button>
             </div>`;
         const list = /** @type {HTMLElement} */ (picker.querySelector('.game-scene-picker-list'));
         const title = picker.querySelector('.game-scene-picker-title');

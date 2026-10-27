@@ -3,12 +3,13 @@ import { buildSurroundingGroups, getVisibleSurroundingGroups } from './surroundi
 
 /** @typedef {import('./surrounding-groups.js').SurroundingCharacter} SurroundingCharacter */
 /** @typedef {import('./surrounding-groups.js').SurroundingGroup} SurroundingGroup */
-/** @typedef {{location: string, userId: string, blindness: DECompleteCharacterReference['blindness'], groups: SurroundingGroup[]}} SurroundingsDisplayData */
+/** @typedef {{location: string, userId: string, userName: string, blindness: DECompleteCharacterReference['blindness'], groups: SurroundingGroup[]}} SurroundingsDisplayData */
 /**
  * Live engine snapshot before grouping.
  * @typedef {object} SurroundingsSceneState
  * @property {string} location
  * @property {string} userId
+ * @property {string} userName
  * @property {DECompleteCharacterReference['blindness']} blindness
  * @property {{conversations: Array<{id: string, participants: string[], remoteParticipants: string[]}>, foundCharacters: string[], leftoverCharacters: string[]}} scene
  * @property {SurroundingCharacter[]} characters
@@ -35,7 +36,7 @@ export class CharacterSurroundingView extends HTMLElement {
     connectedCallback() {
         this.lifecycle++;
         this.root.innerHTML = `<link rel="stylesheet" href="${new URL('./character-surrounding-view.css', import.meta.url).href}">
-            <section class="scene" aria-label="Characters in the scene"><div class="groups"></div></section>`;
+            <section class="scene" aria-label="Characters in the scene"><div class="groups"></div><p class="blindness-notice" role="status" hidden></p></section>`;
         this.cards.clear();
         this.rendering = false;
         this.subscribeToLiveUpdates();
@@ -73,8 +74,8 @@ export class CharacterSurroundingView extends HTMLElement {
 
     /** @returns {Promise<SurroundingsDisplayData>} */
     async getDisplayData() {
-        const { location, userId, blindness, scene, characters } = await this.getLiveSceneState();
-        return { location, userId, blindness, groups: buildSurroundingGroups(scene, userId, characters) };
+        const { location, userId, userName, blindness, scene, characters } = await this.getLiveSceneState();
+        return { location, userId, userName, blindness, groups: buildSurroundingGroups(scene, userId, characters) };
     }
 
     /** @returns {Promise<SurroundingsSceneState>} */
@@ -84,12 +85,13 @@ export class CharacterSurroundingView extends HTMLElement {
         const userId = await client.queryDEObject({ path: ['user'] });
         const [userState, userCharacter] = await Promise.all([
             client.queryDEObject({ path: ['stateFor', userId], pick: ['location'] }),
-            client.queryDEObject({ path: ['characters', userId], pick: ['blindness'] }),
+            client.queryDEObject({ path: ['characters', userId], pick: ['name', 'blindness'] }),
         ]);
         /** @type {SurroundingsSceneState['blindness']} */
         const blindness = userCharacter?.blindness || 'no';
+        const userName = userCharacter?.name || String(userId || 'The character');
         const location = userState?.location || '';
-        if (!location) return { location, userId, blindness, characters: [], scene: { conversations: [], foundCharacters: [], leftoverCharacters: [] } };
+        if (!location) return { location, userId, userName, blindness, characters: [], scene: { conversations: [], foundCharacters: [], leftoverCharacters: [] } };
         /** @type {SurroundingsSceneState['scene']} */
         const scene = await client.queryDEObject({
             path: ['utils', 'conversations', 'getAllConversationsAtLocation'],
@@ -110,7 +112,7 @@ export class CharacterSurroundingView extends HTMLElement {
             return { id, name: name || 'Unknown character', image: metadata?.assets?.neutral || '',
                 locationSlot: state?.locationSlot || '', conversationId: state?.conversationId || null, visibility };
         }));
-        return { location, userId, blindness, scene, characters };
+        return { location, userId, userName, blindness, scene, characters };
     }
 
     /** Queue the latest engine snapshot for the animation pipeline.
@@ -178,6 +180,16 @@ export class CharacterSurroundingView extends HTMLElement {
             this.cards.delete(id);
         }));
         if (!this.isConnected || lifecycle !== this.lifecycle || this.pending) return;
+
+        const notice = this.root.querySelector('.blindness-notice');
+        if (notice instanceof HTMLElement) {
+            const uncertain = (data.blindness === 'partial-bad' || data.blindness === 'full')
+                && !groups.some(group => !group.primary);
+            notice.hidden = !uncertain;
+            notice.textContent = uncertain
+                ? `${data.userName} is ${data.blindness === 'full' ? 'totally' : 'partially'} blind so is unsure if there are other characters around.`
+                : '';
+        }
 
         /** @type {Map<string, HTMLElement>} */
         const existingGroups = new Map();

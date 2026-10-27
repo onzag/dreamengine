@@ -27,7 +27,7 @@ export class GameIntro extends HTMLElement {
             intro.setAttribute('role', 'group');
             intro.setAttribute('aria-label', 'World introduction');
             intro.innerHTML = `
-                <button class="light-fade-intro-skip" type="button">Skip</button>
+                <button class="light-fade-intro-skip game-action-button" type="button">Skip</button>
                 <div class="light-fade-intro-stage" aria-live="polite">
                     <div class="light-fade-intro-title"></div>
                     <div class="light-fade-intro-subtitle"></div>
@@ -35,7 +35,7 @@ export class GameIntro extends HTMLElement {
                 <div class="light-fade-intro-footer">
                     <div class="light-fade-intro-progress" aria-hidden="true"></div>
                     <div class="light-fade-intro-action">
-                        <button class="light-fade-intro-continue" type="button"></button>
+                        <button class="light-fade-intro-continue game-action-button" type="button"></button>
                         <div class="light-fade-intro-hint"><span>Click anywhere to continue</span></div>
                     </div>
                 </div>`;

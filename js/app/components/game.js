@@ -24,7 +24,7 @@ export class GameOverlay extends HTMLElement {
             <main class="game-root">
                 <div class="game-content"></div>
                 <div class="game-setup">
-                    <button class="game-exit" type="button" aria-label="Exit game" hidden>
+                    <button class="game-exit game-action-button" type="button" aria-label="Exit game" hidden>
                         <svg viewBox="0 0 24 24" width="2.2vh" height="2.2vh" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                             <polyline points="16 17 21 12 16 7"></polyline>
