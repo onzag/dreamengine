@@ -368,6 +368,7 @@ export class ImageEdit extends HTMLElement {
 
         this.root.innerHTML = `
         <style>
+        button, input, select, textarea { font-family: inherit; }
             :host {
                 display: block;
                 width: 100%;
@@ -386,7 +387,7 @@ export class ImageEdit extends HTMLElement {
                 width: 100%;
                 height: 100%;
                 color: white;
-                font-family: sans-serif;
+                font-family: inherit;
             }
             .status-region {
                 flex: 0 0 auto;

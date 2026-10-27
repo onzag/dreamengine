@@ -76,6 +76,7 @@ export class VoiceTest extends HTMLElement {
     _render() {
         this.root.innerHTML = `
         <style>
+        button, input, select, textarea { font-family: inherit; }
             .vt-wrap { display: flex; flex-direction: column; gap: 1.4vh; font-size: 2vh; color: #ddd; }
             .vt-row { display: flex; gap: 1ch; align-items: center; flex-wrap: wrap; }
             .vt-status { font-weight: 700; }

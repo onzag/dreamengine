@@ -581,7 +581,6 @@ class OverlayInput extends HTMLElement {
             padding: 1vh;
             border-radius: 0.5vh;
             border: solid 1px #ccc;
-            font-family: 'Cabin Sketch', sans-serif;
             font-weight: bold;
             box-shadow: inset 0 0 10px rgba(100,0,200,0.3);
             background-color: rgba(0, 0, 0, 0.9);
@@ -802,7 +801,6 @@ class OverlayInputSelect extends HTMLElement {
             padding: 1vh;
             border-radius: 0.5vh;
             border: solid 1px #ccc;
-            font-family: 'Cabin Sketch', sans-serif;
             font-weight: bold;
             box-shadow: inset 0 0 10px rgba(100,0,200,0.3);
             background-color: rgba(0, 0, 0, 0.9);
@@ -1002,7 +1000,6 @@ class OverlayListInput extends HTMLElement {
             padding: 1vh;
             border-radius: 0.5vh;
             border: solid 1px #ccc;
-            font-family: 'Cabin Sketch', sans-serif;
             font-weight: bold;
             box-shadow: inset 0 0 10px rgba(100,0,200,0.3);
             background-color: rgba(0, 0, 0, 0.9);
@@ -1022,7 +1019,7 @@ class OverlayListInput extends HTMLElement {
             padding: 0.5vh 1.5vh;
             border-radius: 0.5vh;
             border: solid 1px #ccc;
-            font-family: 'Cabin Sketch', sans-serif;
+            font-family: 'LexendDeca', sans-serif;
             font-weight: bold;
             background-color: rgba(0, 0, 0, 0.9);
             color: white;

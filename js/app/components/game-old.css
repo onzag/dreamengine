@@ -812,6 +812,7 @@
 }
 
 .game-background-message {
+    font-family: 'LexendDeca', sans-serif;
     position: relative;
     z-index: 1;
     color: rgba(234, 243, 255, 0.88);

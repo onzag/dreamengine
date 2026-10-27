@@ -174,7 +174,7 @@
     width: 100%;
     min-height: 20vh;
     font-size: 3vh;
-    font-family: 'Cabin Sketch', sans-serif;
+    font-family: 'LexendDeca', sans-serif;
     font-weight: bold;
     color: #c8dce8;
     background: rgba(0, 10, 20, 0.6);
@@ -362,7 +362,7 @@
     width: 100%;
     min-height: 10vh;
     font-size: 3vh;
-    font-family: 'Cabin Sketch', sans-serif;
+    font-family: 'LexendDeca', sans-serif;
     font-weight: bold;
     color: #c8dce8;
     background: rgba(0, 10, 20, 0.6);
@@ -390,7 +390,7 @@
 .guider-input {
     width: 100%;
     font-size: 3vh;
-    font-family: 'Cabin Sketch', sans-serif;
+    font-family: 'LexendDeca', sans-serif;
     font-weight: bold;
     color: #c8dce8;
     background: rgba(0, 10, 20, 0.6);

@@ -137,6 +137,7 @@ export class AIHubExposeBase extends HTMLElement {
     baseStyle() {
         return `
             :host { display: block; margin-bottom: 1.2vh; }
+            button, input, select, textarea { font-family: inherit; }
             .field { display: flex; flex-direction: column; gap: 0.5vh; }
             label { font-size: 1.6vh; color: #c9a7ff; }
             .tooltip { font-size: 1.3vh; color: #a98fd0; }
@@ -145,7 +146,7 @@ export class AIHubExposeBase extends HTMLElement {
                 background: rgba(20,0,35,0.85); color: #fff;
                 border: 0.15vh solid rgba(150,80,220,0.5);
                 border-radius: 0.5vh; padding: 0.6vh; font-size: 1.5vh;
-                font-family: sans-serif;
+                font-family: inherit;
             }
             input[type="range"] { width: 100%; accent-color: #8a2be2; }
             input[type="checkbox"] { accent-color: #8a2be2; width: 1.8vh; height: 1.8vh; }

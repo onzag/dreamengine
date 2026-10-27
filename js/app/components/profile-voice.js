@@ -620,6 +620,7 @@ class ProfileVoice extends HTMLElement {
         const resolved = this.resolveAssetUrl(voiceUrl) + cacheBuster;
         this.root.innerHTML = `
             <style>
+        button, input, select, textarea { font-family: inherit; }
                 :host {
                     display: block;
                     width: 100%;

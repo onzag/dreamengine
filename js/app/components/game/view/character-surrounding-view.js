@@ -1,17 +1,21 @@
 import '../../world-image.js';
 import { buildSurroundingGroups, getVisibleSurroundingGroups } from './surrounding-groups.js';
-import { createSurroundingsTestStates } from './surroundings-test-data.js';
-export { createSurroundingsTestStates } from './surroundings-test-data.js';
 
 /** @typedef {import('./surrounding-groups.js').SurroundingCharacter} SurroundingCharacter */
 /** @typedef {import('./surrounding-groups.js').SurroundingGroup} SurroundingGroup */
-/** @typedef {{location: string, userId: string, groups: SurroundingGroup[]}} SurroundingsDisplayData */
-/** @typedef {import('./surroundings-test-data.js').SurroundingsSceneState} SurroundingsSceneState */
+/** @typedef {{location: string, userId: string, blindness: DECompleteCharacterReference['blindness'], groups: SurroundingGroup[]}} SurroundingsDisplayData */
+/**
+ * Live engine snapshot before grouping.
+ * @typedef {object} SurroundingsSceneState
+ * @property {string} location
+ * @property {string} userId
+ * @property {DECompleteCharacterReference['blindness']} blindness
+ * @property {{conversations: Array<{id: string, participants: string[], remoteParticipants: string[]}>, foundCharacters: string[], leftoverCharacters: string[]}} scene
+ * @property {SurroundingCharacter[]} characters
+ */
 
 /** Live scene groups, with serialized exits/entries and independently scrolling content. */
 export class CharacterSurroundingView extends HTMLElement {
-    static get observedAttributes() { return ['demo']; }
-
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
@@ -26,12 +30,6 @@ export class CharacterSurroundingView extends HTMLElement {
         /** @type {SurroundingsDisplayData|null} */
         this.pending = null;
         this.rendering = false;
-        /** @type {SurroundingsSceneState|null} */
-        this.testState = null;
-        this.demoSteps = createSurroundingsTestStates();
-        this.demoStep = -1;
-        /** @type {number|undefined} */
-        this.demoTimer = undefined;
     }
 
     connectedCallback() {
@@ -42,92 +40,17 @@ export class CharacterSurroundingView extends HTMLElement {
         this.rendering = false;
         this.subscribeToLiveUpdates();
         void this.refresh();
-        this.scheduleDemoStep();
-    }
-
-    /**
-     * @param {string} name
-     * @param {string|null} oldValue
-     * @param {string|null} newValue
-     */
-    attributeChangedCallback(name, oldValue, newValue) {
-        if (oldValue === newValue) return;
-        if (newValue !== null) this.startDemo();
-        else this.stopDemo();
     }
 
     subscribeToLiveUpdates() {
         this.unsubscribe?.();
         this.unsubscribe = null;
-        if (this.isConnected && !this.testState) {
+        if (this.isConnected) {
             this.unsubscribe = window.ENGINE_WORKER_CLIENT?.addDEObjectUpdatedListener(() => { void this.refresh(); }) || null;
         }
     }
 
-    /** Opt in with `<app-game-character-surrounding-view demo>` or `view.startDemo()`.
-     * The `demo` attribute advances every five seconds while connected.
-     * Without the attribute, call `view.nextDemoStep()` to advance manually.
-     * @returns {string} Description of the active demo step.
-     */
-    startDemo() {
-        this.demoSteps = createSurroundingsTestStates();
-        this.demoStep = -1;
-        return this.nextDemoStep();
-    }
-
-    /** @returns {string} Description of the active demo step. */
-    nextDemoStep() {
-        this.demoStep = (this.demoStep + 1) % this.demoSteps.length;
-        const step = this.demoSteps[this.demoStep];
-        this.setTestState(step.state);
-        this.scheduleDemoStep();
-        return step.label;
-    }
-
-    /** Reset the automatic advance timer; never run it on a detached element. */
-    scheduleDemoStep() {
-        window.clearTimeout(this.demoTimer);
-        this.demoTimer = undefined;
-        if (this.isConnected && this.hasAttribute('demo')) {
-            this.demoTimer = window.setTimeout(() => this.nextDemoStep(), 5000);
-        }
-    }
-
-    /** Inject a full snapshot or edit a copy of the current test snapshot.
-     * Both paths run refresh -> buildSurroundingGroups -> setDisplayData -> reconcile,
-     * exactly as live updates do; no DE state or worker methods are modified.
-     * @param {SurroundingsSceneState | ((state: SurroundingsSceneState) => SurroundingsSceneState|void)} update
-     */
-    setTestState(update) {
-        if (typeof update === 'function') {
-            if (!this.testState) throw new Error('Call startDemo() or setTestState(snapshot) first.');
-            const draft = structuredClone(this.testState);
-            this.testState = structuredClone(update(draft) || draft);
-        } else {
-            this.testState = structuredClone(update);
-        }
-        this.queryVersion++; // Invalidate any live query already in flight.
-        this.pending = null;
-        this.subscribeToLiveUpdates();
-        if (this.isConnected) void this.refresh();
-    }
-
-    /** Resume the real engine feed; departures/arrivals use the same animations. */
-    stopDemo() {
-        window.clearTimeout(this.demoTimer);
-        this.demoTimer = undefined;
-        if (this.hasAttribute('demo')) { this.removeAttribute('demo'); return; }
-        this.testState = null;
-        this.demoStep = -1;
-        this.queryVersion++;
-        this.pending = null;
-        this.subscribeToLiveUpdates();
-        if (this.isConnected) void this.refresh();
-    }
-
     disconnectedCallback() {
-        window.clearTimeout(this.demoTimer);
-        this.demoTimer = undefined;
         this.unsubscribe?.();
         this.unsubscribe = null;
         this.queryVersion++;
@@ -150,8 +73,8 @@ export class CharacterSurroundingView extends HTMLElement {
 
     /** @returns {Promise<SurroundingsDisplayData>} */
     async getDisplayData() {
-        const { location, userId, scene, characters } = this.testState || await this.getLiveSceneState();
-        return { location, userId, groups: buildSurroundingGroups(scene, userId, characters) };
+        const { location, userId, blindness, scene, characters } = await this.getLiveSceneState();
+        return { location, userId, blindness, groups: buildSurroundingGroups(scene, userId, characters) };
     }
 
     /** @returns {Promise<SurroundingsSceneState>} */
@@ -159,31 +82,38 @@ export class CharacterSurroundingView extends HTMLElement {
         const client = window.ENGINE_WORKER_CLIENT;
         /** @type {string} */
         const userId = await client.queryDEObject({ path: ['user'] });
-        /** @type {{location: string}|null} */
-        const userState = await client.queryDEObject({ path: ['stateFor', userId], pick: ['location'] });
+        const [userState, userCharacter] = await Promise.all([
+            client.queryDEObject({ path: ['stateFor', userId], pick: ['location'] }),
+            client.queryDEObject({ path: ['characters', userId], pick: ['blindness'] }),
+        ]);
+        /** @type {SurroundingsSceneState['blindness']} */
+        const blindness = userCharacter?.blindness || 'no';
         const location = userState?.location || '';
-        if (!location) return { location, userId, characters: [], scene: { conversations: [], foundCharacters: [], leftoverCharacters: [] } };
+        if (!location) return { location, userId, blindness, characters: [], scene: { conversations: [], foundCharacters: [], leftoverCharacters: [] } };
         /** @type {SurroundingsSceneState['scene']} */
         const scene = await client.queryDEObject({
             path: ['utils', 'conversations', 'getAllConversationsAtLocation'],
             call: [location], pick: ['conversations', 'foundCharacters', 'leftoverCharacters'],
         });
         const characters = await Promise.all([...new Set(scene.foundCharacters)].map(async id => {
-            const [name, metadata, state] = await Promise.all([
+            const [name, metadata, state, visibility] = await Promise.all([
                 client.queryDEObject({ path: ['utils', 'templates', 'formatCharacterName'], call: [
                     { __type: 'char', value: id }, { __type: 'char', value: userId },
                     { __type: 'object', value: { justName: true, type: 'indefinite', capitalize: true } },
                 ] }),
                 client.queryDEObject({ path: ['characters', id, 'metadata'], pick: ['assets'] }),
                 client.queryDEObject({ path: ['stateFor', id], pick: ['conversationId', 'locationSlot'] }),
+                client.queryDEObject({ path: ['utils', 'characterInfo', 'canSeeCharacter'], call: [
+                    { __type: 'char', value: id }, { __type: 'char', value: userId },
+                ] }),
             ]);
             return { id, name: name || 'Unknown character', image: metadata?.assets?.neutral || '',
-                locationSlot: state?.locationSlot || '', conversationId: state?.conversationId || null };
+                locationSlot: state?.locationSlot || '', conversationId: state?.conversationId || null, visibility };
         }));
-        return { location, userId, scene, characters };
+        return { location, userId, blindness, scene, characters };
     }
 
-    /** Supply fixture data through the same animation pipeline as engine updates.
+    /** Queue the latest engine snapshot for the animation pipeline.
      * @param {SurroundingsDisplayData} data
      */
     setDisplayData(data) {
@@ -227,9 +157,10 @@ export class CharacterSurroundingView extends HTMLElement {
     async reconcile(data, lifecycle) {
         const container = this.root.querySelector('.groups');
         if (!container) return;
+        container.setAttribute('data-blindness', data.blindness);
         /** @type {Map<string, {character: SurroundingCharacter, group: SurroundingGroup, placement: string}>} */
         const desired = new Map();
-        // Also enforce uniqueness for externally supplied fixture data.
+        // Keep at most one portrait per character while groups change.
         const groups = getVisibleSurroundingGroups(data.groups, data.userId);
         for (const group of groups) for (const character of group.characters) {
             if (!desired.has(character.id)) desired.set(character.id, {

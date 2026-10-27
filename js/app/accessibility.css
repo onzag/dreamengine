@@ -15,7 +15,7 @@
     box-shadow: 0 0.3vh 1vh rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    font-family: 'LexendDeca', sans-serif;
     text-shadow: 0 0.1vh 0.2vh rgba(0, 0, 0, 0.8);
     pointer-events: none;
     z-index: 99999;
@@ -104,7 +104,7 @@
 [data-de-aria-group-active] > [data-de-aria-group-exit]::before {
     content: "\00D7";
     font-size: 1.8vh;
-    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    font-family: 'LexendDeca', sans-serif;
     color: #ffffff;
     text-shadow: 0 0.1vh 0.2vh rgba(0, 0, 0, 0.8);
     pointer-events: none;

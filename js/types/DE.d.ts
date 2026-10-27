@@ -2372,6 +2372,9 @@ declare interface DEItemCommunicationDeviceProperties {
     beingContactedPublic: Record<string, DEStringTemplate>;
 }
 
+/** Sensory resolution only; does not establish location, distance or line of sight. */
+declare type DEVisibility = "invisible" | "perceived" | "visible";
+
 declare interface DEItem {
     /**
      * A unique global identifier for this item, it should be unique across all items in the world, and should not change over time, even if the item is destroyed or removed from the world, this id should remain the same for that item
@@ -3730,6 +3733,10 @@ declare interface DEUtils {
         characterIdGenerator(): string;
     },
     items: {
+        /** Resolve an item's sensory visibility using its volume versus the observer's body volume.
+         * Null/omitted perspective is an unrestricted narrator.
+         */
+        canSeeItem(item: DEItem, inPerspectiveOf?: DECompleteCharacterReference | string | null): DEVisibility;
         newItem(definition: Omit<DEItem, "id">): DEItem;
         /**
          * Recursively clones an item and its contents, providing a new item list with a new id and the specified amount
@@ -3874,6 +3881,10 @@ declare interface DEUtils {
         newConversation(conversation: Pick<DEConversation, "participants" | "remoteParticipants" | "location" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipants?: boolean, unsafeMode?: boolean } = {}): Promise<DEConversation>;
     },
     characterInfo: {
+        /** Same size/perception rules as canSeeItem; a character can always recognize themselves. */
+        canSeeCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf?: DECompleteCharacterReference | string | null): DEVisibility;
+        /** Alias of canSeeCharacter. */
+        canSeeOtherCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf?: DECompleteCharacterReference | string | null): DEVisibility;
         getExternalDescriptionOfCharacter(char: DECompleteCharacterReference, inPerspectiveOf: DECompleteCharacterReference, onlyBasics?: boolean, hideCurrentPosture?: boolean): Promise<string>;
 
         isWithinAttractionGroupFor(option: "male" | "female" | "ambiguous", char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
@@ -4224,10 +4235,11 @@ declare interface DEUtils {
         ): string;
         /**
          * @param item the item to format
+         * @param inPerspectiveOf Observer; null/omitted preserves unrestricted naming. Unresolved items get a generic, ID-stable label.
          * @param options the options for formatting the item name, including the type of article to use (default, definite) and whether to capitalize the first letter, only definite is supported because the default form uses definite or indefinite depending on the item uniqueness
          * @returns the formatted name of the item
          */
-        formatItemName(item: DEItem, inPerspectiveOf: DECompleteCharacterReference | string | null, options?: { type?: "default" | "definite", capitalize?: boolean }): string;
+        formatItemName(item: DEItem, inPerspectiveOf?: DECompleteCharacterReference | string | null, options?: { type?: "default" | "definite", capitalize?: boolean }): string;
         /**
          * The story message to parse
          * @param message The story message to parse

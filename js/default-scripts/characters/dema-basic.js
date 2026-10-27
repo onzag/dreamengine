@@ -230,7 +230,8 @@ engine.exports = {
                         replacement: `{{char}} whimpers`,
                     }
                 ],
-            })
+            }),
+            blindness: "no",
         }, {
             type: "4d_creepy",
             strangerBad_n100_n5: {

@@ -25,7 +25,7 @@ export class GameView extends HTMLElement {
                     </div>
                     <app-game-stats></app-game-stats>
                 </div>
-                <app-game-character-surrounding-view demo></app-game-character-surrounding-view>
+                <app-game-character-surrounding-view></app-game-character-surrounding-view>
                 <div class="story">
                     <app-game-message-view></app-game-message-view>
                 </div>

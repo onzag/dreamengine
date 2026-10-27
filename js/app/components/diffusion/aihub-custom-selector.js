@@ -106,6 +106,7 @@ export class AIHubCustomSelector extends HTMLElement {
         const workflows = this._workflowsInCategory();
         this.root.innerHTML = `
             <style>
+        button, input, select, textarea { font-family: inherit; }
                 :host { display: block; }
                 .section-title { font-size: 2vh; font-weight: bold; color: #d9b8ff; margin-bottom: 0.5vh; }
                 .field { display: flex; flex-direction: column; gap: 0.5vh; margin-bottom: 1vh; }

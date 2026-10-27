@@ -1,13 +1,19 @@
-/** @typedef {{id: string, name: string, image: string, locationSlot: string, conversationId: string|null}} SurroundingCharacter */
+/** @typedef {{id: string, name: string, image: string, locationSlot: string, conversationId: string|null, visibility: DEVisibility}} SurroundingCharacter */
 /** @typedef {{id: string, primary: boolean, characters: SurroundingCharacter[]}} SurroundingGroup */
 
-/** Remove the redundant player portrait and omit groups left empty by that.
+/** Remove the player and unseen outsiders. Perceived outsiders have no name;
+ * conversation partners remain identifiable regardless of sight.
+ * Keep the original membership keys so changes in visibility don't relocate
+ * everyone else in the group.
  * @param {SurroundingGroup[]} groups
  * @param {string} userId
  * @returns {SurroundingGroup[]}
  */
 export function getVisibleSurroundingGroups(groups, userId) {
-    return groups.map(group => ({ ...group, characters: group.characters.filter(c => c.id !== userId) }))
+    return groups.map(group => ({ ...group, characters: group.characters
+        .filter(c => c.id !== userId && (group.primary || c.visibility === 'visible' || c.visibility === 'perceived'))
+        .map(c => !group.primary && c.visibility === 'perceived' ? { ...c, name: '' } : c),
+    }))
         .filter(group => group.characters.length > 0)
         .sort((a, b) => Number(b.primary) - Number(a.primary));
 }

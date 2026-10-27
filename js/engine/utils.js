@@ -5,6 +5,7 @@ import { emotions } from "./util/emotions.js";
 import { DEngine } from "./index.js";
 import { getNameIdentificationForOneCharacterTowardsAnother, getNameIdentificationForOneCharacterTowardsAnotherOnlyName } from "./util/messages.js";
 import { utilItemCount } from "./util/items.js";
+import { getSizeVisibility, getPerceivedItemLabel } from "./util/visibility.js";
 
 // NOTE: DE.characters, DE.bonds, DE.stateFor are all keyed by character id (character.id), not character name.
 // DESingleBondDescription.towards is a character id.
@@ -134,6 +135,11 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     items: {
+        canSeeItem(item, inPerspectiveOf) {
+            const observer = resolveCharacter(DE, inPerspectiveOf ?? null);
+            if (inPerspectiveOf && !observer) throw new Error(`Character ${inPerspectiveOf} not found`);
+            return getSizeVisibility(item.volumeLiters, observer || null);
+        },
         newItem(definition) {
             const id = DE.utils.id.itemIdGenerator(definition.name);
             return { ...definition, id };
@@ -951,6 +957,17 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     characterInfo: {
+        canSeeCharacter(char, inPerspectiveOf) {
+            const target = resolveCharacter(DE, char);
+            const observer = resolveCharacter(DE, inPerspectiveOf ?? null);
+            if (!target) throw new Error(`Character ${char} not found`);
+            if (inPerspectiveOf && !observer) throw new Error(`Character ${inPerspectiveOf} not found`);
+            if (observer?.id === target.id) return "visible";
+            return getSizeVisibility(target.weightKg, observer || null);
+        },
+        canSeeOtherCharacter(char, inPerspectiveOf) {
+            return DE.utils.characterInfo.canSeeCharacter(char, inPerspectiveOf);
+        },
         getExternalDescriptionOfCharacter(char, inPerspectiveOf, onlyBasics, hideCurrentPosture) {
             return getExternalDescriptionOfCharacter(DE, char.id, inPerspectiveOf.id, onlyBasics, hideCurrentPosture);
         },
@@ -2124,6 +2141,14 @@ export const deEngineUtilsFn = (DE, engine) => ({
             return "<" + ourChar.id + ":" + nameGiven + ">";
         },
         formatItemName(item, inPerspectiveOf, options) {
+            const visibility = DE.utils.items.canSeeItem(item, inPerspectiveOf);
+            if (visibility !== "visible") {
+                const observer = resolveCharacter(DE, inPerspectiveOf ?? null);
+                const label = visibility === "invisible" || !observer ? "invisible item" : getPerceivedItemLabel(item, observer);
+                let nameGiven = options?.type === "definite" ? "the " + label : (/^[aeiou]/i.test(label) ? "an " : "a ") + label;
+                if (options?.capitalize) nameGiven = nameGiven.charAt(0).toUpperCase() + nameGiven.slice(1);
+                return "<" + item.id + ":" + nameGiven + ">";
+            }
             const nameGiven = utilItemCount(DE, null, item.oneOfAKind || false, item.owner, 1, item.name, item.id, options?.capitalize, options?.type === "definite");
             return "<" + item.id + ":" + nameGiven + ">";
         },

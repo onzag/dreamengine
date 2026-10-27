@@ -72,7 +72,8 @@ export async function initializeNewGame(game) {
             shortDescription, shortDescriptionTopNakedAdd, shortDescriptionBottomNakedAdd,
             stealth, perception, attractiveness, charisma,
             tier, tierValue, apparentTier, apparentTierValue, powerGrowthRate,
-            species, speciesType, race, groupBelonging, initialClothing, initialClothingFitment
+            species, speciesType, race, groupBelonging, initialClothing, initialClothingFitment,
+            blindness
         ] = await Promise.all([
             cfg('user.name'), cfg('user.sex'), cfg('user.gender'),
             cfg('user.heightCm'), cfg('user.weightKg'), cfg('user.ageYears'),
@@ -82,7 +83,8 @@ export async function initializeNewGame(game) {
             cfg('user.shortDescription'), cfg('user.shortDescriptionTopNakedAdd'), cfg('user.shortDescriptionBottomNakedAdd'),
             cfg('user.stealth'), cfg('user.perception'), cfg('user.attractiveness'), cfg('user.charisma'),
             cfg('user.tier'), cfg('user.tierValue'), cfg('user.apparentTier'), cfg('user.apparentTierValue'), cfg('user.powerGrowthRate'),
-            cfg('user.species'), cfg('user.speciesType'), cfg('user.race'), cfg('user.groupBelonging'), cfg('user.initialClothing'), cfg('user.initialClothingFitment')
+            cfg('user.species'), cfg('user.speciesType'), cfg('user.race'), cfg('user.groupBelonging'), cfg('user.initialClothing'), cfg('user.initialClothingFitment'),
+            cfg('user.blindness')
         ]);
 
         const actualInitialClothing = initialClothing || "auto";
@@ -127,6 +129,7 @@ export async function initializeNewGame(game) {
             speciesType: speciesType || 'humanoid',
             race: race || null,
             groupBelonging: groupBelonging || [],
+            blindness: blindness || "no",
         };
 
     }
