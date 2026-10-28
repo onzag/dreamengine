@@ -113,7 +113,12 @@ export class CharacterSurroundingView extends HTMLElement {
                     { __type: 'char', value: id }, { __type: 'char', value: userId }, true, false,
                 ] }),
             ]);
+            const locationSlotName = state?.locationSlot ? await client.queryDEObject({
+                path: ['utils', 'templates', 'formatLocationSlotName'],
+                call: [state.locationSlot, userId, { __type: 'object', value: { type: 'default', justName: true } }],
+            }) : '';
             return { id, name: name || 'Unknown character', image: metadata?.assets?.neutral || '',
+                locationSlotName: locationSlotName || '',
                 locationSlot: state?.locationSlot || '', conversationId: state?.conversationId || null,
                 visibility, externalDescription: externalDescription || '' };
         }));
@@ -269,11 +274,11 @@ export class CharacterSurroundingView extends HTMLElement {
                 const name = card.element.querySelector('.name');
                 const slot = card.element.querySelector('.slot');
                 if (name) name.textContent = character.name;
-                if (slot) slot.textContent = character.locationSlot;
+                if (slot) slot.textContent = character.locationSlotName;
                 const tooltip = card.element.querySelector('.portrait-tooltip');
                 if (tooltip) {
                     tooltip.setAttribute('text', character.externalDescription);
-                    tooltip.setAttribute('aria-label', character.name || character.locationSlot || 'Character description');
+                    tooltip.setAttribute('aria-label', character.name || character.locationSlotName || 'Character description');
                 }
                 const image = card.element.querySelector('app-world-image');
                 if (image && image.getAttribute('image-url') !== character.image) image.setAttribute('image-url', character.image);

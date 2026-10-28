@@ -211,7 +211,7 @@ export function resizeClothingItem(utils, item, character, fitment) {
 /**
  * @param {DEUtils} utils
  * @param {DECompleteCharacterReference} character
- * @param {DEStateForCharacterWithHistory} charState
+ * @param {DEStateForCharacter} charState
  * @param {DEWorld} world
  * @param {"tight" | "loose" | "normal"} fitment
  */

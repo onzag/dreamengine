@@ -168,31 +168,15 @@ export const deEngineUtilsFn = (DE, engine) => ({
         },
         newClonableItemFactory(definitionFn) {
             return (amount) => {
-                const definition = definitionFn();
                 if (amount <= 0) {
                     return [];
                 }
                 const clones = [];
                 for (let i = 0; i < amount; i++) {
+                    const definition = definitionFn();
                     const newId = DE.utils.id.itemIdGenerator(definition.name);
                     /** @type {DEItem} */
-                    const newItem = { ...definition, id: newId, containing: [], ontop: [], containingCharacters: [], ontopCharacters: [] };
-                    if (definition.containing) {
-                        for (const containedItem of definition.containing) {
-                            const singleClone = DE.utils.items.cloneItem(containedItem, 1)[0];
-                            if (singleClone) {
-                                newItem.containing.push(singleClone);
-                            }
-                        }
-                    }
-                    if (definition.ontop) {
-                        for (const ontopItem of definition.ontop) {
-                            const singleClone = DE.utils.items.cloneItem(ontopItem, 1)[0];
-                            if (singleClone) {
-                                newItem.ontop.push(singleClone);
-                            }
-                        }
-                    }
+                    const newItem = { ...definition, id: newId, containingCharacters: [], ontopCharacters: [] };
                     clones.push(newItem);
                 }
                 return clones;

@@ -610,7 +610,7 @@ engine.exports = {
 
         DE.world.scenes["Default Scene"] = /** @type {DEScene} */ ({
             location: lunarStation.id,
-            locationSlot: lunarStation.slots[0].id,
+            locationSlot: Object.values(lunarStation.slots)[0].id,
             time: {
                 dayOfMonth: 17,
                 dayOfWeek: 1,

@@ -3769,7 +3769,8 @@ declare interface DEUtils {
         newItem(definition: Omit<DEItem, "id">): DEItem;
         /**
          * Creates a new clonable item factory function that can be used to create new items with the same definition but different ids
-         * @param definition The definition of the item to be cloned
+         * @param definition The definition of the item to be cloned, make sure to only use other factory functions inside this defintion otherwise it will create
+         * items with the same id and that will cause issues, use newItem() or newClonableItemFactory() instead
          */
         newClonableItemFactory(definition: () => Omit<DEItem, "id">): (amount: number) => DEItem[];
         /**

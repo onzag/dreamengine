@@ -1,4 +1,4 @@
-/** @typedef {{id: string, name: string, image: string, externalDescription: string, locationSlot: string, conversationId: string|null, visibility: DEVisibility}} SurroundingCharacter */
+/** @typedef {{id: string, name: string, image: string, externalDescription: string, locationSlot: string, locationSlotName: string, conversationId: string|null, visibility: DEVisibility}} SurroundingCharacter */
 /** @typedef {{id: string, primary: boolean, characters: SurroundingCharacter[]}} SurroundingGroup */
 
 /** Remove the player and unseen outsiders. Perceived outsiders have no name;

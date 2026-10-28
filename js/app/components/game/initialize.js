@@ -91,7 +91,7 @@ export async function initializeNewGame(game) {
         const actualInitialClothingFitment = initialClothingFitment || "normal";
 
         user = {
-            id: "character0",
+            id: "character-0",
             script: "",
             scriptGivenId: "",
             unknownName: (species || 'human') ? "Stranger" : "Unknown Creature",

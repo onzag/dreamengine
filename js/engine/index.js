@@ -167,7 +167,7 @@ export function repairPotentialUserWithDefaults(character) {
  */
 export function createCharacterFromUser(user) {
     return {
-        id: "character0",
+        id: "character-0",
         script: "",
         scriptGivenId: "",
         unknownName: user.species === "human" ? "Stranger" : "Unknown Creature",

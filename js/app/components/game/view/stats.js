@@ -121,7 +121,13 @@ export class Stats extends HTMLElement {
             }),
             this.getStatesForDisplay(userId, characterState),
         ]);
-        const location = locationId ? await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'templates', 'formatLocationName'], call: [locationId, userId, { __type: "object", value: {type: 'default', justName: true} }] }) : '';
+        const [location, locationSlot] = await Promise.all([
+            locationId ? window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'templates', 'formatLocationName'], call: [locationId, userId, { __type: "object", value: {type: 'default', justName: true} }] }) : '',
+            characterState?.locationSlot ? window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ['utils', 'templates', 'formatLocationSlotName'],
+                call: [characterState.locationSlot, userId, { __type: 'object', value: { type: 'default', justName: true } }],
+            }) : '',
+        ]);
         const dateTime = Number.isFinite(currentTime) ? new Date(currentTime).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
         console.log(profileImage, location, characterState?.locationSlot, dateTime, weather, states);
         return {
@@ -129,7 +135,7 @@ export class Stats extends HTMLElement {
             externalDescription: externalDescription || '',
             profileImage: profileImage || '',
             location,
-            locationSlot: characterState?.locationSlot || '',
+            locationSlot: locationSlot || '',
             dateTime,
             weather: weather || '',
             states,
