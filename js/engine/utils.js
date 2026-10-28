@@ -47,6 +47,23 @@ function resolveCharacter(DE, c) {
 }
 
 /**
+ * @param {{ id: string, name: string }} entity
+ * @param {{ type?: "default" | "indefinite" | "definite", capitalize?: boolean, justName?: boolean }} [options]
+ */
+function formatPlaceName(entity, options) {
+    let nameGiven = entity.name;
+    if (options?.type === "indefinite") {
+        nameGiven = (/^[aeiou]/i.test(nameGiven) ? "an " : "a ") + nameGiven;
+    } else if (options?.type === "definite") {
+        nameGiven = "the " + nameGiven;
+    }
+    if (options?.capitalize) {
+        nameGiven = nameGiven.charAt(0).toUpperCase() + nameGiven.slice(1);
+    }
+    return options?.justName ? nameGiven : "<" + entity.id + ":" + nameGiven + ">";
+}
+
+/**
  * @param {DEObject} DE
  * @param {Array<DECompleteCharacterReference | string>} charsOrig  character id strings or references
  * @param {string} they
@@ -125,12 +142,17 @@ export const deEngineUtilsFn = (DE, engine) => ({
     id: {
         characterIdGenerator() {
             DE.counters.characterId++;
-            return "character" + DE.counters.characterId;
+            return "character-" + DE.counters.characterId;
         },
         itemIdGenerator(itemName) {
             const normalizedItemName = itemName ? itemName.toLowerCase().replace(/\s+/g, "-") : "item";
             DE.counters.itemId[normalizedItemName] = (DE.counters.itemId[normalizedItemName] || 0) + 1;
-            return normalizedItemName + DE.counters.itemId[normalizedItemName];
+            return "item-" + normalizedItemName + "-" + DE.counters.itemId[normalizedItemName];
+        },
+        locationIdGenerator(locationName) {
+            const normalizedLocationName = locationName ? locationName.toLowerCase().replace(/\s+/g, "-") : "location";
+            DE.counters.locationId[normalizedLocationName] = (DE.counters.locationId[normalizedLocationName] || 0) + 1;
+            return "location-" + normalizedLocationName + "-" + DE.counters.locationId[normalizedLocationName];
         },
     },
 
@@ -143,6 +165,38 @@ export const deEngineUtilsFn = (DE, engine) => ({
         newItem(definition) {
             const id = DE.utils.id.itemIdGenerator(definition.name);
             return { ...definition, id };
+        },
+        newClonableItemFactory(definitionFn) {
+            return (amount) => {
+                const definition = definitionFn();
+                if (amount <= 0) {
+                    return [];
+                }
+                const clones = [];
+                for (let i = 0; i < amount; i++) {
+                    const newId = DE.utils.id.itemIdGenerator(definition.name);
+                    /** @type {DEItem} */
+                    const newItem = { ...definition, id: newId, containing: [], ontop: [], containingCharacters: [], ontopCharacters: [] };
+                    if (definition.containing) {
+                        for (const containedItem of definition.containing) {
+                            const singleClone = DE.utils.items.cloneItem(containedItem, 1)[0];
+                            if (singleClone) {
+                                newItem.containing.push(singleClone);
+                            }
+                        }
+                    }
+                    if (definition.ontop) {
+                        for (const ontopItem of definition.ontop) {
+                            const singleClone = DE.utils.items.cloneItem(ontopItem, 1)[0];
+                            if (singleClone) {
+                                newItem.ontop.push(singleClone);
+                            }
+                        }
+                    }
+                    clones.push(newItem);
+                }
+                return clones;
+            };
         },
         cloneItem(item, amount) {
             if (amount <= 0) {
@@ -208,52 +262,91 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 DE.interests[interest.id] = interest;
             }
         },
-        newLocation(name, locationDef) {
+        newLocation(locationDef, slots, scriptGivenId) {
+            const actualScriptGivenId = scriptGivenId || locationDef.script + ":" + locationDef.name;
+
             /**
-             * @type {DEStatefulLocationDefinition}
+             * @param {string | null} withId 
+             * @returns 
              */
-            const statefulLocation = {
-                ...locationDef,
-                internalState: {
-                    // @ts-ignore
-                    currentWeather: null,
-                    // @ts-ignore
-                    currentWeatherHasBeenOngoingFor: null,
-                }
-            };
+            const generateStatefulLocation = (withId) => {
+                const id = withId || DE.utils.id.locationIdGenerator(locationDef.name);
 
-            const alreadyExistingLocation = DE.world.locations[name];
-            if (alreadyExistingLocation) {
-                statefulLocation.internalState.currentWeather = alreadyExistingLocation.internalState.currentWeather;
-                statefulLocation.internalState.currentWeatherHasBeenOngoingFor = alreadyExistingLocation.internalState.currentWeatherHasBeenOngoingFor;
-                statefulLocation.state = alreadyExistingLocation.state;
+                /**
+                 * @type {Record<string, DELocationSlot>}
+                 */
+                const slotsObj = {};
 
-                for (const slot in alreadyExistingLocation.slots) {
-                    if (!statefulLocation.slots[slot]) {
-                        statefulLocation.slots[slot] = alreadyExistingLocation.slots[slot];
-                    } else {
-                        statefulLocation.slots[slot].items = alreadyExistingLocation.slots[slot].items;
-                        statefulLocation.slots[slot].state = alreadyExistingLocation.slots[slot].state;
+                for (const slot of slots()) {
+                    const slotId = DE.utils.id.locationIdGenerator(slot.name);
+                    slotsObj[slotId] = {
+                        ...slot,
+                        id: slotId,
                     }
                 }
+
+                /**
+                 * @type {DEStatefulLocation}
+                 */
+                const statefulLocation = {
+                    ...locationDef,
+                    slots: slotsObj,
+                    id: id,
+                    scriptGivenId: actualScriptGivenId,
+                    internalState: {
+                        // @ts-ignore
+                        currentWeather: null,
+                        // @ts-ignore
+                        currentWeatherHasBeenOngoingFor: null,
+                    }
+                };
+
+                return statefulLocation;
             }
 
-            if (locationDef.parent) {
-                const parentLocation = DE.world.locations[locationDef.parent];
-                if (!parentLocation) {
-                    console.warn(`Parent location ${locationDef.parent} not found for location ${name}`);
-                    DE.world.locations[name] = statefulLocation;
-                    return DE.world.locations[name];
+
+            const alreadyExistingLocationId = Object.keys(DE.world.locations).find(key => DE.world.locations[key].scriptGivenId === actualScriptGivenId);
+            if (alreadyExistingLocationId) {
+                const alreadyExistingLocation = DE.world.locations[alreadyExistingLocationId];
+                const statefulLocation = generateStatefulLocation(alreadyExistingLocationId);
+                for (const property of Object.keys(statefulLocation)) {
+                    if (!["id", "scriptGivenId", "slots", "state", "internalState"].includes(property)) {
+                        // @ts-ignore
+                        alreadyExistingLocation[property] = statefulLocation[property];
+                    }
+                }
+                for (const slotId of Object.keys(statefulLocation.slots)) {
+                    if (!alreadyExistingLocation.slots[slotId]) {
+                        alreadyExistingLocation.slots[slotId] = statefulLocation.slots[slotId];
+                    } else {
+                        for (const property of Object.keys(statefulLocation.slots[slotId])) {
+                            if (!["id", "state", "internalState", "items"].includes(property)) {
+                                // @ts-ignore
+                                alreadyExistingLocation.slots[slotId][property] = statefulLocation.slots[slotId][property];
+                            }
+                        }
+                    }
+                }
+                return alreadyExistingLocation;
+            } else {
+                const statefulLocation = generateStatefulLocation(null);
+                if (statefulLocation.parent) {
+                    const parentLocation = DE.world.locations[statefulLocation.parent];
+                    if (!parentLocation) {
+                        console.warn(`Parent location ${statefulLocation.parent} not found for location ${statefulLocation.name}`);
+                        DE.world.locations[statefulLocation.id] = statefulLocation;
+                        return DE.world.locations[statefulLocation.id];
+                    }
+
+                    if (!locationDef.ownWeatherSystem) {
+                        statefulLocation.internalState.currentWeather = parentLocation.internalState.currentWeather;
+                        statefulLocation.internalState.currentWeatherHasBeenOngoingFor = parentLocation.internalState.currentWeatherHasBeenOngoingFor;
+                    }
                 }
 
-                if (!locationDef.ownWeatherSystem) {
-                    statefulLocation.internalState.currentWeather = parentLocation.internalState.currentWeather;
-                    statefulLocation.internalState.currentWeatherHasBeenOngoingFor = parentLocation.internalState.currentWeatherHasBeenOngoingFor;
-                }
+                DE.world.locations[statefulLocation.id] = statefulLocation;
+                return statefulLocation;
             }
-
-            DE.world.locations[name] = statefulLocation;
-            return DE.world.locations[name];
         },
         newConnection(connectionDef) {
             const id = connectionDef.from + " to " + connectionDef.to;
@@ -280,21 +373,21 @@ export const deEngineUtilsFn = (DE, engine) => ({
         currentLocationIsSafe() {
             return DE.world.locations[DE.world.currentLocation]?.isSafe || false;
         },
-        allCharactersAtLocation(locationName) {
+        allCharactersAtLocation(locationId) {
             const result = [];
             for (const charId of Object.keys(DE.stateFor)) {
-                if (DE.stateFor[charId].location === locationName) {
+                if (DE.stateFor[charId].location === locationId) {
                     const charRef = DE.characters[charId];
                     if (charRef) result.push(charRef);
                 }
             }
             return result;
         },
-        locationIsVehicle(locationName) {
-            return !!DE.world.locations[locationName]?.vehicleType || false;
+        locationIsVehicle(locationId) {
+            return !!DE.world.locations[locationId]?.vehicleType || false;
         },
-        locationIsSafe(locationName) {
-            return DE.world.locations[locationName]?.isSafe || false;
+        locationIsSafe(locationId) {
+            return DE.world.locations[locationId]?.isSafe || false;
         },
     },
 
@@ -540,8 +633,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
         getConversation: async function (conversationId) {
             return DE.database.getConversation(conversationId);
         },
-        getAllConversationsAtLocation: async function (locationName) {
-            const allCharactersAtLocation = DE.utils.world.allCharactersAtLocation(locationName);
+        getAllConversationsAtLocation: async function (locationId) {
+            const allCharactersAtLocation = DE.utils.world.allCharactersAtLocation(locationId);
             const allConversationIds = new Set();
             for (const character of allCharactersAtLocation) {
                 const charState = DE.stateFor[character.id];
@@ -771,16 +864,16 @@ export const deEngineUtilsFn = (DE, engine) => ({
 
             if (
                 (
-                    
-                        message.characterId &&
-                        !conversationObject.participants.includes(message.characterId) &&
-                        !(
-                            conversationObject.remoteParticipants &&
-                            conversationObject.remoteParticipants.includes(message.characterId)
-                        ) &&
-                        !options.unsafeMode &&
-                        !message.isStoryMasterMessage
-                    
+
+                    message.characterId &&
+                    !conversationObject.participants.includes(message.characterId) &&
+                    !(
+                        conversationObject.remoteParticipants &&
+                        conversationObject.remoteParticipants.includes(message.characterId)
+                    ) &&
+                    !options.unsafeMode &&
+                    !message.isStoryMasterMessage
+
                 )
             ) {
                 throw new Error(`Sender ${message.characterId} is not a participant nor a remote participant of conversation ${conversationId}`);
@@ -1967,11 +2060,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
         parseNarration(message) {
             /** @type {Array<DEConversationMessageNarrationFragment>} */
             const fragments = [];
-            /** @type {Set<string> | null} */
-            let itemIds = null;
             let lastIndex = 0;
 
-            // Match the markers emitted by formatCharacterName and formatItemName.
+            // Match entity identifiers paired with their readable names.
             // Leave incomplete markers and other angle-bracketed text untouched.
             for (const match of message.matchAll(/<([^<>:\s]+):([^<>]+)>/g)) {
                 const identifier = match[1];
@@ -1979,6 +2070,10 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 let foundAs = "item";
                 if (Object.prototype.hasOwnProperty.call(DE.characters, identifier)) {
                     foundAs = "character";
+                } else if (Object.prototype.hasOwnProperty.call(DE.world.locations, identifier)) {
+                    foundAs = "location";
+                } else if (Object.values(DE.world.locations).some(location => Object.prototype.hasOwnProperty.call(location.slots, identifier))) {
+                    foundAs = "location-slot";
                 }
 
                 if (match.index > lastIndex) {
@@ -2147,10 +2242,27 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 const label = visibility === "invisible" || !observer ? "invisible item" : getPerceivedItemLabel(item, observer);
                 let nameGiven = options?.type === "definite" ? "the " + label : (/^[aeiou]/i.test(label) ? "an " : "a ") + label;
                 if (options?.capitalize) nameGiven = nameGiven.charAt(0).toUpperCase() + nameGiven.slice(1);
-                return "<" + item.id + ":" + nameGiven + ">";
+                return options?.justName ? nameGiven : "<" + item.id + ":" + nameGiven + ">";
             }
             const nameGiven = utilItemCount(DE, null, item.oneOfAKind || false, item.owner, 1, item.name, item.id, options?.capitalize, options?.type === "definite");
-            return "<" + item.id + ":" + nameGiven + ">";
+            return options?.justName ? nameGiven : "<" + item.id + ":" + nameGiven + ">";
+        },
+        formatLocationName(location, inPerspectiveOf, options) {
+            const locationRef = typeof location === "string" ? DE.world.locations[location] : location;
+            if (!locationRef) {
+                console.warn(`Location reference for ${location} not found when formatting location name`);
+                return "Unknown Location";
+            }
+            return formatPlaceName(locationRef, options);
+        },
+        formatLocationSlotName(slot, inPerspectiveOf, options) {
+            const slotRef = typeof slot === "string" ? Object.values(DE.world.locations)
+                .find(location => Object.prototype.hasOwnProperty.call(location.slots, slot))?.slots[slot] : slot;
+            if (!slotRef) {
+                console.warn(`Location slot reference for ${slot} not found when formatting location slot name`);
+                return "Unknown Location Slot";
+            }
+            return formatPlaceName(slotRef, options);
         },
     },
 

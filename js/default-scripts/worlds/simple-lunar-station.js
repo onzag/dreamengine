@@ -68,61 +68,6 @@ engine.exports = {
         });
     },
     initialize(DE) {
-        DE.world.scenes["Default Scene"] = /** @type {DEScene} */ ({
-            location: "Lunar Station",
-            locationSlot: "Common Area",
-            time: {
-                dayOfMonth: 17,
-                dayOfWeek: 1,
-                hourOfDay: 12,
-                minuteOfHour: 0,
-                monthOfYear: 1,
-                year: 2307,
-                time: (new Date(2307, 0, 17, 12, 0)).getTime(),
-            },
-            narration: (info) => {
-                const others = DE.utils.world.allWorldCharactersButUser();
-                if (!others || others.length === 0) {
-                    return `${DE.utils.templates.formatCharacterName(info.char, info.char)} is a visitor to the Lunar Station, eager to explore this small outpost in space. The entire station is empty and quiet, allowing ${DE.utils.templates.formatCharacterName(info.char, info.char)} to explore their surroundings in solitude.`;
-                }
-
-                const dema = others.find((c) => c.name === "Dema");
-                const visitors = others.filter((c) => c.name !== "Dema");
-
-                if (dema && visitors.length === 0) {
-                    return `${DE.utils.templates.formatCharacterName(info.char, info.char)} is a visitor to the Lunar Station, eager to explore this small outpost in space. ${DE.utils.templates.formatCharacterName(dema, info.char, {
-                        capitalize: true,
-                        type: "indefinite",
-                    })}, keeper of the station, is currently awaiting ${DE.utils.templates.formatPossessive([info.char])} arrival in the common area near the airlock, as ${DE.utils.templates.formatCharacterName(dema, info.char, {
-                        capitalize: false,
-                        type: "definite",
-                    })} is responsible for welcoming visitors and assisting them with their needs during their stay at the station.`;
-                }
-
-                if (dema && visitors.length > 0) {
-                    return `${DE.utils.templates.formatCharacterName(info.char, info.char)} is a visitor to the Lunar Station, eager to explore this small outpost in space. ${DE.utils.templates.formatCharacterName(dema, info.char, {
-                        capitalize: true,
-                        type: "indefinite",
-                    })} , the station's keeper, is there in the common area near the airlock to welcome ${DE.utils.templates.formatPossessive([info.char])} arrival. As it turns out, ${visitors.length === 1 ? "another visitor" : "other visitors"} ${DE.utils.templates.formatVerbToBe(visitors)} also visiting the station at this time, and they all find themselves gathered together in the common area under ${DE.utils.templates.formatCharacterName(dema, info.char, {
-                        capitalize: false,
-                        type: "definite",
-                    })}'s watchful eye.`;
-                }
-                
-                return `${DE.utils.templates.formatCharacterName(info.char, info.char)} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet ${visitors.length === 1 ? "another visitor" : "other visitors"} ${DE.utils.templates.formatVerbToBe(visitors)} also visiting the station at this time, and they find themselves gathered in the common area near the airlock.`;
-            },
-            charactersStart: true,
-            engagedCharacters: () => DE.utils.world.allWorldCharactersButUser(),
-        });
-
-        DE.world.initialScenes.push("Default Scene");
-        DE.world.metadata = standardApp.buildWorldMetadata({
-            theme: {asset: "@assets/worlds/simple-lunar-station/luna.mp3", volume: 1.3},
-        });
-        DE.world.name = "Simple Lunar Station";
-
-        DE.world.lore = "The world is set on a small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities. Outside the station, the barren surface of the Moon stretches out, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of the station's machinery";
-
         /**
          * @type {DEWeatherSystem}
          */
@@ -184,10 +129,7 @@ engine.exports = {
             ],
         };
 
-        /**
-         * @type {DEItem}
-         */
-        const spaceSuit = DE.utils.items.newItem({
+        const spaceSuitFactory = DE.utils.items.newClonableItemFactory(() => ({
             name: "Space Suit",
             description: "A bulky space suit designed for extra-vehicular activity on the lunar surface. It provides life support and protection from the harsh environment of space",
             weightKg: 20,
@@ -221,12 +163,9 @@ engine.exports = {
             },
             owner: null,
             communicator: null,
-        });
+        }));
 
-        /**
-         * @type {DEItem}
-         */
-        const locker = DE.utils.items.newItem({
+        const lockerFactory = DE.utils.items.newClonableItemFactory(() => ({
             name: "Locker",
             description: "A sturdy locker used for storing personal belongings and equipment within the lunar station",
             weightKg: 1500,
@@ -242,9 +181,7 @@ engine.exports = {
                 asset: "@assets/worlds/simple-lunar-station/locker.jpg",
             }),
             consumableProperties: null,
-            containing: [
-                ...DE.utils.items.cloneItem(spaceSuit, 2)
-            ],
+            containing: spaceSuitFactory(2),
             ontop: [],
             containingCharacters: [],
             maxVolumeOnTopLiters: 100,
@@ -252,12 +189,9 @@ engine.exports = {
             ontopCharacters: [],
             owner: null,
             communicator: null,
-        });
+        }));
 
-        /**
-         * @type {DEItem}
-         */
-        const stove = DE.utils.items.newItem({
+        const stoveFactory = DE.utils.items.newClonableItemFactory(() => ({
             name: "Stove",
             description: "A compact stove designed for cooking meals in the confined space of the lunar station. It features multiple burners and a small oven",
             weightKg: 30,
@@ -281,12 +215,9 @@ engine.exports = {
             maxWeightOnTopKg: 100,
             owner: null,
             communicator: null,
-        });
+        }));
 
-        /**
-         * @type {DEItem}
-         */
-        const fork = DE.utils.items.newItem({
+        const forkFactory = DE.utils.items.newClonableItemFactory(() => ({
             name: "Fork",
             description: "A standard eating utensil with four tines, used for picking up and eating food",
             weightKg: 0.1,
@@ -304,12 +235,9 @@ engine.exports = {
             ontopCharacters: [],
             owner: null,
             communicator: null,
-        });
+        }));
 
-        /**
-         * @type {DEItem}
-         */
-        const spoon = DE.utils.items.newItem({
+        const spoonFactory = DE.utils.items.newClonableItemFactory(() => ({
             name: "Spoon",
             description: "A standard eating utensil with a rounded bowl, used for scooping and eating food",
             weightKg: 0.1,
@@ -327,12 +255,9 @@ engine.exports = {
             ontopCharacters: [],
             owner: null,
             communicator: null,
-        });
+        }));
 
-        /**
-         * @type {DEItem}
-         */
-        const cabinetDrawerKitchenware = DE.utils.items.newItem({
+        const cabinetDrawerKitchenwareFactory = DE.utils.items.newClonableItemFactory(() => ({
             name: "Cabinet Drawer",
             description: "A small drawer within the lunar station's kitchenette, used for storing utensils and small kitchen items",
             weightKg: 5,
@@ -349,8 +274,8 @@ engine.exports = {
             }),
             consumableProperties: null,
             containing: [
-                ...DE.utils.items.cloneItem(fork, 10),
-                ...DE.utils.items.cloneItem(spoon, 10)
+                ...forkFactory(10),
+                ...spoonFactory(10)
             ],
             ontop: [],
             containingCharacters: [],
@@ -359,12 +284,9 @@ engine.exports = {
             ontopCharacters: [],
             owner: null,
             communicator: null,
-        });
+        }));
 
-        /**
-         * @type {DEItem}
-         */
-        const bowl = DE.utils.items.newItem({
+        const bowlFactory = DE.utils.items.newClonableItemFactory(() => ({
             name: "Bowl",
             description: "A small bowl used for holding food or liquids",
             weightKg: 0.2,
@@ -388,12 +310,9 @@ engine.exports = {
             ontopCharacters: [],
             owner: null,
             communicator: null,
-        });
+        }));
 
-        /**
-         * @type {DEItem}
-         */
-        const cabinetDrawerBowls = DE.utils.items.newItem({
+        const cabinetDrawerBowlsFactory = DE.utils.items.newClonableItemFactory(() => ({
             name: "Cabinet Drawer",
             description: "A small drawer within the lunar station's kitchenette, used for storing utensils and small kitchen items",
             weightKg: 5,
@@ -410,7 +329,7 @@ engine.exports = {
             }),
             consumableProperties: null,
             containing: [
-                ...DE.utils.items.cloneItem(bowl, 10),
+                ...bowlFactory(10),
             ],
             ontop: [],
             containingCharacters: [],
@@ -419,12 +338,9 @@ engine.exports = {
             ontopCharacters: [],
             owner: null,
             communicator: null,
-        });
+        }));
 
-        /**
-         * @type {DEItem}
-         */
-        const cabinet = DE.utils.items.newItem({
+        const cabinetFactory = DE.utils.items.newClonableItemFactory(() => ({
             name: "Cabinet",
             description: "A storage cabinet in the lunar station's kitchenette, used for storing food items, utensils, and kitchen supplies",
             weightKg: 50,
@@ -446,17 +362,14 @@ engine.exports = {
             ontopCharacters: [],
             consumableProperties: null,
             containing: [
-                ...DE.utils.items.cloneItem(cabinetDrawerKitchenware, 1),
-                ...DE.utils.items.cloneItem(cabinetDrawerBowls, 4),
+                ...cabinetDrawerKitchenwareFactory(1),
+                ...cabinetDrawerBowlsFactory(4),
             ],
             owner: null,
             communicator: null,
-        });
+        }));
 
-        /**
-         * @type {DEItem}
-         */
-        const spaceFoodPack = DE.utils.items.newItem({
+        const spaceFoodPackFactory = DE.utils.items.newClonableItemFactory(() => ({
             name: "Space Food Pack",
             description: "A compact, vacuum-sealed food pack designed for consumption in space. It contains a nutritious meal suitable for astronauts",
             weightKg: 0.5,
@@ -477,43 +390,39 @@ engine.exports = {
             ontopCharacters: [],
             owner: null,
             communicator: null,
+        }));
+
+        const largeCabinetFactory = DE.utils.items.newClonableItemFactory(() => {
+            const spaceFood = spaceFoodPackFactory(100);
+
+            return {
+                name: "Large Cabinet",
+                description: "A large storage cabinet in the lunar station's kitchenette, used for storing bulk food items and kitchen supplies",
+                weightKg: 500,
+                volumeLiters: (spaceFood[0].volumeLiters * 100) + 100,
+                state: {},
+                containerProperties: {
+                    capacityKg: (spaceFood[0].weightKg * 100) + 100,
+                    capacityLiters: (spaceFood[0].volumeLiters * 100) + 100,
+                    structure: "rigid",
+                    canSeeContentsFromOutside: false,
+                },
+                metadata: standardApp.buildItemMetadata({
+                    asset: "@assets/worlds/simple-lunar-station/large_cabinet.jpg",
+                }),
+                consumableProperties: null,
+                containing: spaceFood,
+                ontop: [],
+                containingCharacters: [],
+                maxVolumeOnTopLiters: 100,
+                maxWeightOnTopKg: 100,
+                ontopCharacters: [],
+                owner: null,
+                communicator: null,
+            }
         });
 
-        /**
-         * @type {DEItem}
-         */
-        const largeCabinet = DE.utils.items.newItem({
-            name: "Large Cabinet",
-            description: "A large storage cabinet in the lunar station's kitchenette, used for storing bulk food items and kitchen supplies",
-            weightKg: 500,
-            volumeLiters: (spaceFoodPack.volumeLiters * 100) + 100,
-            state: {},
-            containerProperties: {
-                capacityKg: (spaceFoodPack.weightKg * 100) + 100,
-                capacityLiters: (spaceFoodPack.volumeLiters * 100) + 100,
-                structure: "rigid",
-                canSeeContentsFromOutside: false,
-            },
-            metadata: standardApp.buildItemMetadata({
-                asset: "@assets/worlds/simple-lunar-station/large_cabinet.jpg",
-            }),
-            consumableProperties: null,
-            containing: [
-                ...DE.utils.items.cloneItem(spaceFoodPack, 100),
-            ],
-            ontop: [],
-            containingCharacters: [],
-            maxVolumeOnTopLiters: 100,
-            maxWeightOnTopKg: 100,
-            ontopCharacters: [],
-            owner: null,
-            communicator: null,
-        });
-
-        /**
-         * @type {DEItem}
-         */
-        const chair = DE.utils.items.newItem({
+        const chairFactory = DE.utils.items.newClonableItemFactory(() => ({
             name: "Chair",
             description: "A simple chair made of metal and plastic, designed for use in the lunar station's common area",
             weightKg: 5,
@@ -531,9 +440,51 @@ engine.exports = {
             ontopCharacters: [],
             owner: null,
             communicator: null,
-        });
+        }));
 
-        DE.utils.world.newLocation("Surface of the Moon", {
+        const rockFactory = DE.utils.items.newClonableItemFactory(() => ({
+            name: "Lunar rock",
+            description: "A small, jagged rock from the surface of the Moon. It's covered in a fine layer of grey dust",
+            weightKg: 0.5,
+            volumeLiters: 0.2,
+            state: {},
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/lunar_rock.jpg",
+            }),
+            consumableProperties: null,
+            containing: [],
+            ontop: [],
+            containingCharacters: [],
+            maxVolumeOnTopLiters: 10,
+            maxWeightOnTopKg: 1000,
+            ontopCharacters: [],
+            owner: null,
+            communicator: null,
+        }));
+
+        const bunkBedFactory = DE.utils.items.newClonableItemFactory(() => ({
+            name: "Bunk Bed",
+            description: "A sturdy bunk bed designed for use in the confined space of the lunar station. It features a simple mattress and bedding",
+            weightKg: 20,
+            volumeLiters: 100,
+            state: {},
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/bunk_bed.jpg",
+            }),
+            consumableProperties: null,
+            containing: [],
+            ontop: [],
+            containingCharacters: [],
+            maxVolumeOnTopLiters: 500,
+            maxWeightOnTopKg: 400,
+            ontopCharacters: [],
+            owner: null,
+            communicator: null,
+        }));
+
+        const surfaceOfTheMoon = DE.utils.world.newLocation({
+            name: "Surface of the Moon",
+            script: engine.script,
             description: "The barren, grey surface of the Moon stretches out in all directions, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of distant machinery from the lunar station nearby",
             entrances: [],
             isIndoors: false,
@@ -552,43 +503,24 @@ engine.exports = {
             state: {},
             temp: {},
             parent: null,
-            slots: {
-                "Moon Surface": {
-                    description: "The open expanse of the lunar surface, with its grey dust and scattered rocks",
-                    maxVolumeLiters: 0,
-                    maxWeightKg: 0,
-                    state: {},
-                    temp: {},
-                    metadata: standardApp.buildLocationSlotMetadata({
-                        asset: "@assets/worlds/simple-lunar-station/moon_surface.jpg",
-                    }),
-                    items: DE.utils.items.cloneItem(
-                        DE.utils.items.newItem({
-                            name: "Lunar rock",
-                            description: "A small, jagged rock from the surface of the Moon. It's covered in a fine layer of grey dust",
-                            weightKg: 0.5,
-                            volumeLiters: 0.2,
-                            state: {},
-                            metadata: standardApp.buildItemMetadata({
-                                asset: "@assets/worlds/simple-lunar-station/lunar_rock.jpg",
-                            }),
-                            consumableProperties: null,
-                            containing: [],
-                            ontop: [],
-                            containingCharacters: [],
-                            maxVolumeOnTopLiters: 10,
-                            maxWeightOnTopKg: 1000,
-                            ontopCharacters: [],
-                            owner: null,
-                            communicator: null,
-                        }),
-                        10,
-                    ),
-                },
+        }, () => [
+            {
+                name: "Moon Surface",
+                description: "The open expanse of the lunar surface, with its grey dust and scattered rocks",
+                maxVolumeLiters: 0,
+                maxWeightKg: 0,
+                state: {},
+                temp: {},
+                metadata: standardApp.buildLocationSlotMetadata({
+                    asset: "@assets/worlds/simple-lunar-station/moon_surface.jpg",
+                }),
+                items: rockFactory(10),
             },
-        });
+        ]);
 
-        DE.utils.world.newLocation("Lunar Station", {
+        const lunarStation = DE.utils.world.newLocation({
+            name: "Lunar Station",
+            script: engine.script,
             description: "A small lunar station on the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities",
             entrances: [
                 {
@@ -620,49 +552,50 @@ engine.exports = {
             maxVolumeLiters: 2000,
             maxWeightKg: 2000,
             ownWeatherSystem: [],
-            parent: "Surface of the Moon",
+            parent: surfaceOfTheMoon.id,
             metadata: standardApp.buildLocationMetadata({
                 asset: "@assets/worlds/simple-lunar-station/image",
             }),
             temp: {},
             state: {},
-            slots: {
-                "Common Area": {
-                    description: "The common area of the lunar station, featuring a few chairs, a table, and a small kitchenette. The walls are lined with control panels and monitors displaying various data about the station's systems",
-                    items: [
-                        ...DE.utils.items.cloneItem(locker, 2),
-                        ...DE.utils.items.cloneItem(chair, 4),
-                    ],
-                    maxVolumeLiters: 2000,
-                    maxWeightKg: 2000,
-                    metadata: standardApp.buildLocationSlotMetadata({
-                        asset: "@assets/worlds/simple-lunar-station/common_area.jpg",
-                    }),
-                    temp: {},
-                    state: {},
-                },
-                "Cooking Area": {
-                    description: "A small kitchenette area with a compact stove, a sink, and storage cabinets. There are a few packaged food items and utensils stored here for the crew to use",
-                    items: [
-                        ...DE.utils.items.cloneItem(chair, 4),
-                        ...DE.utils.items.cloneItem(stove, 1),
-                        ...DE.utils.items.cloneItem(largeCabinet, 1),
-                        ...DE.utils.items.cloneItem(cabinet, 1),
-                    ],
-                    maxVolumeLiters: 2000,
-                    maxWeightKg: 2000,
-                    metadata: standardApp.buildLocationSlotMetadata({
-                        asset: "@assets/worlds/simple-lunar-station/cooking_area.jpg",
-                    }),
-                    state: {},
-                    temp: {},
-                },
+        }, () => [
+            {
+                name: "Common Area",
+                description: "The common area of the lunar station, featuring a few chairs, a table, and a small kitchenette. The walls are lined with control panels and monitors displaying various data about the station's systems",
+                items: [
+                    ...lockerFactory(2),
+                    ...chairFactory(4),
+                ],
+                maxVolumeLiters: 2000,
+                maxWeightKg: 2000,
+                metadata: standardApp.buildLocationSlotMetadata({
+                    asset: "@assets/worlds/simple-lunar-station/common_area.jpg",
+                }),
+                temp: {},
+                state: {},
             },
-        });
+            {
+                name: "Cooking Area",
+                description: "A small kitchenette area with a compact stove, a sink, and storage cabinets. There are a few packaged food items and utensils stored here for the crew to use",
+                items: [
+                    ...chairFactory(4),
+                    ...stoveFactory(1),
+                    ...largeCabinetFactory(1),
+                    ...cabinetFactory(1),
+                ],
+                maxVolumeLiters: 2000,
+                maxWeightKg: 2000,
+                metadata: standardApp.buildLocationSlotMetadata({
+                    asset: "@assets/worlds/simple-lunar-station/cooking_area.jpg",
+                }),
+                state: {},
+                temp: {},
+            },
+        ]);
 
         DE.utils.world.newConnection({
-            from: "Lunar Station",
-            to: "Surface of the Moon",
+            from: lunarStation.id,
+            to: surfaceOfTheMoon.id,
             bidirectional: true,
             distanceMeters: 0,
             maxHeightCm: 0,
@@ -675,9 +608,66 @@ engine.exports = {
             temp: {},
         });
 
+        DE.world.scenes["Default Scene"] = /** @type {DEScene} */ ({
+            location: lunarStation.id,
+            locationSlot: lunarStation.slots[0].id,
+            time: {
+                dayOfMonth: 17,
+                dayOfWeek: 1,
+                hourOfDay: 12,
+                minuteOfHour: 0,
+                monthOfYear: 1,
+                year: 2307,
+                time: (new Date(2307, 0, 17, 12, 0)).getTime(),
+            },
+            narration: (info) => {
+                const others = DE.utils.world.allWorldCharactersButUser();
+                if (!others || others.length === 0) {
+                    return `${DE.utils.templates.formatCharacterName(info.char, info.char)} is a visitor to the Lunar Station, eager to explore this small outpost in space. The entire station is empty and quiet, allowing ${DE.utils.templates.formatCharacterName(info.char, info.char)} to explore their surroundings in solitude.`;
+                }
+
+                const dema = others.find((c) => c.name === "Dema");
+                const visitors = others.filter((c) => c.name !== "Dema");
+
+                if (dema && visitors.length === 0) {
+                    return `${DE.utils.templates.formatCharacterName(info.char, info.char)} is a visitor to the Lunar Station, eager to explore this small outpost in space. ${DE.utils.templates.formatCharacterName(dema, info.char, {
+                        capitalize: true,
+                        type: "indefinite",
+                    })}, keeper of the station, is currently awaiting ${DE.utils.templates.formatPossessive([info.char])} arrival in the common area near the airlock, as ${DE.utils.templates.formatCharacterName(dema, info.char, {
+                        capitalize: false,
+                        type: "definite",
+                    })} is responsible for welcoming visitors and assisting them with their needs during their stay at the station.`;
+                }
+
+                if (dema && visitors.length > 0) {
+                    return `${DE.utils.templates.formatCharacterName(info.char, info.char)} is a visitor to the Lunar Station, eager to explore this small outpost in space. ${DE.utils.templates.formatCharacterName(dema, info.char, {
+                        capitalize: true,
+                        type: "indefinite",
+                    })} , the station's keeper, is there in the common area near the airlock to welcome ${DE.utils.templates.formatPossessive([info.char])} arrival. As it turns out, ${visitors.length === 1 ? "another visitor" : "other visitors"} ${DE.utils.templates.formatVerbToBe(visitors)} also visiting the station at this time, and they all find themselves gathered together in the common area under ${DE.utils.templates.formatCharacterName(dema, info.char, {
+                        capitalize: false,
+                        type: "definite",
+                    })}'s watchful eye.`;
+                }
+
+                return `${DE.utils.templates.formatCharacterName(info.char, info.char)} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet ${visitors.length === 1 ? "another visitor" : "other visitors"} ${DE.utils.templates.formatVerbToBe(visitors)} also visiting the station at this time, and they find themselves gathered in the common area near the airlock.`;
+            },
+            charactersStart: true,
+            engagedCharacters: () => DE.utils.world.allWorldCharactersButUser(),
+        });
+
+        DE.world.initialScenes.push("Default Scene");
+        DE.world.metadata = standardApp.buildWorldMetadata({
+            theme: { asset: "@assets/worlds/simple-lunar-station/luna.mp3", volume: 1.3 },
+        });
+        DE.world.name = "Simple Lunar Station";
+
+        DE.world.lore = "The world is set on a small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities. Outside the station, the barren surface of the Moon stretches out, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of the station's machinery";
+
         for (let i = 0; i < 2; i++) {
             const letter = String.fromCharCode(65 + i);
-            DE.utils.world.newLocation("Lunar Station Bedroom " + letter, {
+            const bedroom = DE.utils.world.newLocation({
+                name: "Lunar Station Bedroom " + letter,
+                script: engine.script,
                 description: "A small, utilitarian bedroom within the lunar station. The room is sparsely furnished with a bunk bed, a small desk, and a locker for personal belongings. A porthole window offers a view of the lunar surface below",
                 entrances: [
                     {
@@ -709,50 +699,30 @@ engine.exports = {
                 maxVolumeLiters: 500,
                 maxWeightKg: 500,
                 ownWeatherSystem: [],
-                parent: "Lunar Station",
+                parent: lunarStation.id,
                 metadata: standardApp.buildLocationMetadata({
                     asset: "@assets/worlds/simple-lunar-station/bedroom.jpg",
                 }),
                 state: {},
                 temp: {},
-                slots: {
-                    "Bedroom Area": {
-                        description: "The bedroom area of the lunar station, featuring a bunk bed, a small desk, and a locker for personal belongings",
-                        maxVolumeLiters: 2000,
-                        maxWeightKg: 2000,
-                        metadata: standardApp.buildLocationSlotMetadata({
-                            asset: "@assets/worlds/simple-lunar-station/bedroom_area.jpg",
-                        }),
-                        state: {},
-                        temp: {},
-                        items: [
-                            DE.utils.items.newItem({
-                                name: "Bunk Bed",
-                                description: "A sturdy bunk bed designed for use in the confined space of the lunar station. It features a simple mattress and bedding",
-                                weightKg: 20,
-                                volumeLiters: 100,
-                                state: {},
-                                metadata: standardApp.buildItemMetadata({
-                                    asset: "@assets/worlds/simple-lunar-station/bunk_bed.jpg",
-                                }),
-                                consumableProperties: null,
-                                containing: [],
-                                ontop: [],
-                                containingCharacters: [],
-                                maxVolumeOnTopLiters: 500,
-                                maxWeightOnTopKg: 400,
-                                ontopCharacters: [],
-                                owner: null,
-                                communicator: null,
-                            }),
-                        ],
-                    },
+            }, () => [
+                {
+                    name: "Bedroom Area",
+                    description: "The bedroom area of the lunar station, featuring a bunk bed, a small desk, and a locker for personal belongings",
+                    maxVolumeLiters: 2000,
+                    maxWeightKg: 2000,
+                    metadata: standardApp.buildLocationSlotMetadata({
+                        asset: "@assets/worlds/simple-lunar-station/bedroom_area.jpg",
+                    }),
+                    state: {},
+                    temp: {},
+                    items: bunkBedFactory(1),
                 },
-            });
+            ]);
 
             DE.utils.world.newConnection({
-                from: "Lunar Station Bedroom " + letter,
-                to: "Lunar Station",
+                from: bedroom.id,
+                to: lunarStation.id,
                 bidirectional: true,
                 distanceMeters: 0,
                 maxHeightCm: 0,

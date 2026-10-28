@@ -186,7 +186,8 @@ export async function* getHistoryForCharacter(engine, character, options) {
         const conversationMessages = currentConversationObject.messages.filter(msg => (options.includeRejectedMessages || !msg.isRejectedMessage) && (options.includeDebugMessages || !msg.isDebugMessage) && (options.includeHiddenMessages || !msg.isHiddenMessage) &&
             (!msg.canOnlyBeSeenByCharacter || msg.canOnlyBeSeenByCharacter === character.id));
 
-        const conversationLocation = currentConversationObject.location || "an unknown location";
+        const conversationLocationId = currentConversationObject.location;
+        const conversationLocationName = engine.getDEObject().world.locations[conversationLocationId]?.name || "an Unknown Location";
         const conversationStartTime = currentConversationObject.startTime;
         const firstMessageIsStoryMaster = conversationMessages.length > 0 && conversationMessages[0].isStoryMasterMessage;
 
@@ -215,7 +216,14 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     identifier: character.id,
                     foundAs: "character",
                 },
-                " is at " + conversationLocation + " ",
+                " is at ",
+                !conversationLocationId ? "an Unknown Location" : {
+                    type: "identifier",
+                    text: conversationLocationName,
+                    identifier: conversationLocationId,
+                    foundAs: "location",
+                },
+                " "
             ];
 
             if (participantsExcludingCharacter.length === 0) {
@@ -349,7 +357,14 @@ export async function* getHistoryForCharacter(engine, character, options) {
                         identifier: character.id,
                         foundAs: "character",
                     },
-                    " is at " + conversationLocation + " ",
+                    " is at ",
+                    !conversationLocationId ? "an Unknown Location" : {
+                        type: "identifier",
+                        text: conversationLocationName,
+                        identifier: conversationLocationId,
+                        foundAs: "location",
+                    },
+                    " ",
                 ];
 
                 if (participantsExcludingCharacter.length === 0) {

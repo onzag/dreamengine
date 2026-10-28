@@ -26,9 +26,16 @@ export class Background extends HTMLElement {
     async updateBackground() {
         const version = ++this.updateVersion;
         try {
-            const location = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['world', 'currentLocation'] });
-            const locationSlot = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['world', 'currentLocationSlot'] });
+            const client = window.ENGINE_WORKER_CLIENT;
+            const [location, locationSlot, userId] = await Promise.all([
+                client.queryDEObject({ path: ['world', 'currentLocation'] }),
+                client.queryDEObject({ path: ['world', 'currentLocationSlot'] }),
+                client.queryDEObject({ path: ['user'] }),
+            ]);
+            const blindness = await client.queryDEObject({ path: ['characters', userId, 'blindness'] });
             if (!this.isConnected || version !== this.updateVersion) return;
+            // Apply even when the asset is unchanged or the fallback image is used.
+            this.root.querySelector('img')?.toggleAttribute('data-totally-blind', blindness === 'full');
             const assetLocationSlot = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ['world', 'locations', location, "slots", locationSlot, 'metadata', 'asset'],
             });

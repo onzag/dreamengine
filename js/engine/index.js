@@ -575,6 +575,7 @@ export class DEngine {
             counters: {
                 characterId: 0,
                 itemId: {},
+                locationId: {},
             },
             utils:  /** @type {*} */ (/** @type {unknown} */ (null)),
             database: this.dataManager.getDatabaseForDEObject(),
@@ -828,16 +829,16 @@ export class DEngine {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
-        const locationNames = Object.keys(this.deObject.world.locations);
-        if (locationNames.length === 0) {
+        const locationIds = Object.keys(this.deObject.world.locations);
+        if (locationIds.length === 0) {
             throw new Error("No locations found in world to pick from.");
         }
 
         const charHeight = char.heightCm;
 
-        const viableLocations = locationNames.map(locationName => {
+        const viableLocations = locationIds.map(locationId => {
             // @ts-ignore
-            const allSlots = this.deObject.world.locations[locationName].slots;
+            const allSlots = this.deObject.world.locations[locationId].slots;
             const viableSlots = [];
             for (const slotName in allSlots) {
                 const slot = allSlots[slotName];
@@ -871,7 +872,7 @@ export class DEngine {
                 for (const charName in this.deObject.stateFor) {
                     // @ts-ignore
                     const charState = this.deObject.stateFor[charName];
-                    if (charState.location === locationName && charState.locationSlot === slotName) {
+                    if (charState.location === locationId && charState.locationSlot === slotName) {
                         if (measuredCharacters.includes(charName)) {
                             continue;
                         }
@@ -893,7 +894,7 @@ export class DEngine {
             }
 
             return {
-                location: locationName,
+                location: locationId,
                 viableSlots,
             };
         }).filter(loc => loc.viableSlots.length > 0);
@@ -906,27 +907,27 @@ export class DEngine {
                 throw new Error("DEngine not initialized");
             }
             console.warn(`No viable slots found for character ${char.name} with id ${char.id}, picking random slot without checking viability.`);
-            const locationNames = Object.keys(this.deObject.world.locations);
-            if (locationNames.length === 0) {
+            const locationIds = Object.keys(this.deObject.world.locations);
+            if (locationIds.length === 0) {
                 throw new Error(`No locations found in world to pick from for fallback.`);
             }
-            const randomLocationName = locationNames[Math.floor(Math.random() * locationNames.length)];
-            if (!randomLocationName) {
+            const randomLocationId = locationIds[Math.floor(Math.random() * locationIds.length)];
+            if (!randomLocationId) {
                 throw new Error(`No locations found in world to pick from for fallback.`);
             }
-            const location = this.deObject.world.locations[randomLocationName];
+            const location = this.deObject.world.locations[randomLocationId];
             if (!location) {
-                throw new Error(`Location ${randomLocationName} not found in world for fallback.`);
+                throw new Error(`Location ${randomLocationId} not found in world for fallback.`);
             }
-            const slotNames = Object.keys(location.slots);
-            if (!slotNames || slotNames.length === 0) {
-                throw new Error(`No slots found in location ${randomLocationName} to pick from for fallback.`);
+            const slotIds = Object.keys(location.slots);
+            if (!slotIds || slotIds.length === 0) {
+                throw new Error(`No slots found in location ${randomLocationId} to pick from for fallback.`);
             }
-            const randomSlotName = slotNames[Math.floor(Math.random() * slotNames.length)];
+            const randomSlotName = slotIds[Math.floor(Math.random() * slotIds.length)];
             if (!randomSlotName) {
-                throw new Error(`No valid slot found in location ${randomLocationName} for fallback.`);
+                throw new Error(`No valid slot found in location ${randomLocationId} for fallback.`);
             }
-            return { location: randomLocationName, locationSlot: randomSlotName };
+            return { location: randomLocationId, locationSlot: randomSlotName };
         }
 
         if (!randomViableLocation) {

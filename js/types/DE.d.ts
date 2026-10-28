@@ -2682,6 +2682,17 @@ declare interface DEItemInteraction {
 }
 
 declare interface DELocationSlot {
+    /**
+     * the id of the location slot that this slot belongs to, this is used to identify the slot
+     */
+    id: string;
+    /**
+     * Name of the slot, this is used to identify the slot in the location
+     */
+    name: string;
+    /**
+     * Description of the slot
+     */
     description: DEStringTemplateCharOnly;
     /**
      * Maximum height in centimeters that can fit in this slot
@@ -2978,7 +2989,24 @@ declare interface DEEntrances {
     autoLocks: boolean;
 }
 
-declare interface DELocationDefinition {
+declare interface DELocation {
+    /**
+     * Unique identifier for the location
+     */
+    id: string;
+    /**
+     * The script-given ID for the location, this is what the script will use to refer to the location
+     */
+    scriptGivenId: string;
+    /**
+     * The script that generated this location.
+     * Pass engine.script to this when creating the location to track it down
+     */
+    script: string;
+    /**
+     * The name of the location, this is what the character will refer to when talking about it
+     */
+    name: string;
     /**
      * Description of the location
      */
@@ -3167,7 +3195,7 @@ declare interface DEConnection {
     temp: Record<string, any>;
 }
 
-declare interface DEStatefulLocationDefinition extends DELocationDefinition {
+declare interface DEStatefulLocation extends DELocation {
     internalState: {
         // STATEFUL PROPERTIES
         /**
@@ -3215,7 +3243,7 @@ declare interface DEConversationMessageFragmentIdentifier {
     type: "identifier";
     text: string;
     identifier: string;
-    foundAs: "character" | "item";
+    foundAs: "character" | "item" | "location" | "location-slot";
 }
 
 declare interface DEConversationMessage {
@@ -3669,7 +3697,7 @@ declare interface DEWorld {
     /**
      * All the locations in the world with their current state
      */
-    locations: Record<string, DEStatefulLocationDefinition>;
+    locations: Record<string, DEStatefulLocation>;
     /**
      * The connections between locations in the world
      */
@@ -3731,6 +3759,7 @@ declare interface DEUtils {
     id: {
         itemIdGenerator(itemName: string): string;
         characterIdGenerator(): string;
+        locationIdGenerator(locationName: string): string;
     },
     items: {
         /** Resolve an item's sensory visibility using its volume versus the observer's body volume.
@@ -3738,6 +3767,11 @@ declare interface DEUtils {
          */
         canSeeItem(item: DEItem, inPerspectiveOf?: DECompleteCharacterReference | string | null): DEVisibility;
         newItem(definition: Omit<DEItem, "id">): DEItem;
+        /**
+         * Creates a new clonable item factory function that can be used to create new items with the same definition but different ids
+         * @param definition The definition of the item to be cloned
+         */
+        newClonableItemFactory(definition: () => Omit<DEItem, "id">): (amount: number) => DEItem[];
         /**
          * Recursively clones an item and its contents, providing a new item list with a new id and the specified amount
          * the new item will not contain any character references
@@ -3754,7 +3788,11 @@ declare interface DEUtils {
         shallowCloneItem(item: DEItem, amount: number): DEItem[];
     },
     world: {
-        newLocation(name: string, definition: DELocationDefinition): DELocationDefinition;
+        newLocation(
+            definition: Omit<DELocation, "id" | "scriptGivenId" | "slots">,
+            slots: () => Array<Omit<DELocationSlot, "id">>,
+            scriptGivenId?: string
+        ): DELocation;
         newConnection(definition: DEConnection): DEConnection;
         defineGlobalInterest(interest: DECharacterInterest);
 
@@ -3769,8 +3807,8 @@ declare interface DEUtils {
          */
         allWorldCharactersButUser(): DECompleteCharacterReference[];
         /**
-         * The name of the character current location
-         * @returns eg. Eldoria, Shadowfen
+         * The id of the character current location
+         * @returns eg. eldoria, shadowfen
          */
         currentLocation(): string;
         /**
@@ -3787,17 +3825,17 @@ declare interface DEUtils {
          * The list of all characters available in the current location of the world, including the user
          * @returns eg. [Luna, Kiro]
          */
-        allCharactersAtLocation(locationName: string): DECompleteCharacterReference[];
+        allCharactersAtLocation(locationId: string): DECompleteCharacterReference[];
         /**
          * Boolean indicating if the provided location is a vehicle
          * @returns true or false
          */
-        locationIsVehicle(locationName: string): boolean;
+        locationIsVehicle(locationId: string): boolean;
         /**
          * Boolean indicating if the provided location is a safe location
          * @returns true or false
          */
-        locationIsSafe(locationName: string): boolean;
+        locationIsSafe(locationId: string): boolean;
     },
     characters: {
         /**
@@ -3960,8 +3998,8 @@ declare interface DEUtils {
         getPosture(char: string | DECompleteCharacterReference): DEPosture;
 
         /**
-         * String indicating a location where another character should be at according to the character's knowledge
-         * @returns eg. Eldoria, Shadowfen, or empty string if they have no idea
+         * String indicating the id of a location where another character should be at according to the character's knowledge
+         * @returns eg. eldoria, shadowfen, or empty string if they have no idea
          */
         lastSaw(povChar: string | DECompleteCharacterReference, char: string | DECompleteCharacterReference): Promise<string>;
         /**
@@ -4226,7 +4264,7 @@ declare interface DEUtils {
          */
         formatCharacterName(
             char: DECompleteCharacterReference | string,
-            inPerspectiveOf: DECompleteCharacterReference | string | null,
+            inPerspectiveOf?: DECompleteCharacterReference | string | null,
             options?: {
                 type?: "default" | "indefinite" | "definite"
                 capitalize?: boolean,
@@ -4236,10 +4274,28 @@ declare interface DEUtils {
         /**
          * @param item the item to format
          * @param inPerspectiveOf Observer; null/omitted preserves unrestricted naming. Unresolved items get a generic, ID-stable label.
-         * @param options the options for formatting the item name, including the type of article to use (default, definite) and whether to capitalize the first letter, only definite is supported because the default form uses definite or indefinite depending on the item uniqueness
+         * @param options Article type (default, definite), capitalization, and justName to return plain text instead of an identifier marker. The default article depends on item uniqueness.
          * @returns the formatted name of the item
          */
-        formatItemName(item: DEItem, inPerspectiveOf?: DECompleteCharacterReference | string | null, options?: { type?: "default" | "definite", capitalize?: boolean }): string;
+        formatItemName(item: DEItem, inPerspectiveOf?: DECompleteCharacterReference | string | null, options?: { type?: "default" | "definite", capitalize?: boolean, justName?: boolean }): string;
+        /**
+         * Formats a location reference or ID as an identifier marker, or plain text with justName.
+         * @param inPerspectiveOf Reserved for future perspective-dependent naming; currently ignored.
+         */
+        formatLocationName(
+            location: DELocation | string,
+            inPerspectiveOf?: DECompleteCharacterReference | string | null,
+            options?: { type?: "default" | "indefinite" | "definite", capitalize?: boolean, justName?: boolean }
+        ): string;
+        /**
+         * Formats a location slot reference or ID as an identifier marker, or plain text with justName.
+         * @param inPerspectiveOf Reserved for future perspective-dependent naming; currently ignored.
+         */
+        formatLocationSlotName(
+            slot: DELocationSlot | string,
+            inPerspectiveOf?: DECompleteCharacterReference | string | null,
+            options?: { type?: "default" | "indefinite" | "definite", capitalize?: boolean, justName?: boolean }
+        ): string;
         /**
          * The story message to parse
          * @param message The story message to parse
@@ -4353,6 +4409,9 @@ declare interface DEObject {
         characterId: number;
         itemId: {
             [itemName: string]: number;
+        };
+        locationId: {
+            [locationName: string]: number;
         };
     };
     /**

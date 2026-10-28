@@ -111,9 +111,9 @@ export class Stats extends HTMLElement {
             window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['currentTime', 'time'] }),
             window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', userId, 'voice'], pick: ['mute'] }),
         ]);
-        const location = characterState?.location || await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['world', 'currentLocation'] }) || '';
+        const locationId = characterState?.location || await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['world', 'currentLocation'] }) || '';
         const [weather, profileImage, externalDescription, states] = await Promise.all([
-            location ? window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['world', 'locations', location, 'internalState', 'currentWeather'] }) : '',
+            locationId ? window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['world', 'locations', locationId, 'internalState', 'currentWeather'] }) : '',
             window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', userId, 'metadata', 'assets', 'neutral'] }),
             window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ['utils', 'characterInfo', 'getExternalDescriptionOfCharacter'],
@@ -121,6 +121,7 @@ export class Stats extends HTMLElement {
             }),
             this.getStatesForDisplay(userId, characterState),
         ]);
+        const location = locationId ? await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'templates', 'formatLocationName'], call: [locationId, userId, { __type: "object", value: {type: 'default', justName: true} }] }) : '';
         const dateTime = Number.isFinite(currentTime) ? new Date(currentTime).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
         console.log(profileImage, location, characterState?.locationSlot, dateTime, weather, states);
         return {

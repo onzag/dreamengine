@@ -529,11 +529,12 @@ export function getWearableFitment(deObject, item, character, isNotBeingCurrentl
 /**
  * @param {DEObject} deObject
  * @param {string} characterId
- * @param {string} currentLocation
+ * @param {string} inPerspectiveOfCharacterId
+ * @param {string} currentLocationId
  * @param {Array<string | number>} locationPath
  * @param {boolean} [ignoreCarrierWearer] whether to ignore the carrier/wearer in the message, this is used for example when we are trying to figure out if an item is being worn by a character, as the LLM may refer to the item in a different way than how it is named in the world state, for example it may say "hat" instead of "red hat", so we want to ignore case and also check if the item name includes the name we are looking for instead of checking for an exact match, this is just to increase the chances of finding the item and thus accepting feasible changes even if they are not perfectly formatted
  */
-export function locationPathToMessageWithoutItemName(deObject, characterId, currentLocation, locationPath, ignoreCarrierWearer = false) {
+export function locationPathToMessageWithoutItemName(deObject, characterId, inPerspectiveOfCharacterId, currentLocationId, locationPath, ignoreCarrierWearer = false) {
     if (!deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -545,17 +546,18 @@ export function locationPathToMessageWithoutItemName(deObject, characterId, curr
         pathCopy.pop();
     }
 
-    return locationPathToMessage(deObject, characterId, currentLocation, pathCopy, ignoreCarrierWearer);
+    return locationPathToMessage(deObject, characterId, inPerspectiveOfCharacterId, currentLocationId, pathCopy, ignoreCarrierWearer);
 }
 
 /**
  * @param {DEObject} deObject
  * @param {string} characterId
- * @param {string} currentLocation
+ * @param {string} inPerspectiveOfCharacterId
+ * @param {string} currentLocationId
  * @param {Array<string | number>} locationPath
  * @param {boolean} [ignoreCarrierWearer] whether to ignore the carrier/wearer in the message, this is used for example when we are trying to figure out if an item is being worn by a character, as the LLM may refer to the item in a different way than how it is named in the world state, for example it may say "hat" instead of "red hat", so we want to ignore case and also check if the item name includes the name we are looking for instead of checking for an exact match, this is just to increase the chances of finding the item and thus accepting feasible changes even if they are not perfectly formatted
  */
-export function locationPathToMessage(deObject, characterId, currentLocation, locationPath, ignoreCarrierWearer = false) {
+export function locationPathToMessage(deObject, characterId, inPerspectiveOfCharacterId, currentLocationId, locationPath, ignoreCarrierWearer = false) {
     if (!deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -565,26 +567,26 @@ export function locationPathToMessage(deObject, characterId, currentLocation, lo
      */
     let elementToFollow = null;
     if (locationPath[0] === "characters") {
-        const carrierWearerName = deObject.characters[locationPath[1]]?.name ?? locationPath[1];
-        base = ignoreCarrierWearer ? "" : `${locationPath[2] === "carrying" ? "carried" : "worn"} by ${carrierWearerName}`;
+        const actualCarrierWearerName = deObject.utils.templates.formatCharacterName(deObject.characters[locationPath[1]], inPerspectiveOfCharacterId, {type: "definite"});
+        base = ignoreCarrierWearer ? "" : `${locationPath[2] === "carrying" ? "carried" : "worn"} by ${actualCarrierWearerName}`;
         // @ts-ignore
-        elementToFollow = engine.deObject.stateFor[locationPath[1]][locationPath[2]];
+        elementToFollow = deObject.stateFor[locationPath[1]][locationPath[2]];
     } else if (locationPath[0] === "slots") {
-        let locationSlotNameToUse = /** @type {string} */ (locationPath[1]);
-        if (!locationSlotNameToUse.toLowerCase().startsWith("a ") && !locationSlotNameToUse.toLowerCase().startsWith("an ") && !locationSlotNameToUse.toLowerCase().startsWith("the ")) {
-            locationSlotNameToUse = "the " + locationSlotNameToUse;
-        }
+        const locationSlotNameToUse = deObject.utils.templates.formatLocationSlotName(deObject.world.locations[currentLocationId].slots[locationPath[1]], inPerspectiveOfCharacterId, {type: "definite"});
         base = `in ${locationSlotNameToUse}`;
-        elementToFollow = deObject.world.locations[currentLocation].slots[locationPath[1]].items;
+        elementToFollow = deObject.world.locations[currentLocationId].slots[locationPath[1]].items;
     }
 
     for (let i = 3; i < locationPath.length; i += 2) {
-        const itemId = locationPath[i];
+        /**
+         * @type {string}
+         */
+        const itemId = /** @type {string} */ (locationPath[i]);
         const relation = locationPath[i + 1];
 
         let itemNameToUse = elementToFollow[itemId].name;
         if (!itemNameToUse.toLowerCase().startsWith("a ") && !itemNameToUse.toLowerCase().startsWith("an ") && !itemNameToUse.toLowerCase().startsWith("the ")) {
-            if (checkItemIsOneOfAKindAtLocation(deObject, deObject.stateFor[characterId].location, elementToFollow[itemId].name)) {
+            if (checkItemIsOneOfAKindAtLocation(deObject, deObject.stateFor[characterId].location, elementToFollow[itemId].name, itemId)) {
                 itemNameToUse = "the " + itemNameToUse;
             } else if (itemNameToUse.toLowerCase().startsWith("a")) {
                 itemNameToUse = "an " + itemNameToUse;
@@ -593,11 +595,11 @@ export function locationPathToMessage(deObject, characterId, currentLocation, lo
             }
         }
         if (relation === "containing" || relation === "containingCharacters") {
-            base = `inside ${itemNameToUse}, ${base}`;
+            base = `inside <${itemId}:${itemNameToUse}>, ${base}`;
         } else if (relation === "ontop" || relation === "ontopCharacters") {
-            base = `on top of ${itemNameToUse}, ${base}`;
+            base = `on top of <${itemId}:${itemNameToUse}>, ${base}`;
         } else {
-            base = `${itemNameToUse}, ${base}`;
+            base = `<${itemId}:${itemNameToUse}>, ${base}`;
         }
         elementToFollow = elementToFollow[itemId][relation];
     }

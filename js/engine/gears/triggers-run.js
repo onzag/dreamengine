@@ -1545,12 +1545,12 @@ export async function deleteTemp(engine) {
 
     engine.deObject.world.temp = {};
 
-    for (const locationName in engine.deObject.world.locations) {
-        const location = engine.deObject.world.locations[locationName];
+    for (const locationId in engine.deObject.world.locations) {
+        const location = engine.deObject.world.locations[locationId];
         location.temp = {};
 
-        for (const slotName in location.slots) {
-            const slot = location.slots[slotName];
+        for (const slotId in location.slots) {
+            const slot = location.slots[slotId];
             slot.temp = {};
         }
     }

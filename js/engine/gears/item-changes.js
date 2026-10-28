@@ -1788,7 +1788,7 @@ export default async function calculateItemChanges(engine, character) {
  * @param {DEStateForCharacterWithHistory} charState
  * @param {string[]} allCharactersAtLocation
  * @param {string[]} charactersToQuestion 
- * @param {DELocationDefinition} location 
+ * @param {DELocation} location 
  * @param {string} item
  * @param {boolean} [wearableOnly] whether to only consider wearable items, this is used for example when we are trying to figure out if an item is being worn by a character, as the LLM may refer to the item in a different way than how it is named in the world state, for example it may say "hat" instead of "red hat", so we want to ignore case and also check if the item name includes the name we are looking for instead of checking for an exact match, this is just to increase the chances of finding the item and thus accepting feasible changes even if they are not perfectly formatted
  * @returns 

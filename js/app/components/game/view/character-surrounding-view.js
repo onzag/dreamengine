@@ -1,4 +1,5 @@
 import '../../world-image.js';
+import './tooltip.js';
 import { buildSurroundingGroups, getVisibleSurroundingGroups } from './surrounding-groups.js';
 
 /** @typedef {import('./surrounding-groups.js').SurroundingCharacter} SurroundingCharacter */
@@ -98,7 +99,7 @@ export class CharacterSurroundingView extends HTMLElement {
             call: [location], pick: ['conversations', 'foundCharacters', 'leftoverCharacters'],
         });
         const characters = await Promise.all([...new Set(scene.foundCharacters)].map(async id => {
-            const [name, metadata, state, visibility] = await Promise.all([
+            const [name, metadata, state, visibility, externalDescription] = await Promise.all([
                 client.queryDEObject({ path: ['utils', 'templates', 'formatCharacterName'], call: [
                     { __type: 'char', value: id }, { __type: 'char', value: userId },
                     { __type: 'object', value: { justName: true, type: 'indefinite', capitalize: true } },
@@ -108,9 +109,13 @@ export class CharacterSurroundingView extends HTMLElement {
                 client.queryDEObject({ path: ['utils', 'characterInfo', 'canSeeCharacter'], call: [
                     { __type: 'char', value: id }, { __type: 'char', value: userId },
                 ] }),
+                client.queryDEObject({ path: ['utils', 'characterInfo', 'getExternalDescriptionOfCharacter'], call: [
+                    { __type: 'char', value: id }, { __type: 'char', value: userId }, true, false,
+                ] }),
             ]);
             return { id, name: name || 'Unknown character', image: metadata?.assets?.neutral || '',
-                locationSlot: state?.locationSlot || '', conversationId: state?.conversationId || null, visibility };
+                locationSlot: state?.locationSlot || '', conversationId: state?.conversationId || null,
+                visibility, externalDescription: externalDescription || '' };
         }));
         return { location, userId, userName, blindness, scene, characters };
     }
@@ -255,7 +260,7 @@ export class CharacterSurroundingView extends HTMLElement {
                     const element = document.createElement('figure');
                     element.className = 'character';
                     element.dataset.characterId = character.id;
-                    element.innerHTML = '<app-world-image no-transition="true" default-image="./images/default-profile.png" aria-hidden="true"></app-world-image><figcaption><span class="name"></span><span class="slot"></span></figcaption>';
+                    element.innerHTML = '<app-game-tooltip class="portrait-tooltip" align-with="bottom" tabindex="0"><app-world-image no-transition="true" default-image="./images/default-profile.png" aria-hidden="true"></app-world-image></app-game-tooltip><figcaption><span class="name"></span><span class="slot"></span></figcaption>';
                     card = { element, placement: target.placement, primary: group.primary };
                     this.cards.set(character.id, card);
                     entering.add(character.id);
@@ -265,6 +270,11 @@ export class CharacterSurroundingView extends HTMLElement {
                 const slot = card.element.querySelector('.slot');
                 if (name) name.textContent = character.name;
                 if (slot) slot.textContent = character.locationSlot;
+                const tooltip = card.element.querySelector('.portrait-tooltip');
+                if (tooltip) {
+                    tooltip.setAttribute('text', character.externalDescription);
+                    tooltip.setAttribute('aria-label', character.name || character.locationSlot || 'Character description');
+                }
                 const image = card.element.querySelector('app-world-image');
                 if (image && image.getAttribute('image-url') !== character.image) image.setAttribute('image-url', character.image);
                 const cardIndex = index + (group.primary ? 1 : 0);

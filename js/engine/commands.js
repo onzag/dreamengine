@@ -13,7 +13,7 @@ export const commands = {
                 throw new Error("DEngine not initialized");
             }
 
-            return `You are at: ${engine.deObject.world.currentLocation}, at the slot: ${engine.deObject.world.currentLocationSlot}\n\n` +
+            return `You are at: ${engine.deObject.utils.templates.formatLocationName(engine.deObject.world.currentLocation, engine.deObject.user)}, at the slot: ${engine.deObject.utils.templates.formatLocationSlotName(engine.deObject.world.locations[engine.deObject.world.currentLocation].slots[engine.deObject.world.currentLocationSlot], engine.deObject.user, { type: "default" })}\n\n` +
                 // @ts-ignore
                 (await engine.deObject.world.locations[engine.deObject.world.currentLocation].description.execute(engine.deObject, engine.userCharacter, undefined, undefined, undefined, undefined) || "No location description available.") + "\n\n" +
                 // @ts-ignore

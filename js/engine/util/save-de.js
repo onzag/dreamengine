@@ -50,15 +50,28 @@ export function removeUnnecessaryPropertiesFromDE(object) {
             }
         } else {
             cleanedDE.characters[charId] = {
+                id: char.id,
+                scriptGivenId: char.scriptGivenId,
                 state: char.state,
             };
         }
     }
     for (const [locId, loc] of Object.entries(object.world.locations)) {
         cleanedDE.world.locations[locId] = {
+            id: loc.id,
+            scriptGivenId: loc.scriptGivenId,
             state: loc.state,
             internalState: loc.internalState,
+            slots: {},
         };
+
+        for (const [slotId, slot] of Object.entries(loc.slots || {})) {
+            cleanedDE.world.locations[locId].slots[slotId] = {
+                state: slot.state,
+                id: slot.id,
+                items: slot.items || [],
+            };
+        }
     }
     for (const [connId, conn] of Object.entries(object.world.connections)) {
         cleanedDE.world.connections[connId] = {
@@ -134,29 +147,11 @@ export function regenerateDEFromSavedDE(engine, savedDE) {
     properDE.utils = deEngineUtilsFn(properDE, engine);
 
     for (const [charId, char] of Object.entries(savedDE.characters)) {
-        const isUser = charId === savedDE.user;
-        if (isUser) {
-            const user = properDE.user;
-            if (user) {
-                const userCharacter = {...savedDE.characters[user]};
-                // @ts-ignore
-                const converted = createCharacterFromUser(repairPotentialUserWithDefaults({ name: user }));
-                for (const key of Object.keys(converted)) {
-                    // @ts-ignore
-                    if (typeof userCharacter[key] === "undefined") {
-                        // @ts-ignore
-                        userCharacter[key] = converted[key];
-                    }
-                }
-                properDE.characters[charId] = userCharacter;
-            }
-        } else {
-            // @ts-ignore
-            const cheapUserStyle = repairPotentialUserWithDefaults({ name: charId });
-            const properChar = createCharacterFromUser(cheapUserStyle);
-            properChar.state = char.state;
-            properDE.characters[charId] = properChar;
-        }
+        // @ts-ignore
+        const cheapUserStyle = repairPotentialUserWithDefaults({ id: charId, name: char.name, scriptGivenId: char.scriptGivenId});
+        const properChar = createCharacterFromUser(cheapUserStyle);
+        properChar.state = char.state;
+        properDE.characters[charId] = properChar;
     }
 
     // regenerate locations with whatever properties
@@ -180,7 +175,25 @@ export function regenerateDEFromSavedDE(engine, savedDE) {
             slots: {},
             temp: {},
             metadata: {},
+            id: loc.id,
+            scriptGivenId: loc.scriptGivenId,
+            name: loc.name || loc.id,
+            script: "???",
         };
+
+        for (const [slotId, slot] of Object.entries(loc.slots || {})) {
+            properDE.world.locations[locId].slots[slotId] = {
+                state: slot.state,
+                id: slot.id,
+                name: slot.name || slot.id,
+                description: "",
+                temp: {},
+                metadata: {},
+                items: slot.items || [],
+                maxVolumeLiters: 1000,
+                maxWeightKg: 1000,
+            };
+        }
     }
 
     // regenerate connections

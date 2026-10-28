@@ -586,7 +586,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
      */
     const inPerspectiveCharacterPerception = inPerspectiveCharacter.perception;
 
-    const inPerspectiveCharacterName = getNameIdentificationForOneCharacterTowardsAnotherOnlyName(deObject, inPerspectiveCharacter, inPerspectiveCharacter);
+    const inPerspectiveCharacterName = getNameIdentificationForOneCharacterTowardsAnother(deObject, inPerspectiveCharacter, inPerspectiveCharacter);
 
     const characterGender = character.gender;
     const characterSpecies = character.species;
@@ -594,7 +594,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
 
     const sameSpeciesAsPerspective = characterSpecies === inPerspectiveCharacter.species;
 
-    const characterSpeciesFromPerspective = sameSpeciesAsPerspective ? characterSpecies : "fellow " + characterSpecies;
+    const characterSpeciesFromPerspective = sameSpeciesAsPerspective ?  "fellow " + characterSpecies : characterSpecies;
 
     const descriptionsOfSpeciesType = {
         "humanoid": "a humanoid creature",
@@ -632,14 +632,14 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
             shouldIncludeStatefulDescriptions = false;
             canSenseTheyAreNaked = false;
             canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry = false;
-            finalDescription = inPerspectiveCharacterName + " vision is severely impaired and cannot see them clearly only figuring out they are a " + characterSpeciesFromPerspective + ".";
+            finalDescription = inPerspectiveCharacterName + "'s vision is severely impaired and cannot see them clearly only figuring out they are a " + characterSpeciesFromPerspective + ".";
         } else if (inPerspectiveCharacterPerception < 0.75) {
             shouldIncludeStatefulDescriptions = false;
             canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry = false;
             if (characterSpecies === "human") {
-                finalDescription = inPerspectiveCharacterName + " vision is severely impaired, but they can make out some details, figuring out they are a " + characterSpeciesFromPerspective + " of " + characterGender + " gender.";
+                finalDescription = inPerspectiveCharacterName + "'s vision is severely impaired, but they can make out some details, figuring out they are a " + characterSpeciesFromPerspective + " of " + characterGender + " gender.";
             } else {
-                finalDescription = inPerspectiveCharacterName + " vision is severely impaired, but they can make out some details, figuring out they are a " + characterSpeciesFromPerspective + ", " + (descriptionsOfSpeciesType[characterSpeciesType] || "") + " of " + characterGender + " gender.";
+                finalDescription = inPerspectiveCharacterName + "'s vision is severely impaired, but they can make out some details, figuring out they are a " + characterSpeciesFromPerspective + ", " + (descriptionsOfSpeciesType[characterSpeciesType] || "") + " of " + characterGender + " gender.";
             }
         } else {
             // their perception is high enough that they can make out the standard short description of the character in all details, even if they are partially blind.
@@ -841,13 +841,16 @@ export function getExternalDescriptionOfCharacterPostureOnly(deObject, character
 
     const characterExactLocation = getCharacterExactLocation(deObject, characterId);
 
-    let postureAppliedOnDescription = (posturesThatDoNotSpecifyGround.includes(characterState.posture)) ? "at the " + characterState.locationSlot : "on the ground at the " + characterState.locationSlot;
+    const slotValue = deObject.world.locations[characterState.location].slots[characterState.locationSlot];
+    const formattedSlotName = deObject.utils.templates.formatLocationSlotName(slotValue, inPerspectiveOfCharacterId, {type: "definite"})
+
+    let postureAppliedOnDescription = (posturesThatDoNotSpecifyGround.includes(characterState.posture)) ? "at " + formattedSlotName : "on the ground at " + formattedSlotName;
     if (characterExactLocation.itemPathEnd === "ontopCharacters" && characterExactLocation.itemPath) {
-        postureAppliedOnDescription = locationPathToMessage(deObject, characterId, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
+        postureAppliedOnDescription = locationPathToMessage(deObject, characterId, inPerspectiveOfCharacterId, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
     } else if (characterExactLocation.itemPathEnd === "containingCharacters" && characterExactLocation.itemPath) {
-        postureAppliedOnDescription = locationPathToMessage(deObject, characterId, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
+        postureAppliedOnDescription = locationPathToMessage(deObject, characterId, inPerspectiveOfCharacterId, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
     }
-    1
+    
     const inPerspectiveOfCharacterName = deObject.utils.templates.formatCharacterName(character, inPerspectiveOfCharacterId, {
         capitalize: true,
         type: "definite",
@@ -981,17 +984,17 @@ export async function getCharacterCanSee(deObject, characterId) {
 
     // TODO add places where character can go, fit, etc...
 
-    const slotNames = Object.keys(location.slots);
+    const slotIds = Object.keys(location.slots);
     let noItemsInAnySlot = true;
-    for (const slotName of slotNames) {
-        const slot = location.slots[slotName];
+    for (const slotId of slotIds) {
+        const slot = location.slots[slotId];
         if (slot.items.length > 0) {
             noItemsInAnySlot = false;
             break;
         }
     }
 
-    let finalDescription = `# Items at the current location (${characterState.location}):\n\n`;
+    let finalDescription = `# Items at the current location ${deObject.utils.templates.formatLocationName(characterState.location)}:\n\n`;
 
     const carryingCapacity = getCharacterCarryingCapacity(deObject, characterId);
 
@@ -1189,24 +1192,24 @@ export async function getCharacterCanSee(deObject, characterId) {
     if (noItemsInAnySlot) {
         finalDescription += "No items available at the location.\n\n";
     } else {
-        for (const slotName of slotNames) {
-            const slot = location.slots[slotName];
-            finalDescription += `## Items at the ${slotName}:\n\n`;
+        for (const slotId of slotIds) {
+            const slot = location.slots[slotId];
+            finalDescription += `## Items at ${deObject.utils.templates.formatLocationSlotName(slot, null, {type: "definite"})}:\n\n`;
             listItemArray("", true, slot.items, null);
             finalDescription += "\n";
         }
     }
 
     // now let's check each character excluding our own for now
-    for (const otherCharName in deObject.stateFor) {
-        if (otherCharName === characterId) continue;
-        const otherCharState = deObject.stateFor[otherCharName];
+    for (const otherCharId in deObject.stateFor) {
+        if (otherCharId === characterId) continue;
+        const otherCharState = deObject.stateFor[otherCharId];
         if (otherCharState.deadEnded) continue;
         if (otherCharState.location === characterState.location) {
-            const otherRef = charRef(otherCharName);
+            const otherRef = charRef(otherCharId);
             finalDescription += `# Character: ${otherRef}:\n\n`;
 
-            const bondToOtherChar = deObject.bonds[characterId].active.find(b => b.towards === otherCharName) || deObject.bonds[characterId].ex.find(b => b.towards === otherCharName);
+            const bondToOtherChar = deObject.bonds[characterId].active.find(b => b.towards === otherCharId) || deObject.bonds[characterId].ex.find(b => b.towards === otherCharId);
             if (!bondToOtherChar) {
                 finalDescription += `${otherRef} is a complete stranger to ${selfRef}, ${selfRef} does not know their name or any details about them.\n\n`;
             } else if (!bondToOtherChar.knowsAs.length && bondToOtherChar.stranger) {
@@ -1220,7 +1223,7 @@ export async function getCharacterCanSee(deObject, characterId) {
             }
 
             // how many times bigger/smaller is the other character compared to the character
-            const otherCharacter = deObject.characters[otherCharName];
+            const otherCharacter = deObject.characters[otherCharId];
             const ratioByHeight = character.heightCm / otherCharacter.heightCm;
             const reverseRatioByHeight = otherCharacter.heightCm / character.heightCm;
             if (ratioByHeight >= 100) {
@@ -1317,8 +1320,8 @@ export async function getCharacterCanSee(deObject, characterId) {
                 finalDescription += `${otherRef} is a bit smaller compared to ${selfRef} who is slightly larger.\n\n`;
             }
 
-            const otherCharacterWeight = getCharacterWeight(deObject, otherCharName);
-            const otherCharacterVolume = getCharacterVolume(deObject, otherCharName);
+            const otherCharacterWeight = getCharacterWeight(deObject, otherCharId);
+            const otherCharacterVolume = getCharacterVolume(deObject, otherCharId);
 
             if (character.carryingCapacityKg < otherCharacter.weightKg) {
                 finalDescription += `${otherRef} is too heavy for ${selfRef} to carry.\n\n`;
@@ -1344,7 +1347,7 @@ export async function getCharacterCanSee(deObject, characterId) {
                 }
             }
 
-            const externalDescription = await getExternalDescriptionOfCharacter(deObject, otherCharName, true, false);
+            const externalDescription = await getExternalDescriptionOfCharacter(deObject, otherCharId, characterId, true, false);
             if (externalDescription) {
                 finalDescription += `## ${otherRef} Appearance:\n\n${externalDescription}\n\n`;
             }
@@ -1353,17 +1356,17 @@ export async function getCharacterCanSee(deObject, characterId) {
             if (otherCharState.wearing.length === 0) {
                 finalDescription += `${otherRef} Is currently naked.\n\n`;
             } else {
-                listItemArray("", true, otherCharState.wearing, otherCharName);
+                listItemArray("", true, otherCharState.wearing, otherCharId);
                 finalDescription += `\n`;
             }
-            const carriedChars = getListOfCarriedCharactersByCharacter(deObject, otherCharName);
+            const carriedChars = getListOfCarriedCharactersByCharacter(deObject, otherCharId);
             if (carriedChars.length > 0) {
                 finalDescription += `## Characters carried by ${otherRef}:\n\n`;
                 for (const carriedChar of carriedChars) {
                     if (carriedChar.itemPathEnd === "containingCharacters" && carriedChar.itemPath) {
-                        finalDescription += `${otherRef} is carrying ${charRef(carriedChar.carriedId)} ${locationPathToMessage(deObject, otherCharName, otherCharState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
+                        finalDescription += `${otherRef} is carrying ${charRef(carriedChar.carriedId)} ${locationPathToMessage(deObject, otherCharId, otherCharState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
                     } else if (carriedChar.itemPathEnd === "ontopCharacters" && carriedChar.itemPath) {
-                        finalDescription += `${otherRef} is carrying ${charRef(carriedChar.carriedId)} ${locationPathToMessage(deObject, otherCharName, otherCharState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
+                        finalDescription += `${otherRef} is carrying ${charRef(carriedChar.carriedId)} ${locationPathToMessage(deObject, otherCharId, otherCharState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
                     } else {
                         finalDescription += `${otherRef} is carrying ${charRef(carriedChar.carriedId)}.\n\n`;
                     }
@@ -1373,11 +1376,11 @@ export async function getCharacterCanSee(deObject, characterId) {
             if (otherCharState.carrying.length === 0) {
                 finalDescription += `No items carried by ${otherRef}.\n\n`;
             } else {
-                listItemArray("", true, otherCharState.carrying, otherCharName);
+                listItemArray("", true, otherCharState.carrying, otherCharId);
                 finalDescription += `\n`;
             }
 
-            const exactLocation = getCharacterExactLocation(deObject, otherCharName);
+            const exactLocation = getCharacterExactLocation(deObject, otherCharId);
             if (exactLocation.beingCarriedBy) {
                 finalDescription += `## ${otherRef} is being carried by another character:\n\n`;
                 finalDescription += `${otherRef} is being carried by character: ${charRef(exactLocation.beingCarriedBy)}.\n\n`;
@@ -1385,12 +1388,12 @@ export async function getCharacterCanSee(deObject, characterId) {
 
             if (exactLocation.itemPathEnd === "containingCharacters" && exactLocation.itemPath) {
                 finalDescription += `## ${otherRef} is inside an item:\n\n`;
-                finalDescription += `${otherRef} is ${locationPathToMessage(deObject, otherCharName, otherCharState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
+                finalDescription += `${otherRef} is ${locationPathToMessage(deObject, otherCharId, otherCharState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
             }
 
             if (exactLocation.itemPathEnd === "ontopCharacters" && exactLocation.itemPath) {
                 finalDescription += `## ${otherRef} is on top of an item:\n\n`;
-                finalDescription += `${otherRef} is ${locationPathToMessage(deObject, otherCharName, otherCharState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
+                finalDescription += `${otherRef} is ${locationPathToMessage(deObject, otherCharId, otherCharState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
             }
         }
     }
@@ -1528,7 +1531,7 @@ export async function getCharacterCanSee(deObject, characterId) {
     if (deadBodies.length > 0) {
         finalDescription += `\n\n# Dead bodies at the location:\n\n`;
         for (const deadBody of deadBodies) {
-            const externalDescription = await getExternalDescriptionOfCharacter(deObject, deadBody, true, false);
+            const externalDescription = await getExternalDescriptionOfCharacter(deObject, deadBody, characterId, true, false);
             finalDescription += `- ${charRef(deadBody)} (Deceased): ${externalDescription}\n`;
         }
     }
@@ -2180,13 +2183,13 @@ export async function getSysPromptForCharacter(engine, characterId) {
     let scenario = "";
     const currentLocation = engine.deObject.world.locations[engine.deObject.stateFor[characterId].location];
     if (currentLocation) {
-        scenario = `## Location:\n\n${engine.deObject.stateFor[characterId].location}, ` + (typeof currentLocation.description === "string" ? currentLocation.description : await currentLocation.description({
+        scenario = `## Location:\n\n${engine.deObject.utils.templates.formatLocationName(engine.deObject.stateFor[characterId].location, characterId, {type: "default"})}, ` + (typeof currentLocation.description === "string" ? currentLocation.description : await currentLocation.description({
             char: character,
         }));
     }
     const currentLocationSlot = currentLocation.slots[engine.deObject.stateFor[characterId].locationSlot];
     if (currentLocationSlot) {
-        scenario += `\n\nSpecifically at the ${engine.deObject.stateFor[characterId].locationSlot} of ${engine.deObject.stateFor[characterId].location}, ` + (typeof currentLocationSlot.description === "string" ? currentLocationSlot.description : await currentLocationSlot.description({
+        scenario += `\n\nSpecifically at ${engine.deObject.utils.templates.formatLocationSlotName(currentLocationSlot, characterId, {type: "definite"})}, ` + (typeof currentLocationSlot.description === "string" ? currentLocationSlot.description : await currentLocationSlot.description({
             char: character,
         }));
     }
@@ -2238,31 +2241,31 @@ export async function whatIsWeatherLikeForCharacter(deObject, characterId) {
     }
     const character = deObject.characters[characterId];
     const characterState = deObject.stateFor[characterId];
-    const characterLocation = characterState.location;
-    const characterLocationSlot = characterState.locationSlot;
-    const location = deObject.world.locations[characterLocation];
+    const characterLocationId = characterState.location;
+    const characterLocationSlotId = characterState.locationSlot;
+    const location = deObject.world.locations[characterLocationId];
     const weatherThere = location.internalState.currentWeather;
-    const weatherSystem = getWeatherSystemForLocationAndWeather(deObject, characterLocation, weatherThere);
+    const weatherSystem = getWeatherSystemForLocationAndWeather(deObject, characterLocationId, weatherThere);
 
     if (!weatherSystem) {
-        console.error(`Weather system "${weatherThere}" not found in location "${characterLocation}".`);
-        return `The current weather where "${characterId}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}".`;
+        console.error(`Weather system "${weatherThere}" not found in location "${characterLocationId}".`);
+        return `The current weather where "${characterId}" is (${characterLocationId}, ${characterLocationSlotId}) is "${weatherThere}".`;
     }
 
-    const isSheltered = await isCharacterShelteredFromWeather(deObject, characterId, weatherThere, characterLocation, characterLocationSlot);
+    const isSheltered = await isCharacterShelteredFromWeather(deObject, characterId, weatherThere, characterLocationId, characterLocationSlotId);
 
     if (isSheltered.fullySheltered) {
         const noEffectDescription = typeof weatherSystem.noEffectDescription === "string" ? weatherSystem.noEffectDescription : await weatherSystem.noEffectDescription({ char: character });
-        return `The current weather where "${characterId}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". However, "${characterId}" is fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to them."}`;
+        return `The current weather where "${characterId}" is (${characterLocationId}, ${characterLocationSlotId}) is "${weatherThere}". However, "${characterId}" is fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to them."}`;
     } else if (isSheltered.partiallySheltered) {
         const partialEffectDescription = typeof weatherSystem.partialEffectDescription === "string" ? weatherSystem.partialEffectDescription : await weatherSystem.partialEffectDescription({ char: character });
-        return `The current weather where "${characterId}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterId}" is partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to them."}`;
+        return `The current weather where "${characterId}" is (${characterLocationId}, ${characterLocationSlotId}) is "${weatherThere}". "${characterId}" is partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to them."}`;
     } else if (isSheltered.negativelyExposed) {
         const negativeEffectsDescription = typeof weatherSystem.negativelyExposedDescription === "string" ? weatherSystem.negativelyExposedDescription : await weatherSystem.negativelyExposedDescription({ char: character });
-        return `The current weather where "${characterId}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterId}" is negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to them."}`;
+        return `The current weather where "${characterId}" is (${characterLocationId}, ${characterLocationSlotId}) is "${weatherThere}". "${characterId}" is negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to them."}`;
     } else {
         const effectDescription = typeof weatherSystem.fullEffectDescription === "string" ? weatherSystem.fullEffectDescription : await weatherSystem.fullEffectDescription({ char: character });
-        return `The current weather where "${characterId}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to them."}`;
+        return `The current weather where "${characterId}" is (${characterLocationId}, ${characterLocationSlotId}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to them."}`;
     }
 }
 
@@ -2272,15 +2275,16 @@ export async function whatIsWeatherLikeForCharacter(deObject, characterId) {
  * @param {DEObject} deObject 
  * @param {string} characterId 
  * @param {string} weatherName
- * @param {string} locationName
+ * @param {string} locationId
  * @param {string} slotName
  */
-export async function isCharacterShelteredFromWeather(deObject, characterId, weatherName, locationName, slotName) {
+export async function isCharacterShelteredFromWeather(deObject, characterId, weatherName, locationId, slotName) {
     if (!deObject) {
         throw new Error("DEngine not initialized");
     }
 
     const selfRef = getNameIdentificationForOneCharacterTowardsAnother(deObject, deObject.characters[characterId], deObject.characters[characterId]);
+    const locationName = deObject.utils.templates.formatLocationName(locationId, characterId, { type: "default" });
 
     const returnInformation = {
         fullySheltered: false,
@@ -2289,21 +2293,21 @@ export async function isCharacterShelteredFromWeather(deObject, characterId, wea
         reason: `${selfRef} is fully exposed to the weather condition "${weatherName}"`,
     }
 
-    const weatherSystem = getWeatherSystemForLocationAndWeather(deObject, locationName, weatherName);
+    const weatherSystem = getWeatherSystemForLocationAndWeather(deObject, locationId, weatherName);
 
     const character = deObject.characters[characterId];
     if (!character) {
         throw new Error(`Character ${characterId} not found in world.`);
     }
 
-    const locationInfo = deObject.world.locations[locationName];
+    const locationInfo = deObject.world.locations[locationId];
     if (!locationInfo) {
-        throw new Error(`Location ${locationName} not found in world.`);
+        throw new Error(`Location ${locationId} not found in world.`);
     }
 
     const slotInfo = locationInfo.slots[slotName];
     if (!slotInfo) {
-        throw new Error(`Slot ${slotName} not found in location ${locationName}.`);
+        throw new Error(`Slot ${slotName} not found in location ${locationId}.`);
     }
 
     const characterState = deObject.stateFor[characterId];

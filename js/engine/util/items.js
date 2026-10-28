@@ -186,10 +186,10 @@ function sortIds(ids, numericSuffixPattern) {
 
 /**
  * @param {DEngine} engine
- * @param {string} characterName
+ * @param {string} characterId
  * @return {{complete: string, cheapList: string[], usedRangedMode: boolean}}
  */
-export function describeItemsAvailableToCharacterForInference(engine, characterName) {
+export function describeItemsAvailableToCharacterForInference(engine, characterId) {
     /**
      * @type {string[]}
      */
@@ -197,20 +197,20 @@ export function describeItemsAvailableToCharacterForInference(engine, characterN
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
-    const characterState = engine.deObject.stateFor[characterName];
+    const characterState = engine.deObject.stateFor[characterId];
     if (!characterState) {
-        throw new Error(`Character state for ${characterName} not found.`);
+        throw new Error(`Character state for ${characterId} not found.`);
     }
-    const locationName = characterState.location;
+    const locationId = characterState.location;
 
-    const location = engine.deObject.world.locations[locationName];
+    const location = engine.deObject.world.locations[locationId];
     if (!location) {
-        throw new Error(`Location ${locationName} not found.`);
+        throw new Error(`Location ${locationId} not found.`);
     }
-    const slotNames = Object.keys(location.slots);
+    const slotIds = Object.keys(location.slots);
     let noItemsInAnySlot = true;
-    for (const slotName of slotNames) {
-        const slot = location.slots[slotName];
+    for (const slotId of slotIds) {
+        const slot = location.slots[slotId];
         if (slot.items.length > 0) {
             noItemsInAnySlot = false;
             break;
@@ -271,8 +271,9 @@ export function describeItemsAvailableToCharacterForInference(engine, characterN
     if (noItemsInAnySlot) {
         message += "No items available at the location.\n";
     } else {
-        for (const slotName of slotNames) {
-            const slot = location.slots[slotName];
+        for (const slotId of slotIds) {
+            const slot = location.slots[slotId];
+            const slotName = engine.deObject.utils.templates.formatLocationSlotName(slot, characterId, { type: "default" });
             message += `\n## Items at ${slotName}:\n`;
 
             const groupedItems = getItemsContiguousDescription(slot.items);
@@ -286,14 +287,15 @@ export function describeItemsAvailableToCharacterForInference(engine, characterN
     }
 
     // now let's check each character excluding our own for now
-    for (const otherCharName in engine.deObject.stateFor) {
-        if (otherCharName === characterName) continue;
-        const otherCharState = engine.deObject.stateFor[otherCharName];
-        if (otherCharState.location === locationName) {
+    for (const otherCharacterId in engine.deObject.stateFor) {
+        if (otherCharacterId === characterId) continue;
+        const otherCharState = engine.deObject.stateFor[otherCharacterId];
+        if (otherCharState.location === locationId) {
             const deceasedAddition = otherCharState.dead ? " (Deceased)" : "";
+            const otherCharName = engine.deObject.utils.templates.formatCharacterName(otherCharacterId, characterId, { type: "definite" });
             message += `\n## Items worn by ${otherCharName}${deceasedAddition}:\n`;
             if (otherCharState.wearing.length === 0) {
-                message += `${otherCharName} Is currently naked.\n`;
+                message += `${otherCharName} is currently naked.\n`;
             } else {
                 const groupedWearingItems = getItemsContiguousDescription(otherCharState.wearing);
                 for (const groupedItem of groupedWearingItems) {
@@ -318,6 +320,8 @@ export function describeItemsAvailableToCharacterForInference(engine, characterN
             }
         }
     }
+
+    const characterName = engine.deObject.utils.templates.formatCharacterName(characterId, characterId, { type: "definite" });
 
     // now let's do our own character
     const deceasedAddition = characterState.dead ? " (Deceased)" : "";
@@ -352,16 +356,16 @@ export function describeItemsAvailableToCharacterForInference(engine, characterN
 
 /**
  * @param {DEngine} engine
- * @param {string} locationName
+ * @param {string} locationId
  * @returns {Array<{id: string, name: string}>}
  */
-export function getFullItemListAtLocation(engine, locationName) {
+export function getFullItemListAtLocation(engine, locationId) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
-    const location = engine.deObject.world.locations[locationName];
+    const location = engine.deObject.world.locations[locationId];
     if (!location) {
-        throw new Error(`Location ${locationName} not found.`);
+        throw new Error(`Location ${locationId} not found.`);
     }
     /**
      * @type {Array<{id: string, name: string}>}
@@ -385,7 +389,7 @@ export function getFullItemListAtLocation(engine, locationName) {
         processItemList(locationSlot.items);
     }
     // @ts-ignore
-    const charactersAtLocation = Object.keys(engine.deObject.stateFor).filter(charName => engine.deObject.stateFor[charName].location === locationName);
+    const charactersAtLocation = Object.keys(engine.deObject.stateFor).filter(charName => engine.deObject.stateFor[charName].location === locationId);
     for (const charName of charactersAtLocation) {
         const charState = engine.deObject.stateFor[charName];
         processItemList(charState.wearing);
@@ -631,12 +635,12 @@ export function isSingularOfPlural(itemNameLower) {
 /**
  * 
  * @param {DEObject} deObject
- * @param {string} location
+ * @param {string} locationId
  * @param {string} itemName
  * @param {string} itemId
  * @returns {boolean} true if the item is one of a kind at the location, false otherwise
  */
-export function checkItemIsOneOfAKindAtLocation(deObject, location, itemName, itemId) {
+export function checkItemIsOneOfAKindAtLocation(deObject, locationId, itemName, itemId) {
     let foundAnother = false
     const itemTrimmedLower = itemName.trim().toLowerCase();
 
@@ -678,7 +682,7 @@ export function checkItemIsOneOfAKindAtLocation(deObject, location, itemName, it
     const allCharactersToCheck = [];
     for (const charName in deObject.characters) {
         const charState = deObject.stateFor[charName];
-        if (charState.location === location) {
+        if (charState.location === locationId) {
             allCharactersToCheck.push(charName);
         }
     }
@@ -693,7 +697,7 @@ export function checkItemIsOneOfAKindAtLocation(deObject, location, itemName, it
             return false;
         }
     }
-    for (const [slotName, slot] of Object.entries(deObject.world.locations[location].slots)) {
+    for (const [slotName, slot] of Object.entries(deObject.world.locations[locationId].slots)) {
         countInList(slot.items);
         if (foundAnother) {
             return false;
@@ -710,8 +714,8 @@ export function checkItemIsOneOfAKindAtLocation(deObject, location, itemName, it
  * @returns {boolean}
  */
 export function checkItemIsOneOfAKindAtWorld(deObject, itemName, itemId) {
-    for (const locationName in deObject.world.locations) {
-        if (checkItemIsOneOfAKindAtLocation(deObject, locationName, itemName, itemId) === false) {
+    for (const locationId in deObject.world.locations) {
+        if (checkItemIsOneOfAKindAtLocation(deObject, locationId, itemName, itemId) === false) {
             return false;
         }
     }
