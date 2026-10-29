@@ -1,5 +1,7 @@
-/** @typedef {{id: string, name: string, image: string, externalDescription: string, locationSlot: string, locationSlotName: string, conversationId: string|null, visibility: DEVisibility}} SurroundingCharacter */
+/** @typedef {{id: string, name: string, image: string, externalDescription: string, locationSlot: string, locationSlotName: string, conversationId: string|null, visibility: DEVisibility, remote: boolean, communicatorName: string}} SurroundingCharacter */
 /** @typedef {{id: string, primary: boolean, characters: SurroundingCharacter[]}} SurroundingGroup */
+/** @typedef {Pick<DEConversation, 'id'|'participants'|'locations'|'communicators'>} SurroundingConversation */
+/** @typedef {{conversations: SurroundingConversation[], foundCharacters: string[], leftoverCharacters: string[]}} SurroundingScene */
 
 /** Remove the player and unseen outsiders. Perceived outsiders have no name;
  * conversation partners remain identifiable regardless of sight.
@@ -11,7 +13,7 @@
  */
 export function getVisibleSurroundingGroups(groups, userId) {
     return groups.map(group => ({ ...group, characters: group.characters
-        .filter(c => c.id !== userId && (group.primary || c.visibility === 'visible' || c.visibility === 'perceived'))
+        .filter(c => c.id !== userId && (group.primary || (!c.remote && (c.visibility === 'visible' || c.visibility === 'perceived'))))
         .map(c => !group.primary && c.visibility === 'perceived' ? { ...c, name: '' } : c),
     }))
         .filter(group => group.characters.length > 0)
@@ -21,19 +23,20 @@ export function getVisibleSurroundingGroups(groups, userId) {
 /**
  * Resolve overlapping conversation membership once, before creating any DOM.
  * A character's current conversation wins; otherwise prefer the user's group,
- * then conversation ID for a deterministic result. Off-location participants
- * never appear, even when they belong to a conversation at this location.
- * @param {{conversations: Array<{id: string, participants: string[], remoteParticipants: string[]}>, foundCharacters: string[], leftoverCharacters: string[]}} scene
+ * then conversation ID for a deterministic result. Only the user's group may
+ * include participants at other locations; different slots remain local.
+ * @param {SurroundingScene} scene
  * @param {string} userId
  * @param {SurroundingCharacter[]} characters
+ * @param {string} currentLocation
  * @returns {SurroundingGroup[]}
  */
-export function buildSurroundingGroups(scene, userId, characters) {
+export function buildSurroundingGroups(scene, userId, characters, currentLocation) {
     const present = new Set(scene.foundCharacters);
-    const byId = new Map(characters.filter(c => present.has(c.id)).map(c => [c.id, c]));
+    const byId = new Map(characters.map(c => [c.id, c]));
     const conversations = scene.conversations.map(c => ({
-        id: c.id,
-        members: new Set([...c.participants, ...c.remoteParticipants].filter(id => byId.has(id))),
+        ...c,
+        members: new Set(c.participants.filter(id => byId.has(id))),
     })).sort((a, b) => a.id.localeCompare(b.id));
     const userConversation = byId.get(userId)?.conversationId;
     const primary = conversations.find(c => c.id === userConversation && c.members.has(userId))
@@ -41,12 +44,22 @@ export function buildSurroundingGroups(scene, userId, characters) {
     /** @type {Map<string, SurroundingCharacter[]>} */
     const assigned = new Map();
     for (const character of byId.values()) {
-        const choices = conversations.filter(c => c.members.has(character.id));
+        const memberships = conversations.filter(c => c.members.has(character.id));
+        const choices = memberships.filter(c => c === primary || c.locations[character.id]?.locationId === currentLocation);
         const chosen = choices.find(c => c.id === character.conversationId)
             || choices.find(c => c === primary) || choices[0];
+        // Never turn a filtered remote outsider into a standalone local portrait.
+        if (!chosen && (memberships.length || !present.has(character.id))) continue;
         const key = chosen ? `conversation:${chosen.id}` : `solo:${character.id}`;
         const members = assigned.get(key) || [];
-        members.push(character);
+        const location = chosen?.locations[character.id];
+        members.push({
+            ...character,
+            locationSlot: location?.locationSlotId || character.locationSlot,
+            locationSlotName: location?.locationSlotNameAtTheTime || character.locationSlotName,
+            remote: chosen ? location?.locationId !== currentLocation : false,
+            communicatorName: chosen?.communicators[character.id]?.communicatorName || '',
+        });
         assigned.set(key, members);
     }
     return [...assigned.values()].map(members => {

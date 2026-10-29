@@ -1,0 +1,26 @@
+@import './shared.css';
+@import './identifier-links.css';
+:host { display: block; --ink: #edf6ff; --muted: #b3c7da; --accent: #a7d9ff; color: var(--ink); }
+.detail { --image-blur: 0vh; min-width: 0; padding: 0 1vh 2vh; }
+.detail[data-blindness="partial-good"] { --image-blur: .45vh; }
+.detail[data-blindness="partial-bad"] { --image-blur: 1.2vh; }
+.detail[data-blindness="full"] { --image-blur: 3vh; }
+.hero { position: relative; margin-bottom: 2vh; }
+.hero[hidden] { display: none; }
+app-asset-image { --asset-image-border-width: .2vh; }
+app-asset-image::part(asset-image) { filter: blur(var(--image-blur)); border-radius: .8vh; }
+app-asset-image::part(asset-image-container) { border-radius: .8vh; }
+.banner { width: 100%; height: 25vh; aspect-ratio: auto; }
+.portrait { width: 22vh; height: 22vh; max-width: 100%; aspect-ratio: 1; }
+.character .with-banner { padding-bottom: 10vh; }
+.character .with-banner .portrait { position: absolute; bottom: 0; left: 3vh; }
+.copy { min-width: 0; }
+.character-stats { display: flex; flex-direction: column; margin: 0 0 2vh; border: .1vh solid rgba(167, 217, 255, .25); border-radius: .8vh; background: rgba(20, 43, 65, .45); }
+.character-stats > div { display: grid; grid-template-columns: 14vh minmax(0, 1fr); align-items: baseline; gap: 1.5vh; padding: 1.2vh 1.5vh; }
+.character-stats > div + div { border-top: .1vh solid rgba(167, 217, 255, .15); }
+.character-stats dt { display: flex; align-items: center; gap: .8vh; color: var(--muted); font-size: 1.8vh; }
+.character-stats svg { width: 2.3vh; height: 2.3vh; flex-shrink: 0; fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.character-stats dd { margin: 0; font-size: 2.2vh; line-height: 1.4; overflow-wrap: anywhere; }
+.description { font-size: 2.7vh; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 80ch; }
+.item { display: grid; grid-template-columns: 24vh minmax(0, 1fr); gap: 0 3vh; }
+@media (max-width: 700px) { .item { grid-template-columns: minmax(0, 1fr); } .banner { height: 20vh; } .portrait { width: 18vh; height: 18vh; } }

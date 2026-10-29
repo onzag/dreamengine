@@ -3,9 +3,9 @@ import { BaseDataManager } from "./base.js";
 /** @type {Record<string, "text" | "boolean" | "json">} */
 const conversationFields = {
     participants: "json",
-    remoteParticipants: "json",
     previousConversationIdsPerParticipant: "json",
-    location: "text",
+    locations: "json",
+    communicators: "json",
     startTime: "json",
     endTime: "json",
     pseudoConversation: "boolean",
@@ -151,6 +151,19 @@ export class SQLiteBridge extends BaseDataManager {
                     )`,
                     `CREATE INDEX IF NOT EXISTS engine_messages_by_conversation
                         ON engine_conversation_messages (conversation_id, id)`,
+                    `CREATE TABLE IF NOT EXISTS engine_conversation_participants (
+                        conversation_id INTEGER NOT NULL REFERENCES engine_conversations(id),
+                        participant_id TEXT NOT NULL,
+                        locationId TEXT,
+                        locationNameAtTheTime TEXT,
+                        locationSlotId TEXT,
+                        locationSlotNameAtTheTime TEXT,
+                        search_location_name TEXT,
+                        search_slot_name TEXT,
+                        PRIMARY KEY (conversation_id, participant_id)
+                    )`,
+                    `CREATE INDEX IF NOT EXISTS engine_conversations_by_participant
+                        ON engine_conversation_participants (participant_id, conversation_id)`,
                     `CREATE TABLE IF NOT EXISTS engine_historic_states (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         charId TEXT NOT NULL,
@@ -312,6 +325,68 @@ export class SQLiteBridge extends BaseDataManager {
         return this.findHistoricStates(charId, matches, "item", name, true);
     }
 
+    /**
+     * Return location snapshots from any participant in this character's conversations.
+     * Search names recorded at the time, including locations visited only by other participants.
+     * @param {string} charId
+     * @param {string} locationOrSlotName
+     * @returns {Promise<DEConversationLocationMatch[]>}
+     */
+    async getPossibleLocationsCharKnowsAlikeTo(charId, locationOrSlotName) {
+        const search = normalizeHistoricName(locationOrSlotName);
+        return this.withDatabase(async (id) => {
+            if (!search) return [];
+            return this.databaseController.runQuery(id, `
+                SELECT 'C' || place.conversation_id AS conversationId,
+                    place.participant_id AS participantId,
+                    place.locationId, place.locationNameAtTheTime,
+                    place.locationSlotId, place.locationSlotNameAtTheTime
+                FROM engine_conversation_participants AS known
+                JOIN engine_conversation_participants AS place
+                    ON place.conversation_id = known.conversation_id
+                WHERE known.participant_id = ? AND place.locationId IS NOT NULL
+                    AND (instr(place.search_location_name, ?) > 0
+                        OR instr(place.search_slot_name, ?) > 0)
+                ORDER BY place.conversation_id DESC, place.participant_id
+            `, [charId, search, search]);
+        });
+    }
+
+    /**
+     * Refresh participant membership and searchable location snapshots inside the caller's transaction.
+     * Locations keyed by characters outside the participant list are not evidence of an encounter.
+     * @param {string} databaseId
+     * @param {number} conversationId
+     * @param {Pick<DEConversation, "participants" | "locations">} conversation
+     * @returns {Promise<void>}
+     */
+    async indexConversationParticipants(databaseId, conversationId, conversation) {
+        const entries = [...new Set(conversation.participants)].map(participantId => {
+            const location = conversation.locations?.[participantId];
+            return [
+                participantId,
+                location?.locationId ?? null,
+                location?.locationNameAtTheTime ?? null,
+                location?.locationSlotId ?? null,
+                location?.locationSlotNameAtTheTime ?? null,
+                location ? normalizeHistoricName(location.locationNameAtTheTime) : null,
+                location ? normalizeHistoricName(location.locationSlotNameAtTheTime) : null,
+            ];
+        });
+        await this.databaseController.runQuery(databaseId,
+            "DELETE FROM engine_conversation_participants WHERE conversation_id = ?", [conversationId]);
+        await this.databaseController.runQuery(databaseId, `
+            INSERT INTO engine_conversation_participants (
+                conversation_id, participant_id, locationId, locationNameAtTheTime,
+                locationSlotId, locationSlotNameAtTheTime, search_location_name, search_slot_name
+            )
+            SELECT ?, json_extract(value, '$[0]'), json_extract(value, '$[1]'),
+                json_extract(value, '$[2]'), json_extract(value, '$[3]'),
+                json_extract(value, '$[4]'), json_extract(value, '$[5]'), json_extract(value, '$[6]')
+            FROM json_each(?)
+        `, [conversationId, JSON.stringify(entries)]);
+    }
+
     /** @param {string} conversationId @returns {Promise<DEConversation | null>} */
     async getConversation(conversationId) {
         return this.withDatabase(async (id) => {
@@ -351,6 +426,7 @@ export class SQLiteBridge extends BaseDataManager {
                 INSERT INTO engine_conversations (${Object.keys(conversationFields).join(", ")})
                 VALUES (${values.map(() => "?").join(", ")}) RETURNING *
             `, values);
+            await this.indexConversationParticipants(id, rows[0].id, readFields(conversationFields, rows[0]));
             const messages = [];
             for (const messageValues of initialMessages) {
                 messages.push(await this.insertMessage(id, rows[0].id, messageValues));
@@ -397,7 +473,7 @@ export class SQLiteBridge extends BaseDataManager {
             .filter(([name, value]) => Object.prototype.hasOwnProperty.call(conversationFields, name) && value !== undefined)
             .map(([name]) => [name, conversationFields[name]]));
         const values = fieldValues(fields, conversation);
-        return this.withDatabase(async (id) => {
+        return this.withTransaction(async (id) => {
             const query = values.length ? `
                 UPDATE engine_conversations
                 SET ${Object.keys(fields).map(name => `${name} = ?`).join(", ")}
@@ -406,6 +482,10 @@ export class SQLiteBridge extends BaseDataManager {
             const rows = await this.databaseController.runQuery(id, query,
                 [...values, numericId(conversationId, "C")]);
             if (!rows.length) return null;
+            if (Object.prototype.hasOwnProperty.call(fields, "participants") ||
+                Object.prototype.hasOwnProperty.call(fields, "locations")) {
+                await this.indexConversationParticipants(id, rows[0].id, readFields(conversationFields, rows[0]));
+            }
             const messages = await this.databaseController.runQuery(id, `
                 SELECT * FROM engine_conversation_messages
                 WHERE conversation_id = ? ORDER BY id

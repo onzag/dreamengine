@@ -1,6 +1,13 @@
 import { playCancelSound, playHoverSound, playPauseSound } from '../sound.js';
 
 class Dialog extends HTMLElement {
+    static get observedAttributes() { return ['dialog-title']; }
+
+    attributeChangedCallback() {
+        const title = this.root.getElementById('dialog-title');
+        if (title) title.textContent = this.getAttribute('dialog-title') || 'Dialog Title';
+    }
+
     constructor() {
         super();
         /**
@@ -18,6 +25,8 @@ class Dialog extends HTMLElement {
 
     connectedCallback() {
         this.render();
+        this.root.querySelector('.dialog-close')?.addEventListener('click', this.onCancelButtonClick);
+        this.root.querySelector('.dialog-close')?.addEventListener('mouseenter', playHoverSound);
 
         playPauseSound();
         document.addEventListener("keydown", this.onDocumentKeydown);
@@ -140,6 +149,7 @@ class Dialog extends HTMLElement {
             z-index: ${parseInt(this.getAttribute('extra-z-index') || '35')};
         }
         .dialog-title {
+            padding-right: 5vh;
             font-size: 5vh;
             font-weight: bold;
             margin-bottom: 2vh;
@@ -152,6 +162,23 @@ class Dialog extends HTMLElement {
             max-height: 60vh;
             overflow-y: auto;
         }
+        .dialog-close {
+            position: absolute;
+            top: 4vh;
+            right: 5vh;
+            display: grid;
+            place-items: center;
+            width: 8vh;
+            height: 8vh;
+            padding: .7vh;
+            border: 0;
+            border-radius: .5vh;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+        }
+        .dialog-close:hover, .dialog-close:focus-visible { color: #FF6B6B; background: rgba(255, 255, 255, .1); }
+        .dialog-close svg { width: 100%; height: 100%; }
         .dialog-content-prexpand {
             height: 60vh;
         }
@@ -172,6 +199,7 @@ class Dialog extends HTMLElement {
       </style>
       <div class="backdrop"></div>
       <div class="dialog ${this.getAttribute("large") ? "" : "dialog-limited"}" role="dialog" aria-modal="true" aria-labelledby="dialog-title" data-de-aria-group="static" data-de-aria-group-use-inert data-de-aria-group-active>
+        ${this.getAttribute('confirmation') === 'true' ? '' : `<button class="dialog-close" type="button" aria-label="Close" data-de-aria-key="c"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>`}
         <div class="dialog-title" id="dialog-title" tabindex="0" data-de-aria-text="true">
             ${title}
         </div>

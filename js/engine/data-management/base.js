@@ -95,6 +95,20 @@ export class BaseDataManager {
     }
 
     /**
+     * Return matching location snapshots from conversations charId participated in,
+     * including the locations of other participants. Match the recorded location or slot
+     * name, ignoring case, accents, punctuation and spacing. Empty normalized searches
+     * return no matches. Results are newest first, one row per conversation and participant;
+     * repeated locations are retained with their source conversation and participant IDs.
+     * @param {string} charId
+     * @param {string} locationOrSlotName
+     * @returns {Promise<DEConversationLocationMatch[]>}
+     */
+    async getPossibleLocationsCharKnowsAlikeTo(charId, locationOrSlotName) {
+        return [];
+    }
+
+    /**
      * @param {string} messageId 
      * @returns {Promise<DEConversationMessage|null>}
      */
@@ -236,6 +250,7 @@ export class BaseDataManager {
     getDatabaseForDEObject() {
         return {
             getConversation: this.getConversation.bind(this),
+            getPossibleLocationsCharKnowsAlikeTo: this.getPossibleLocationsCharKnowsAlikeTo.bind(this),
             getConversationMessage: this.getConversationMessage.bind(this),
             newConversation: this.newConversation.bind(this),
             newConversationMessage: this.newConversationMessage.bind(this),

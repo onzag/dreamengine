@@ -1,4 +1,5 @@
 @import './shared.css';
+@import './identifier-links.css';
 :host { display: inline-flex; position: relative; min-width: 0; max-width: 100%; }
 .tip {
     /* The popover top layer escapes overflow, transforms and glass backdrops. */
@@ -25,5 +26,7 @@
     transition: opacity .15s;
 }
 .tip::backdrop { background: transparent; pointer-events: none; }
+:host([identifier-id]) { cursor: pointer; }
+:host([identifier-id]:focus-visible) { outline: .2vh solid var(--accent, #a7d9ff); outline-offset: .3vh; }
 @starting-style { .tip:popover-open { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .tip { transition: none; } }

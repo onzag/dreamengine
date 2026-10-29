@@ -1,3 +1,6 @@
+import { openIdentifierDialog } from './identifier-dialog.js';
+import { createNarrationNodes } from './narration.js';
+
 /** A top-layer tooltip: scroll containers never clip its content. */
 export class GameTooltip extends HTMLElement {
     static get observedAttributes() { return ['text', 'align-with']; }
@@ -15,12 +18,13 @@ export class GameTooltip extends HTMLElement {
         this.frame = 0;
         this.hideTimer = 0;
         this.geometry = '';
+        this.textVersion = 0;
     }
 
     connectedCallback() {
         this.controller = new AbortController();
         const { signal } = this.controller;
-        this.tip.textContent = this.getAttribute('text') || '';
+        void this.renderText();
         this.addEventListener('pointerenter', () => this.show(), { signal });
         this.addEventListener('pointerleave', () => this.scheduleHide(), { signal });
         this.addEventListener('focusin', () => this.show(), { signal });
@@ -28,6 +32,17 @@ export class GameTooltip extends HTMLElement {
         this.tip.addEventListener('pointerenter', () => window.clearTimeout(this.hideTimer), { signal });
         this.tip.addEventListener('pointerleave', () => this.scheduleHide(), { signal });
         this.root.addEventListener('focusout', () => this.scheduleHide(), { signal });
+        // Portrait tooltips opt into opening their own entity; tooltip links open theirs.
+        this.addEventListener('click', event => {
+            if (!event.composedPath().includes(this.tip)) this.openTarget();
+        }, { signal });
+        this.addEventListener('keydown', event => {
+            if ((event.key === 'Enter' || event.key === ' ') && !event.composedPath().includes(this.tip)
+                && this.hasAttribute('identifier-id')) {
+                event.preventDefault();
+                this.openTarget();
+            }
+        }, { signal });
         // Escape also dismisses a hover-only tooltip without moving focus.
         window.addEventListener('keydown', event => {
             if (event.key === 'Escape') this.hide();
@@ -35,16 +50,61 @@ export class GameTooltip extends HTMLElement {
     }
 
     disconnectedCallback() {
+        this.textVersion++;
         this.hide();
         this.controller?.abort();
         this.controller = null;
     }
 
-    attributeChangedCallback() {
-        this.tip.textContent = this.getAttribute('text') || '';
+    /** @param {string} name @param {string|null} oldValue @param {string|null} newValue */
+    attributeChangedCallback(name, oldValue, newValue) {
+        if (oldValue === newValue) return;
+        if (name === 'text' && this.isConnected) void this.renderText();
         this.geometry = '';
         if (!this.tip.textContent.trim()) this.hide();
         else if (this.tip.matches(':popover-open')) this.position();
+    }
+
+    /** Parse every description here so all tooltip callers get the same identifier links. */
+    async renderText() {
+        const version = ++this.textVersion;
+        const text = this.getAttribute('text') || '';
+        this.tip.textContent = text;
+        this.tip.setAttribute('role', 'tooltip');
+        this.geometry = '';
+        if (!text.trim()) { this.hide(); return; }
+        const client = window.ENGINE_WORKER_CLIENT;
+        if (!client) return;
+        try {
+            /** @type {DEConversationMessageNarrationFragment[]} */
+            const fragments = await client.queryDEObject({ path: ['utils', 'templates', 'parseNarration'], call: [text] });
+            if (!this.isConnected || version !== this.textVersion) return;
+            this.tip.replaceChildren(...createNarrationNodes(fragments, (id, foundAs) => this.openIdentifier(id, foundAs)));
+            // Interactive descriptions are non-modal popovers rather than text-only tooltips.
+            if (fragments.some(fragment => typeof fragment !== 'string')) {
+                this.tip.setAttribute('role', 'dialog');
+                this.tip.setAttribute('aria-label', 'Description');
+            } else this.tip.removeAttribute('aria-label');
+            this.geometry = '';
+            if (this.tip.matches(':popover-open')) this.position();
+        } catch (error) {
+            if (this.isConnected && version === this.textVersion) console.warn('Unable to parse tooltip description', error);
+        }
+    }
+
+    openTarget() {
+        const identifier = this.getAttribute('identifier-id');
+        const foundAs = this.getAttribute('found-as');
+        if (identifier && (foundAs === 'character' || foundAs === 'location' || foundAs === 'location-slot' || foundAs === 'item')) {
+            this.openIdentifier(identifier, foundAs);
+        }
+    }
+
+    /** @param {string} identifier @param {DEConversationMessageFragmentIdentifier['foundAs']} foundAs */
+    openIdentifier(identifier, foundAs) {
+        this.hide();
+        const trigger = this.querySelector('[tabindex], button, a');
+        openIdentifierDialog(identifier, foundAs, trigger instanceof HTMLElement ? trigger : this);
     }
 
     show() {

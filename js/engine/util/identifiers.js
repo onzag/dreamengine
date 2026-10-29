@@ -40,7 +40,7 @@ function findIdentifierNaive(DE, id, name, force) {
             const location = DE.world.locations[locationId];
             if (location.slots && location.slots[id]) {
                 return {
-                    identifier: locationId,
+                    identifier: id,
                     text: name || location.slots[id].name,
                     foundAs: "location-slot",
                     type: "identifier",
@@ -136,12 +136,37 @@ function findACharacterWithTheName(DE, nameLower, characterIdThatEmittedTheIdent
 
 /**
  * @param {DEObject} DE
- * @param {string} nameLower
- * @param {string} characterIdThatEmittedTheIdentifier
- * @returns {Promise<DECompleteLocationReference|null>}
+ * Search the emitter's conversation snapshots, including other participants' locations.
+ * @param {string} name
+ * @param {string|null} characterIdThatEmittedTheIdentifier
+ * @returns {Promise<DEConversationMessageFragmentIdentifier|null>}
  */
-function findALocationWithTheName(DE, nameLower, characterIdThatEmittedTheIdentifier) {
-    
+async function findALocationWithTheName(DE, name, characterIdThatEmittedTheIdentifier) {
+    if (!characterIdThatEmittedTheIdentifier) return null;
+    // Use the same name normalization as the database when distinguishing location/slot hits.
+    /** @param {string} value */
+    const normalize = value => value.normalize("NFKD").toLowerCase()
+        .replace(/[\p{M}]/gu, "").replace(/[^\p{L}\p{N}]/gu, "");
+    const search = normalize(name);
+    if (!search) return null;
+
+    const matches = await DE.database.getPossibleLocationsCharKnowsAlikeTo(
+        characterIdThatEmittedTheIdentifier, name,
+    );
+    // The database returns newest conversations first. Skip locations that no longer exist.
+    for (const match of matches) {
+        const location = DE.world.locations[match.locationId];
+        if (!location) continue;
+        const matchesLocation = normalize(match.locationNameAtTheTime).includes(search);
+        if (!matchesLocation && !location.slots?.[match.locationSlotId]) continue;
+        return {
+            identifier: matchesLocation ? match.locationId : match.locationSlotId,
+            text: name,
+            foundAs: matchesLocation ? "location" : "location-slot",
+            type: "identifier",
+        };
+    }
+    return null;
 }
 
 /**
@@ -194,29 +219,31 @@ export async function findBestIdentifier(DE, id, name, characterIdThatEmittedThe
     }
 
     // okay now we are stuck we cannot quite find what it is, let's do our last resort
-    const shouldBeCharacter = idLower.startsWith("character-");
+    const shouldBeCharacter = actualId1.startsWith("character-");
     if (shouldBeCharacter) {
-        const potentialCharacter = findACharacterWithTheName(DE, nameLower, characterIdThatEmittedTheIdentifier);
+        const potentialCharacter = findACharacterWithTheName(DE, actualName1.toLowerCase().trim(), characterIdThatEmittedTheIdentifier);
         if (potentialCharacter) {
             return {
                 identifier: potentialCharacter.id,
-                text: name || potentialCharacter.name,
+                text: actualName1 || potentialCharacter.name,
                 foundAs: "character",
                 type: "identifier",
             };
         }
     }
 
-    const shouldBeLocation = nameLower.startsWith("location-");
+    const shouldBeLocation = actualId1.startsWith("location-");
     if (shouldBeLocation) {
-        const potentialLocation = await findALocationWithTheName(DE, nameLower, characterIdThatEmittedTheIdentifier);
+        const potentialLocation = await findALocationWithTheName(DE, actualName1, characterIdThatEmittedTheIdentifier);
         if (potentialLocation) {
-            return {
-                identifier: potentialLocation.id,
-                text: name || potentialLocation.name,
-                foundAs: "location",
-                type: "identifier",
-            };
+            return potentialLocation;
         }
     }
+
+    return {
+        identifier: actualId1,
+        text: actualName1,
+        foundAs: "item",
+        type: "identifier",
+    };
 }

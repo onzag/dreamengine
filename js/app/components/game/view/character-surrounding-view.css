@@ -23,5 +23,9 @@ figcaption { margin-top: .6vh; line-height: 1.25; }
 .name { display: block; font-size: 1.8vh; }
 .primary .name { font-size: 2.2vh; }
 .slot { display: block; margin-top: .3vh; color: var(--muted); font-size: 1.5vh; }
-.name:empty, .slot:empty { display: none; }
+.communicator { display: block; margin-top: .4vh; color: var(--accent); font-size: 1.5vh; }
+.character.remote .portrait-tooltip { outline: .15vh dashed var(--accent); outline-offset: .3vh; }
+.character.remote .portrait-tooltip:focus-visible { outline-style: solid; outline-width: .2vh; }
+.character.remote .slot { display: inline-block; padding: .2vh .6vh; border: .1vh solid var(--accent); border-radius: .4vh; color: var(--accent); background: rgba(20, 43, 65, .55); font-weight: 600; }
+.name:empty, .slot:empty, .communicator:empty { display: none; }
 .blindness-notice { margin: 1.5vh 0 0; padding: 1vh 1.4vh; border-left: .2vh solid var(--border); color: var(--muted); font-size: 2vh; line-height: 1.45; }

@@ -3,6 +3,7 @@ import { makeTimestamp, getNameIdentificationForOneCharacterTowardsAnother, getN
 import { getItemsContiguousDescription } from "./items.js";
 import { getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage } from "./weight-and-volume.js";
 import { getWeatherSystemForLocationAndWeather } from "./world.js";
+import { getSizeVisibility } from "./visibility.js";
 
 /**
  * @param {DEObject} deObject 
@@ -551,6 +552,173 @@ export function getApparentPowerLevelFromCharacter(character) {
 }
 
 /**
+ * @param {DECompleteCharacterReference} character 
+ * @param {DECompleteCharacterReference} inPerspectiveCharacter 
+ */
+export function whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharacter) {
+    /**
+     * number from 0 to 1, regarding how perceptive the character is
+     */
+    const inPerspectiveCharacterPerception = inPerspectiveCharacter.perception;
+
+    let inPerspectiveCharacterBlindness = inPerspectiveCharacter.blindness || "no";
+    if (inPerspectiveCharacter.id === character.id) {
+        // force a character to not be blind to themselves, even if they are blind, for the purposes of this function.
+        inPerspectiveCharacterBlindness = "no";
+    }
+
+    let canTellStates = true;
+    let canTellNakedness = true;
+    let canTellDetailsOfClothingOrCarriedItems = true;
+    let canTellSpecies = true;
+    let canTellGender = true;
+    let canTellHeight = true;
+    let canTellWeight = true;
+    
+    const hasHighPerception = inPerspectiveCharacterPerception >= 0.75 || character.id === inPerspectiveCharacter.id; // a character can always tell their own details, even if they are blind or have low perception
+    const hasLowPerception = inPerspectiveCharacterPerception < 0.5 && !hasHighPerception;
+    const hasMediumPerception = inPerspectiveCharacterPerception >= 0.5 && inPerspectiveCharacterPerception < 0.75 && !hasHighPerception;
+    if (inPerspectiveCharacterBlindness === "full") {
+        canTellStates = false;
+        canTellNakedness = false;
+        canTellDetailsOfClothingOrCarriedItems = false;
+        canTellSpecies = false;
+        canTellGender = false;
+        canTellHeight = false;
+        canTellWeight = false;
+    } else if (inPerspectiveCharacterBlindness === "partial-bad") {
+        if (hasLowPerception) {
+            canTellStates = false;
+            canTellNakedness = false;
+            canTellDetailsOfClothingOrCarriedItems = false;
+            canTellGender = false;
+            canTellHeight = false;
+            canTellWeight = false;
+        } else if (hasMediumPerception) {
+            canTellStates = false;
+            canTellDetailsOfClothingOrCarriedItems = false;
+        } else {
+            // their perception is high enough that they can make out the standard short description of the character in all details, even if they are partially blind.
+        }
+
+        // partial-good is too good of a vision in this design, so it is treated the same as no blindness.
+    } else {
+        // just good
+    }
+
+    return {
+        canTellStates,
+        canTellNakedness,
+        canTellDetailsOfClothingOrCarriedItems,
+        canTellSpecies,
+        canTellGender,
+        canTellHeight,
+        canTellWeight,
+        hasLowPerception,
+        hasMediumPerception,
+        hasHighPerception,
+    };
+}
+
+/**
+ * @param {DELocation | DELocationSlot} location
+ * @param {DECompleteCharacterReference} inPerspectiveCharacter
+ */
+export function whatCanTheyMakeOfALocation(location, inPerspectiveCharacter) {
+    const inPerspectiveCharacterPerception = inPerspectiveCharacter.perception;
+    const hasLowPerception = inPerspectiveCharacterPerception < 0.5;
+    const hasMediumPerception = inPerspectiveCharacterPerception >= 0.5 && inPerspectiveCharacterPerception < 0.75;
+    const hasHighPerception = inPerspectiveCharacterPerception >= 0.75;
+
+    let isUnclear = false;
+    if (inPerspectiveCharacter.blindness === "full") {
+        isUnclear = true;
+    } else if (inPerspectiveCharacter.blindness === "partial-bad") {
+        if (hasLowPerception) {
+            isUnclear = true;
+        } else if (hasMediumPerception) {
+            isUnclear = false;
+        } else {
+            // their perception is high enough that they can make out the standard short description of the location in all details, even if they are partially blind.
+            isUnclear = false;
+        }
+    }
+    return {
+        isUnclear,
+        hasLowPerception,
+        hasMediumPerception,
+        hasHighPerception,
+    };
+}
+
+/**
+ * @param {DEObject} deObject
+ * @param {DEItem} item 
+ * @param {DECompleteCharacterReference} inPerspectiveCharacter 
+ */
+export function whatCanTheyMakeOfAnItem(deObject, item, inPerspectiveCharacter) {
+    const visibility = getSizeVisibility(item.volumeLiters, inPerspectiveCharacter || null);
+
+    const charState = deObject.stateFor[inPerspectiveCharacter.id];
+    if (!charState) {
+        throw new Error(`Character ${inPerspectiveCharacter.id} not found in engine state.`);
+    }
+
+    /**
+     * @param {DEItem[]} items 
+     */
+    const checkItemList = (items) => {
+        for (const carriedObject of items) {
+            if (carriedObject.id === item.id) {
+                return true;
+            }
+            if (carriedObject.containing && checkItemList(carriedObject.containing)) {
+                return true;
+            }
+            if (carriedObject.ontop && checkItemList(carriedObject.ontop)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    const isItemCarriedOrWornByCharacter = checkItemList(charState.carrying) || checkItemList(charState.wearing);
+
+    const canTellTheirExactDescription = visibility === "visible" || isItemCarriedOrWornByCharacter;
+    const canTellTheirVolume = visibility === "perceived" || visibility === "visible" || isItemCarriedOrWornByCharacter;
+    const canTellTheirWeight = visibility === "perceived" || visibility === "visible" || isItemCarriedOrWornByCharacter;
+
+    const inPerspectiveCharacterPerception = inPerspectiveCharacter.perception;
+    
+    const hasHighPerception = inPerspectiveCharacterPerception >= 0.75 || isItemCarriedOrWornByCharacter;
+    const hasLowPerception = inPerspectiveCharacterPerception < 0.5 && !hasHighPerception;
+    const hasMediumPerception = inPerspectiveCharacterPerception >= 0.5 && inPerspectiveCharacterPerception < 0.75 && !hasHighPerception;
+
+    /**
+     * @type {"YES" | "NO_BECAUSE_CLOSED" | "NO_BECAUSE_BAD_VISION" | "NOT_A_CONTAINER"}
+     */
+    const canSeeContents = item.containerProperties ? (item.containerProperties?.canSeeContentsFromOutside ? (
+        visibility === "perceived" || visibility === "invisible" ? "NO_BECAUSE_BAD_VISION" : "YES"
+    ) : (
+        item.state.opened || item.state.open ? "YES" : "NO_BECAUSE_CLOSED"
+    )) : "NOT_A_CONTAINER";
+
+    const canSeeOntop = visibility === "perceived" || visibility === "invisible" ? "NO_BECAUSE_BAD_VISION" : "YES";
+
+    return {
+        canSeeItIsThere: visibility === "visible" || visibility === "perceived",
+        canTellTheirExactDescription,
+        canTellTheirVolume,
+        canTellTheirWeight,
+        canSeeContents,
+        canSeeOntop,
+        hasLowPerception,
+        hasMediumPerception,
+        hasHighPerception,
+    }
+}
+
+/**
  * @param {DEObject} deObject 
  * @param {string} characterId
  * @param {string} inPerspectiveOfCharacterId
@@ -568,7 +736,6 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
         throw new Error(`Character state for ${characterId} not found.`);
     }
 
-
     const inPerspectiveCharacter = deObject.characters[inPerspectiveOfCharacterId];
 
     if (!inPerspectiveCharacter) {
@@ -580,11 +747,6 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
         // force a character to not be blind to themselves, even if they are blind, for the purposes of this function.
         inPerspectiveCharacterBlindness = "no";
     }
-
-    /**
-     * number from 0 to 1, regarding how perceptive the character is
-     */
-    const inPerspectiveCharacterPerception = inPerspectiveCharacter.perception;
 
     const inPerspectiveCharacterName = getNameIdentificationForOneCharacterTowardsAnother(deObject, inPerspectiveCharacter, inPerspectiveCharacter);
 
@@ -602,18 +764,17 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
         "animal": "an animal",
     }
 
-    let finalDescription = "";
-    let shouldIncludeStatefulDescriptions = true;
-    let canSenseTheyAreNaked = true;
-    let canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry = true;
-    if (inPerspectiveCharacterBlindness === "full") {
-        shouldIncludeStatefulDescriptions = false;
-        canSenseTheyAreNaked = false;
-        canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry = false;
+    const whatCanTheyMakeOf = whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharacter);
 
-        if (inPerspectiveCharacterPerception < 0.5) {
+    // we will not use this because we are assuming awareness, canSeeCharacter is used for non-aware
+    // surrounding characters
+    // const canSeeThem = deObject.utils.characterInfo.canSeeCharacter(inPerspectiveCharacter, character);
+
+    let finalDescription = "";
+    if (inPerspectiveCharacterBlindness === "full") {
+        if (whatCanTheyMakeOf.hasLowPerception) {
             finalDescription = inPerspectiveCharacterName + " is completely blind and cannot see them.";
-        } else if (inPerspectiveCharacterPerception < 0.75 && !sameSpeciesAsPerspective) {
+        } else if (whatCanTheyMakeOf.hasMediumPerception && !sameSpeciesAsPerspective) {
             // If the character is partially perceptive and the character is not the same species, they can sense the species but not the gender or type.
             if (characterSpecies === "human") {
                 finalDescription = inPerspectiveCharacterName + " is completely blind, but senses they are a " + characterSpeciesFromPerspective + ".";
@@ -628,14 +789,9 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
             }
         }
     } else if (inPerspectiveCharacterBlindness === "partial-bad") {
-        if (inPerspectiveCharacterPerception < 0.5) {
-            shouldIncludeStatefulDescriptions = false;
-            canSenseTheyAreNaked = false;
-            canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry = false;
+        if (whatCanTheyMakeOf.hasLowPerception) {
             finalDescription = inPerspectiveCharacterName + "'s vision is severely impaired and cannot see them clearly only figuring out they are a " + characterSpeciesFromPerspective + ".";
-        } else if (inPerspectiveCharacterPerception < 0.75) {
-            shouldIncludeStatefulDescriptions = false;
-            canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry = false;
+        } else if (whatCanTheyMakeOf.hasMediumPerception) {
             if (characterSpecies === "human") {
                 finalDescription = inPerspectiveCharacterName + "'s vision is severely impaired, but they can make out some details, figuring out they are a " + characterSpeciesFromPerspective + " of " + characterGender + " gender.";
             } else {
@@ -657,7 +813,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
         }
     }
 
-    if (shouldIncludeStatefulDescriptions) {
+    if (whatCanTheyMakeOf.canTellStates) {
         let maxStateDominance = 0;
         for (const state of characterState.states) {
             const stateInfo = character.stateDefinitions[state.state];
@@ -718,7 +874,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
         }
     }
 
-    if (canSenseTheyAreNaked) {
+    if (whatCanTheyMakeOf.canTellNakedness) {
         const topNaked = isTopNaked(deObject, characterId);
         const bottomNaked = isBottomNaked(deObject, characterId);
 
@@ -748,7 +904,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
         const hasItemsCoveringTopNakenessThatAreNotUnderwear = characterState.wearing.some(item => item.wearableProperties && item.wearableProperties.coversTopNakedness && !item.wearableProperties.underwear);
 
         if (characterState.wearing.length > 0) {
-            if (canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry) {
+                if (whatCanTheyMakeOf.canTellDetailsOfClothingOrCarriedItems) {
                 const visibleWornItems = characterState.wearing.filter(item => {
                     if (!item.wearableProperties) {
                         return false;
@@ -776,7 +932,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
 
     if (!onlyBasics) {
         if (characterState.carrying.length > 0) {
-            if (canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry) {
+            if (whatCanTheyMakeOf.canTellDetailsOfClothingOrCarriedItems) {
                 finalDescription += " Carrying " + deObject.utils.templates.formatAnd(characterState.carrying.map(item => deObject.utils.templates.formatItemName(item) + " - " + item.description)) + ".";
             } else {
                 if (inPerspectiveCharacterBlindness === "full" || inPerspectiveCharacterBlindness === "partial-bad") {
@@ -786,7 +942,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
                 }
             }
         } else {
-            if (canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry) {
+            if (whatCanTheyMakeOf.canTellDetailsOfClothingOrCarriedItems) {
                 finalDescription += " Not carrying any items.";
             } else {
                 // nothing.
@@ -794,7 +950,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
         }
 
         if (characterExactLocation.beingCarriedBy) {
-            if (canMakeUpDetailsAboutTheClothingTheyWearOrItemsTheyCarry) {
+            if (whatCanTheyMakeOf.canTellDetailsOfClothingOrCarriedItems) {
                 finalDescription += ` Being carried by ${characterExactLocation.beingCarriedBy}.`;
             } else {
                 finalDescription += ` Being carried by someone, but cannot make out the details of who it is.`;

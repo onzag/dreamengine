@@ -1,10 +1,10 @@
-import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter } from "./util/character-info.js";
+import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter, whatCanTheyMakeOfALocation, whatCanTheyMakeOfAnotherCharacter, whatCanTheyMakeOfAnItem } from "./util/character-info.js";
 import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/random.js";
 import { getCharacterVolume, getCharacterWeight } from "./util/weight-and-volume.js";
 import { emotions } from "./util/emotions.js";
 import { DEngine } from "./index.js";
 import { getNameIdentificationForOneCharacterTowardsAnother, getNameIdentificationForOneCharacterTowardsAnotherOnlyName } from "./util/messages.js";
-import { utilItemCount } from "./util/items.js";
+import { itemsEqualIgnoringId, utilItemCount } from "./util/items.js";
 import { getSizeVisibility, getPerceivedItemLabel } from "./util/visibility.js";
 import { findBestIdentifier } from "./util/identifiers.js";
 
@@ -45,6 +45,149 @@ function formatOrHelper(list) {
 function resolveCharacter(DE, c) {
     if (!c) return undefined;
     return typeof c === "string" ? DE.characters[c] : c;
+}
+
+/**
+ * @param {DEObject} DE
+ * @param {DEItem | string} item
+ * @returns {DEItem | undefined}
+ */
+function resolveItem(DE, item) {
+    if (!item) return undefined;
+    if (typeof item === "object") {
+        return item;
+    }
+
+    /**
+     * @param {DEItem[]} items
+     * @returns {DEItem | null}
+     */
+    const findItemInArray = (items) => {
+        for (const i of items) {
+            if (i.id === item) {
+                return i;
+            }
+            if (i.containing) {
+                const foundInContaining = findItemInArray(i.containing);
+                if (foundInContaining) {
+                    return foundInContaining;
+                }
+            }
+            if (i.ontop) {
+                const foundInOntop = findItemInArray(i.ontop);
+                if (foundInOntop) {
+                    return foundInOntop;
+                }
+            }
+        }
+        return null;
+    }
+
+    // find it on a character
+    for (const charId of Object.keys(DE.stateFor)) {
+        const charState = DE.stateFor[charId];
+        if (!charState) continue;
+        const foundItem = findItemInArray(charState.carrying) || findItemInArray(charState.wearing);
+        if (foundItem) {
+            return foundItem;
+        }
+    }
+
+    // find it everywhere
+    for (const locationId of Object.keys(DE.world.locations)) {
+        const location = DE.world.locations[locationId];
+        for (const slotId of Object.keys(location.slots)) {
+            const slot = location.slots[slotId];
+            const foundItem = findItemInArray(slot.items);
+            if (foundItem) {
+                return foundItem;
+            }
+        }
+    }
+}
+
+/**
+ * @param {DEObject} DE
+ * @param {DELocation | string} location
+ * @returns {DELocation | undefined}
+ */
+function resolveLocation(DE, location) {
+    return typeof location === "string" ? DE.world.locations[location] : location;
+}
+
+/**
+ * @param {DEObject} DE
+ * @param {DELocationSlot | string} slot
+ * @returns {DELocationSlot | undefined}
+ */
+function resolveLocationSlot(DE, slot) {
+    return typeof slot === "string" ? Object.values(DE.world.locations)
+        .find(location => Object.prototype.hasOwnProperty.call(location.slots, slot))?.slots[slot] : slot;
+}
+
+/**
+ * @param {DEObject} DE
+ * @param {DECompleteCharacterReference | string} character
+ * @returns {DECompleteCharacterReference}
+ */
+function requireCharacter(DE, character) {
+    const resolved = resolveCharacter(DE, character);
+    if (!resolved) throw new Error(`Character ${character} not found`);
+    return resolved;
+}
+
+/**
+ * @param {DEObject} DE
+ * @param {DEItem | string} item
+ * @returns {DEItem}
+ */
+function requireItem(DE, item) {
+    const resolved = resolveItem(DE, item);
+    if (!resolved) throw new Error(`Item ${item} not found`);
+    return resolved;
+}
+
+/**
+ * Contact identifies items throughout the observer's worn/carried inventory.
+ * @param {DEObject} DE
+ * @param {DEItem} item
+ * @param {DECompleteCharacterReference | undefined} observer
+ * @returns {boolean}
+ */
+function isItemCarriedOrWorn(DE, item, observer) {
+    const state = observer && DE.stateFor[observer.id];
+    if (!state) return false;
+    const pending = [...state.carrying, ...state.wearing];
+    const visited = new Set();
+    while (pending.length) {
+        const candidate = pending.pop();
+        if (!candidate || visited.has(candidate)) continue;
+        if (candidate.id === item.id) return true;
+        visited.add(candidate);
+        pending.push(...(candidate.containing || []), ...(candidate.ontop || []));
+    }
+    return false;
+}
+
+/**
+ * @param {DEObject} DE
+ * @param {DELocation | DELocationSlot} place
+ * @param {DECompleteCharacterReference | string} inPerspectiveOf
+ */
+async function describePlace(DE, place, inPerspectiveOf) {
+    const observer = requireCharacter(DE, inPerspectiveOf);
+    const visibility = whatCanTheyMakeOfALocation(place, observer);
+    if (observer.blindness === "full" || visibility.isUnclear) {
+        const observerName = DE.utils.templates.formatCharacterName(observer, observer, { capitalize: true });
+        const placeName = "slots" in place
+            ? DE.utils.templates.formatLocationName(place, observer)
+            : DE.utils.templates.formatLocationSlotName(place, observer);
+        if (observer.blindness === "full") {
+            return `${observerName} ${DE.utils.templates.formatVerbToBe([observer])} completely blind and cannot see ${placeName} at all.`;
+        }
+        return `${observerName} cannot clearly see ${placeName}.`;
+    }
+    return typeof place.description === "string" ? place.description : await place.description({ char: observer });
 }
 
 /**
@@ -104,12 +247,32 @@ function removeDuplicatesHelper(list) {
 }
 
 /**
+ * Groups structurally identical items, ignoring ids, in first-seen order.
+ * @param {DEItem[]} items
+ * @returns {Array<{ item: DEItem, amount: number }>}
+ */
+function getRepresentativeItems(items) {
+    /** @type {Array<{ item: DEItem, amount: number }>} */
+    const representatives = [];
+    for (const item of items) {
+        const existing = representatives.find(group => itemsEqualIgnoringId(group.item, item));
+        if (existing) {
+            existing.amount++;
+        } else {
+            representatives.push({ item, amount: 1 });
+        }
+    }
+    return representatives;
+}
+
+/**
  * @param {DEObject} DE
- * @param {DECompleteCharacterReference} character
+ * @param {DECompleteCharacterReference | string} character
  * @param {string} stateName
  * @returns {Promise<Array<DEStateCauseCausantCharacter | DEStateCauseCausantObject>>}
  */
 async function getCausantsHelperLocal(DE, character, stateName) {
+    character = requireCharacter(DE, character);
     const actualStateName = stateName.trim().toUpperCase().replace(/\s+/g, "_");
     // Keys in stateFor are character ids
 
@@ -142,6 +305,7 @@ async function getCausantsHelperLocal(DE, character, stateName) {
 export const deEngineUtilsFn = (DE, engine) => ({
     id: {
         async findBestIdentifier(id, name, characterEmitterId) {
+            characterEmitterId = typeof characterEmitterId === "string" || !characterEmitterId ? characterEmitterId : characterEmitterId.id;
             return findBestIdentifier(DE, id, name, characterEmitterId);
         },
         characterIdGenerator(charName) {
@@ -162,10 +326,42 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     items: {
+        getItemById(itemId) {
+            return resolveItem(DE, itemId) || null;
+        },
+        getRepresentativeContents(item) {
+            return getRepresentativeItems(requireItem(DE, item).containing || []);
+        },
+        getRepresentativeOntop(item) {
+            return getRepresentativeItems(requireItem(DE, item).ontop || []);
+        },
+        getDescriptionOfItem(item, inPerspectiveOf) {
+            const itemResolved = resolveItem(DE, item);
+            if (!itemResolved) {
+                throw new Error(`Item ${item} not found`);
+            }
+            const sizeVisibility = DE.utils.items.canSeeItem(itemResolved, inPerspectiveOf);
+            const perspectiveCharacter = resolveCharacter(DE, inPerspectiveOf ?? null);
+            if (!perspectiveCharacter) {
+                throw new Error(`Character ${inPerspectiveOf} not found`);
+            }
+            if (isItemCarriedOrWorn(DE, itemResolved, perspectiveCharacter)) {
+                return itemResolved.description;
+            }
+            const perspectiveCharacterName = DE.utils.templates.formatCharacterName(perspectiveCharacter, perspectiveCharacter, { capitalize: true });
+            if (sizeVisibility === "invisible") {
+                return perspectiveCharacterName + " cannot see " + DE.utils.templates.formatItemName(itemResolved, perspectiveCharacter, { capitalize: false });
+            } else if (sizeVisibility === "perceived") {
+                return perspectiveCharacterName + " cannot see " + DE.utils.templates.formatItemName(itemResolved, perspectiveCharacter, { capitalize: false });
+            } else {
+                return itemResolved.description;
+            }
+        },
         canSeeItem(item, inPerspectiveOf) {
+            const resolvedItem = requireItem(DE, item);
             const observer = resolveCharacter(DE, inPerspectiveOf ?? null);
             if (inPerspectiveOf && !observer) throw new Error(`Character ${inPerspectiveOf} not found`);
-            return getSizeVisibility(item.volumeLiters, observer || null);
+            return getSizeVisibility(resolvedItem.volumeLiters, observer || null);
         },
         newItem(definition) {
             const id = DE.utils.id.itemIdGenerator(definition.name);
@@ -191,6 +387,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (amount <= 0) {
                 return [];
             }
+            item = requireItem(DE, item);
             const clones = [];
             for (let i = 0; i < amount; i++) {
                 const newId = DE.utils.id.itemIdGenerator(item.name);
@@ -222,6 +419,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (amount <= 0) {
                 return [];
             }
+            item = requireItem(DE, item);
             const clones = [];
             for (let i = 0; i < amount; i++) {
                 const newId = DE.utils.id.itemIdGenerator(item.name);
@@ -236,6 +434,47 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     world: {
+        getLocationSlotById(slotId) {
+            return resolveLocationSlot(DE, slotId) || null;
+        },
+        async getDescriptionOfLocation(location, inPerspectiveOf) {
+            const resolvedLocation = resolveLocation(DE, location);
+            if (!resolvedLocation) throw new Error(`Location ${location} not found`);
+            return describePlace(DE, resolvedLocation, inPerspectiveOf);
+        },
+        /**
+         * Accepts (slot, observer) or (location, slot, observer).
+         * @param {DELocation | DELocationSlot | string} locationOrSlot
+         * @param {DELocationSlot | DECompleteCharacterReference | string} slotOrObserver
+         * @param {DECompleteCharacterReference | string} [inPerspectiveOf]
+         */
+        async getDescriptionOfLocationSlot(locationOrSlot, slotOrObserver, inPerspectiveOf) {
+            if (inPerspectiveOf !== undefined) {
+                if (typeof locationOrSlot !== "string" && !("slots" in locationOrSlot)) {
+                    throw new Error("Expected a location reference");
+                }
+                const location = resolveLocation(DE, locationOrSlot);
+                if (!location) throw new Error(`Location ${locationOrSlot} not found`);
+                if (typeof slotOrObserver !== "string" && "gender" in slotOrObserver) {
+                    throw new Error("Expected a location slot reference");
+                }
+                const slotId = typeof slotOrObserver === "string" ? slotOrObserver : slotOrObserver.id;
+                const slot = typeof slotOrObserver === "string" ? location.slots[slotId] : slotOrObserver;
+                if (!slot || !Object.prototype.hasOwnProperty.call(location.slots, slotId)) {
+                    throw new Error(`Location slot ${slotId} not found in location ${location.id}`);
+                }
+                return describePlace(DE, slot, inPerspectiveOf);
+            }
+            if (typeof locationOrSlot !== "string" && "slots" in locationOrSlot) {
+                throw new Error("Expected a location slot reference");
+            }
+            if (typeof slotOrObserver !== "string" && !("gender" in slotOrObserver)) {
+                throw new Error("Expected a character reference");
+            }
+            const slot = resolveLocationSlot(DE, locationOrSlot);
+            if (!slot) throw new Error(`Location slot ${locationOrSlot} not found`);
+            return describePlace(DE, slot, slotOrObserver);
+        },
         defineGlobalInterest(interest) {
             if (DE.interests[interest.id]) {
                 console.warn(`Interest with id ${interest.id} already exists, mixing it.`);
@@ -363,6 +602,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             return DE.world.locations[DE.world.currentLocation]?.isSafe || false;
         },
         allCharactersAtLocation(locationId) {
+            locationId = typeof locationId === "string" ? locationId : locationId.id;
             const result = [];
             for (const charId of Object.keys(DE.stateFor)) {
                 if (DE.stateFor[charId].location === locationId) {
@@ -373,10 +613,10 @@ export const deEngineUtilsFn = (DE, engine) => ({
             return result;
         },
         locationIsVehicle(locationId) {
-            return !!DE.world.locations[locationId]?.vehicleType || false;
+            return !!resolveLocation(DE, locationId)?.vehicleType || false;
         },
         locationIsSafe(locationId) {
-            return DE.world.locations[locationId]?.isSafe || false;
+            return resolveLocation(DE, locationId)?.isSafe || false;
         },
     },
 
@@ -620,7 +860,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
 
     conversations: {
         getConversation: async function (conversationId) {
-            return DE.database.getConversation(conversationId);
+            return typeof conversationId === "string" ? DE.database.getConversation(conversationId) : conversationId;
         },
         getAllConversationsAtLocation: async function (locationId) {
             const allCharactersAtLocation = DE.utils.world.allCharactersAtLocation(locationId);
@@ -863,6 +1103,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (!conversationObject) {
                 throw new Error(`Conversation with ID ${conversationId} not found`);
             }
+            conversationId = conversationObject.id;
 
             if (
                 (
@@ -906,6 +1147,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             return addedMessage;
         },
         async addMessageIntoTargetConversation(targetCharacterId, message, options = {}) {
+            targetCharacterId = typeof targetCharacterId === "string" ? targetCharacterId : targetCharacterId.id;
             // target is a character id
             const targetChar = DE.stateFor[targetCharacterId];
             if (!targetChar) {
@@ -1082,6 +1324,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             });
         },
         async addMessageBroadcast(message, location, travelDistance, travelDistanceType) {
+            location = typeof location === "string" ? location : location.id;
             const locationsToBroadcast = new Set([
                 {
                     location: location,
@@ -1131,6 +1374,17 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     characterInfo: {
+        getRepresentativeCarrying(char) {
+            const character = requireCharacter(DE, char);
+            return getRepresentativeItems(DE.stateFor[character.id].carrying);
+        },
+        getRepresentativeWearing(char) {
+            const character = requireCharacter(DE, char);
+            return getRepresentativeItems(DE.stateFor[character.id].wearing);
+        },
+        whatCanTheyMakeOfAnotherCharacter(char, inPerspectiveOf) {
+            return whatCanTheyMakeOfAnotherCharacter(requireCharacter(DE, char), requireCharacter(DE, inPerspectiveOf));
+        },
         canSeeCharacter(char, inPerspectiveOf) {
             const target = resolveCharacter(DE, char);
             const observer = resolveCharacter(DE, inPerspectiveOf ?? null);
@@ -1139,11 +1393,10 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (observer?.id === target.id) return "visible";
             return getSizeVisibility(target.weightKg, observer || null);
         },
-        canSeeOtherCharacter(char, inPerspectiveOf) {
-            return DE.utils.characterInfo.canSeeCharacter(char, inPerspectiveOf);
-        },
         getExternalDescriptionOfCharacter(char, inPerspectiveOf, onlyBasics, hideCurrentPosture) {
-            return getExternalDescriptionOfCharacter(DE, char.id, inPerspectiveOf.id, onlyBasics, hideCurrentPosture);
+            const target = requireCharacter(DE, char);
+            const observer = requireCharacter(DE, inPerspectiveOf);
+            return getExternalDescriptionOfCharacter(DE, target.id, observer.id, onlyBasics, hideCurrentPosture);
         },
         isWithinAttractionGroupFor(opt, char1, char2) {
             const char1Ref = resolveCharacter(DE, char1);
@@ -1399,13 +1652,15 @@ export const deEngineUtilsFn = (DE, engine) => ({
             const locationInfo = DE.world.locations[locationOfChar];
             return locationInfo ? !locationInfo.isIndoors : false;
         },
-        hasItem(char, itemName) {
+        hasItem(char, item) {
             const charRef = resolveCharacter(DE, char);
             if (!charRef) {
-                console.warn(`Character reference for ${char} not found when checking if has item ${itemName}`);
+                console.warn(`Character reference for ${char} not found when checking if has item ${typeof item === "string" ? item : item.id}`);
                 return false;
             }
-            return DE.stateFor[charRef.id].carrying.find(item => item.name === itemName) !== undefined;
+            return DE.stateFor[charRef.id].carrying.some(carried => typeof item === "string"
+                ? carried.name === item || carried.id === item
+                : carried.id === item.id);
         },
         getPosture(char) {
             const charRef = resolveCharacter(DE, char);
@@ -1825,7 +2080,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
             const currentLocation = DE.world.currentLocation;
             const socialGroup = DE.bonds[charRef.id].active.map(bond => bond.towards);
             const presentSocialGroup = socialGroup.filter(memberId => DE.stateFor[memberId].location === currentLocation);
-            return list.filter(id => !presentSocialGroup.includes(id));
+            return list.map(member => typeof member === "string" ? member : member.id)
+                .filter(id => !presentSocialGroup.includes(id));
         },
         getExSocialGroup(char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
             const charRef = resolveCharacter(DE, char);
@@ -2054,6 +2310,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             }
         },
         removeCausantFromState(character, stateName, causant, causantType) {
+            causant = typeof causant === "string" ? causant : causant.id;
             const characterRef = resolveCharacter(DE, character);
             if (!characterRef) {
                 if (typeof character === "string") {
@@ -2082,21 +2339,26 @@ export const deEngineUtilsFn = (DE, engine) => ({
             return (await getCausantsHelperLocal(DE, char, stateName)).filter(c => c.type === "object").map(c => c.id);
         },
         getStates(char) {
+            char = requireCharacter(DE, char);
             return DE.stateFor[char.id].states.map(s => s.state);
         },
         getStateIntensity(char, stateName) {
+            char = requireCharacter(DE, char);
             const stateObject = DE.stateFor[char.id].states.find(s => s.state === stateName);
             return stateObject ? stateObject.intensity : 0;
         },
         hasState(char, stateName) {
+            char = requireCharacter(DE, char);
             return DE.stateFor[char.id].states.some(s => s.state === stateName);
         },
         stateHasJustActivated(char, stateName) {
+            char = requireCharacter(DE, char);
             const stateObject = DE.stateFor[char.id].states.find(s => s.state === stateName);
             if (!stateObject) return false;
             return stateObject.contiguousStartActivationCyclesAgo === 0;
         },
         async getStateActivationCyclesAgo(char, stateName) {
+            char = requireCharacter(DE, char);
             const stateObject = DE.stateFor[char.id].states.find(s => s.state === stateName);
             if (!stateObject) {
                 return DE.database.getHistoricStateActivationCyclesAgo(char.id, stateName);
@@ -2138,7 +2400,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     templates: {
-        parseNarration(message) {
+        parseNarration: async (message) => {
             /** @type {Array<DEConversationMessageNarrationFragment>} */
             const fragments = [];
             let lastIndex = 0;
@@ -2147,20 +2409,15 @@ export const deEngineUtilsFn = (DE, engine) => ({
             // Leave incomplete markers and other angle-bracketed text untouched.
             for (const match of message.matchAll(/<([^<>:\s]+):([^<>]+)>/g)) {
                 const identifier = match[1];
-                /** @type {DEConversationMessageFragmentIdentifier["foundAs"]} */
-                let foundAs = "item";
-                if (Object.prototype.hasOwnProperty.call(DE.characters, identifier)) {
-                    foundAs = "character";
-                } else if (Object.prototype.hasOwnProperty.call(DE.world.locations, identifier)) {
-                    foundAs = "location";
-                } else if (Object.values(DE.world.locations).some(location => Object.prototype.hasOwnProperty.call(location.slots, identifier))) {
-                    foundAs = "location-slot";
-                }
+                const name = match[2];
 
                 if (match.index > lastIndex) {
                     fragments.push(message.slice(lastIndex, match.index));
                 }
-                fragments.push({ type: "identifier", identifier, text: match[2], foundAs });
+
+                const result = await findBestIdentifier(DE, identifier, name, null);
+                fragments.push(result);
+
                 lastIndex = match.index + match[0].length;
             }
             if (lastIndex < message.length) {
@@ -2317,19 +2574,20 @@ export const deEngineUtilsFn = (DE, engine) => ({
             return "<" + ourChar.id + ":" + nameGiven + ">";
         },
         formatItemName(item, inPerspectiveOf, options) {
+            item = requireItem(DE, item);
             const visibility = DE.utils.items.canSeeItem(item, inPerspectiveOf);
-            if (visibility !== "visible") {
-                const observer = resolveCharacter(DE, inPerspectiveOf ?? null);
+            const observer = resolveCharacter(DE, inPerspectiveOf ?? null);
+            if (visibility !== "visible" && !isItemCarriedOrWorn(DE, item, observer)) {
                 const label = visibility === "invisible" || !observer ? "invisible item" : getPerceivedItemLabel(item, observer);
                 let nameGiven = options?.type === "definite" ? "the " + label : (/^[aeiou]/i.test(label) ? "an " : "a ") + label;
                 if (options?.capitalize) nameGiven = nameGiven.charAt(0).toUpperCase() + nameGiven.slice(1);
                 return options?.justName ? nameGiven : "<" + item.id + ":" + nameGiven + ">";
             }
-            const nameGiven = utilItemCount(DE, null, item.oneOfAKind || false, item.owner, 1, item.name, item.id, options?.capitalize, options?.type === "definite");
+            const nameGiven = utilItemCount(DE, null, item.oneOfAKind || false, item.owner, options?.amount || 1, item.name, item.id, options?.capitalize, options?.type === "definite", options?.type === "plain");
             return options?.justName ? nameGiven : "<" + item.id + ":" + nameGiven + ">";
         },
         formatLocationName(location, inPerspectiveOf, options) {
-            const locationRef = typeof location === "string" ? DE.world.locations[location] : location;
+            const locationRef = resolveLocation(DE, location);
             if (!locationRef) {
                 console.warn(`Location reference for ${location} not found when formatting location name`);
                 return "Unknown Location";
@@ -2337,8 +2595,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             return formatPlaceName(locationRef, options);
         },
         formatLocationSlotName(slot, inPerspectiveOf, options) {
-            const slotRef = typeof slot === "string" ? Object.values(DE.world.locations)
-                .find(location => Object.prototype.hasOwnProperty.call(location.slots, slot))?.slots[slot] : slot;
+            const slotRef = resolveLocationSlot(DE, slot);
             if (!slotRef) {
                 console.warn(`Location slot reference for ${slot} not found when formatting location slot name`);
                 return "Unknown Location Slot";
@@ -2360,9 +2617,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
             return result ? result.item : options[0];
         },
         getRandomOptionFixedCharacter(char, options) {
-            const charRef = resolveCharacter(DE, char);
+            const charRef = requireCharacter(DE, char);
             // Use character id for consistent seeding per character
-            const result = weightedRandomByLikelihood(options.map(option => ({ item: option, likelihood: 1 })), generateIntSeedFromString(1000000, char.id));
+            const result = weightedRandomByLikelihood(options.map(option => ({ item: option, likelihood: 1 })), generateIntSeedFromString(1000000, charRef.id));
             return result ? result.item : options[0];
         },
     },

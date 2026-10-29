@@ -12,7 +12,7 @@ import { buildSurroundingGroups, getVisibleSurroundingGroups } from './surroundi
  * @property {string} userId
  * @property {string} userName
  * @property {DECompleteCharacterReference['blindness']} blindness
- * @property {{conversations: Array<{id: string, participants: string[], remoteParticipants: string[]}>, foundCharacters: string[], leftoverCharacters: string[]}} scene
+ * @property {import('./surrounding-groups.js').SurroundingScene} scene
  * @property {SurroundingCharacter[]} characters
  */
 
@@ -76,7 +76,7 @@ export class CharacterSurroundingView extends HTMLElement {
     /** @returns {Promise<SurroundingsDisplayData>} */
     async getDisplayData() {
         const { location, userId, userName, blindness, scene, characters } = await this.getLiveSceneState();
-        return { location, userId, userName, blindness, groups: buildSurroundingGroups(scene, userId, characters) };
+        return { location, userId, userName, blindness, groups: buildSurroundingGroups(scene, userId, characters, location) };
     }
 
     /** @returns {Promise<SurroundingsSceneState>} */
@@ -85,7 +85,7 @@ export class CharacterSurroundingView extends HTMLElement {
         /** @type {string} */
         const userId = await client.queryDEObject({ path: ['user'] });
         const [userState, userCharacter] = await Promise.all([
-            client.queryDEObject({ path: ['stateFor', userId], pick: ['location'] }),
+            client.queryDEObject({ path: ['stateFor', userId], pick: ['location', 'conversationId'] }),
             client.queryDEObject({ path: ['characters', userId], pick: ['name', 'blindness'] }),
         ]);
         /** @type {SurroundingsSceneState['blindness']} */
@@ -98,14 +98,18 @@ export class CharacterSurroundingView extends HTMLElement {
             path: ['utils', 'conversations', 'getAllConversationsAtLocation'],
             call: [location], pick: ['conversations', 'foundCharacters', 'leftoverCharacters'],
         });
-        const characters = await Promise.all([...new Set(scene.foundCharacters)].map(async id => {
+        const userConversation = scene.conversations.find(c => c.id === userState?.conversationId && c.participants.includes(userId))
+            || scene.conversations.find(c => c.participants.includes(userId));
+        const characterIds = new Set([...scene.foundCharacters, ...(userConversation?.participants || [])]);
+        const characters = await Promise.all([...characterIds].map(async id => {
+            const hasConversation = scene.conversations.some(c => c.participants.includes(id));
             const [name, metadata, state, visibility, externalDescription] = await Promise.all([
                 client.queryDEObject({ path: ['utils', 'templates', 'formatCharacterName'], call: [
                     { __type: 'char', value: id }, { __type: 'char', value: userId },
                     { __type: 'object', value: { justName: true, type: 'indefinite', capitalize: true } },
                 ] }),
                 client.queryDEObject({ path: ['characters', id, 'metadata'], pick: ['assets'] }),
-                client.queryDEObject({ path: ['stateFor', id], pick: ['conversationId', 'locationSlot'] }),
+                client.queryDEObject({ path: ['stateFor', id], pick: hasConversation ? ['conversationId'] : ['conversationId', 'locationSlot'] }),
                 client.queryDEObject({ path: ['utils', 'characterInfo', 'canSeeCharacter'], call: [
                     { __type: 'char', value: id }, { __type: 'char', value: userId },
                 ] }),
@@ -113,13 +117,14 @@ export class CharacterSurroundingView extends HTMLElement {
                     { __type: 'char', value: id }, { __type: 'char', value: userId }, true, false,
                 ] }),
             ]);
-            const locationSlotName = state?.locationSlot ? await client.queryDEObject({
+            const locationSlotName = !hasConversation && state?.locationSlot ? await client.queryDEObject({
                 path: ['utils', 'templates', 'formatLocationSlotName'],
                 call: [state.locationSlot, userId, { __type: 'object', value: { type: 'default', justName: true } }],
             }) : '';
             return { id, name: name || 'Unknown character', image: metadata?.assets?.neutral || '',
                 locationSlotName: locationSlotName || '',
                 locationSlot: state?.locationSlot || '', conversationId: state?.conversationId || null,
+                remote: false, communicatorName: '',
                 visibility, externalDescription: externalDescription || '' };
         }));
         return { location, userId, userName, blindness, scene, characters };
@@ -176,7 +181,7 @@ export class CharacterSurroundingView extends HTMLElement {
         const groups = getVisibleSurroundingGroups(data.groups, data.userId);
         for (const group of groups) for (const character of group.characters) {
             if (!desired.has(character.id)) desired.set(character.id, {
-                character, group, placement: JSON.stringify([data.location, group.id, character.locationSlot]),
+                character, group, placement: JSON.stringify([data.location, group.id, character.remote ? 'remote' : character.locationSlot]),
             });
         }
         const oldRects = new Map([...this.cards].map(([id, card]) => [id, card.element.getBoundingClientRect()]));
@@ -265,7 +270,7 @@ export class CharacterSurroundingView extends HTMLElement {
                     const element = document.createElement('figure');
                     element.className = 'character';
                     element.dataset.characterId = character.id;
-                    element.innerHTML = '<app-game-tooltip class="portrait-tooltip" align-with="bottom" tabindex="0"><app-world-image no-transition="true" default-image="./images/default-profile.png" aria-hidden="true"></app-world-image></app-game-tooltip><figcaption><span class="name"></span><span class="slot"></span></figcaption>';
+                    element.innerHTML = '<app-game-tooltip class="portrait-tooltip" align-with="bottom" tabindex="0"><app-world-image no-transition="true" default-image="./images/default-profile.png" aria-hidden="true"></app-world-image></app-game-tooltip><figcaption><span class="name"></span><span class="slot"></span><span class="communicator"></span></figcaption>';
                     card = { element, placement: target.placement, primary: group.primary };
                     this.cards.set(character.id, card);
                     entering.add(character.id);
@@ -273,12 +278,19 @@ export class CharacterSurroundingView extends HTMLElement {
                 card.primary = group.primary;
                 const name = card.element.querySelector('.name');
                 const slot = card.element.querySelector('.slot');
+                const communicator = card.element.querySelector('.communicator');
+                card.element.classList.toggle('remote', character.remote);
                 if (name) name.textContent = character.name;
-                if (slot) slot.textContent = character.locationSlotName;
+                if (slot) slot.textContent = character.remote ? 'Remote' : character.locationSlotName;
+                if (communicator) communicator.textContent = character.communicatorName ? `Via ${character.communicatorName}` : '';
                 const tooltip = card.element.querySelector('.portrait-tooltip');
                 if (tooltip) {
                     tooltip.setAttribute('text', character.externalDescription);
                     tooltip.setAttribute('aria-label', character.name || character.locationSlotName || 'Character description');
+                    tooltip.setAttribute('identifier-id', character.id);
+                    tooltip.setAttribute('found-as', 'character');
+                    tooltip.setAttribute('role', 'button');
+                    tooltip.setAttribute('aria-haspopup', 'dialog');
                 }
                 const image = card.element.querySelector('app-world-image');
                 if (image && image.getAttribute('image-url') !== character.image) image.setAttribute('image-url', character.image);

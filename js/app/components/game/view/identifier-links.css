@@ -1,0 +1,3 @@
+.identifier { display: inline; margin: 0; padding: 0; border: 0; background: none; color: var(--accent, #a7d9ff); font: inherit; line-height: inherit; text-align: inherit; white-space: inherit; text-decoration: underline; text-underline-offset: .15em; cursor: pointer; }
+.identifier:hover { color: #fff; }
+.identifier:focus-visible { outline: .2vh solid var(--accent, #a7d9ff); outline-offset: .2vh; }

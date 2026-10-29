@@ -4,7 +4,7 @@ import './tooltip.js';
 /** @typedef {'somewhat'|'standard'|'very'|'overwhelming'} StatsChipColorScheme */
 /** @typedef {{ id: string, label: string, description: string, dominance: number, relieving: boolean, colorScheme: StatsChipColorScheme, causes: string[] }} StatsDisplayState */
 /** @typedef {{ id: string, label: string, description: string }} StatsInformationTag */
-/** @typedef {{ userName: string, externalDescription: string, profileImage: string, location: string, locationSlot: string, dateTime: string, weather: string, states: StatsDisplayState[], informationTags: StatsInformationTag[] }} StatsDisplayData */
+/** @typedef {{ userId: string, userName: string, externalDescription: string, profileImage: string, location: string, locationSlot: string, dateTime: string, weather: string, states: StatsDisplayState[], informationTags: StatsInformationTag[] }} StatsDisplayData */
 
 /** Character traits are separate from intensity/dominance-based states.
  * @param {(Pick<DECompleteCharacterReference, 'blindness'|'autism'> & {voice?: Pick<DEVoiceDescription, 'mute'>|null})|null} character
@@ -78,7 +78,7 @@ export class Stats extends HTMLElement {
 
     connectedCallback() {
         this.root.innerHTML = `<link rel="stylesheet" href="${new URL('./stats.css', import.meta.url).href}">
-            <section class="glass" aria-label="Character status"><header><h1 class="user-name"></h1><app-game-tooltip class="portrait-tooltip" align-with="bottom"><app-world-image class="portrait" image-url="" default-image="./images/default-profile.png" aria-hidden="true"></app-world-image></app-game-tooltip></header>
+            <section class="glass" aria-label="Character status"><header><h1 class="user-name"></h1><app-game-tooltip class="portrait-tooltip" align-with="bottom" tabindex="0" role="button" aria-haspopup="dialog"><app-world-image class="portrait" image-url="" default-image="./images/default-profile.png" aria-hidden="true"></app-world-image></app-game-tooltip></header>
             <dl class="world-details"><div><dd class="location"></dd></div><div><dd class="date-time"></dd></div><div class="weather-row"><dd class="weather"></dd></div></dl>
             <section class="states" aria-label="Character information and current states"><div class="state-list"></div></section></section>`;
         this.unsubscribe = window.ENGINE_WORKER_CLIENT?.addDEObjectUpdatedListener(() => { void this.updateStats(); }) || null;
@@ -131,6 +131,7 @@ export class Stats extends HTMLElement {
         const dateTime = Number.isFinite(currentTime) ? new Date(currentTime).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
         console.log(profileImage, location, characterState?.locationSlot, dateTime, weather, states);
         return {
+            userId,
             userName: character?.name || String(userId || ''),
             externalDescription: externalDescription || '',
             profileImage: profileImage || '',
@@ -236,7 +237,12 @@ export class Stats extends HTMLElement {
         const portrait = this.root.querySelector('app-world-image');
         if (portrait) portrait.setAttribute('image-url', data.profileImage || '');
         const portraitTooltip = this.root.querySelector('.portrait-tooltip');
-        if (portraitTooltip) portraitTooltip.setAttribute('text', data.externalDescription || '');
+        if (portraitTooltip) {
+            portraitTooltip.setAttribute('text', data.externalDescription || '');
+            portraitTooltip.setAttribute('identifier-id', data.userId);
+            portraitTooltip.setAttribute('found-as', 'character');
+            portraitTooltip.setAttribute('aria-label', data.userName || 'Character details');
+        }
         const list = this.root.querySelector('.state-list');
         if (!list) return;
         const informationTags = data.informationTags || [];

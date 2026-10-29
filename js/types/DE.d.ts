@@ -2493,6 +2493,15 @@ declare interface DEItem {
         capacityLiters: number;
         canSeeContentsFromOutside: boolean;
         /**
+         * Whether the container can be opened or not, for example, a box can be opened, but a sealed bag cannot
+         * use (opened: true) or (opened: false) in the item state to specify if the container is opened or closed
+         */
+        openable: boolean;
+        /**
+         * Whether it can be closed again after being opened
+         */
+        openableResealable: boolean;
+        /**
          * Whether the container is rigid or flexible, a rigid container does not take
          * more volume when more items are put inside it, while a flexible container grows in volume with the items put inside it
          * so keep in mind the volume of a flexible container
@@ -3780,16 +3789,22 @@ declare interface DEUtils {
          * Always returns a fragment; unresolved inputs are preserved as an item.
          * Does not create IDs or modify entities; fills missing names when found.
          */
-        findBestIdentifier(id: string, name: string, characterEmitterId: string | null): Promise<DEConversationMessageFragmentIdentifier>;
+        findBestIdentifier(id: string, name: string, characterEmitterId: DECompleteCharacterReference | string | null): Promise<DEConversationMessageFragmentIdentifier>;
         itemIdGenerator(itemName: string): string;
         characterIdGenerator(charName: string): string;
         locationIdGenerator(locationName: string): string;
     },
     items: {
+        /** Find an item anywhere in character inventories or location slots, including nested contents. */
+        getItemById(itemId: string): DEItem | null;
+        /** Group direct contents by equality ignoring ids, returning the first item and count for each group. */
+        getRepresentativeContents(item: DEItem | string): Array<{ item: DEItem; amount: number }>;
+        /** Group items directly on top by equality ignoring ids, returning the first item and count for each group. */
+        getRepresentativeOntop(item: DEItem | string): Array<{ item: DEItem; amount: number }>;
         /** Resolve an item's sensory visibility using its volume versus the observer's body volume.
          * Null/omitted perspective is an unrestricted narrator.
          */
-        canSeeItem(item: DEItem, inPerspectiveOf?: DECompleteCharacterReference | string | null): DEVisibility;
+        canSeeItem(item: DEItem | string, inPerspectiveOf?: DECompleteCharacterReference | string | null): DEVisibility;
         newItem(definition: Omit<DEItem, "id">): DEItem;
         /**
          * Creates a new clonable item factory function that can be used to create new items with the same definition but different ids
@@ -3803,16 +3818,23 @@ declare interface DEUtils {
          * @param item 
          * @param amount 
          */
-        cloneItem(item: DEItem, amount: number): DEItem[];
+        cloneItem(item: DEItem | string, amount: number): DEItem[];
         /**
          * Copies an item but not its contents, providing a new item list with new ids of the copied item and the specified amount
          * the contents will be empty and the new item will not contain any character references
          * @param item 
          * @param amount 
          */
-        shallowCloneItem(item: DEItem, amount: number): DEItem[];
+        shallowCloneItem(item: DEItem | string, amount: number): DEItem[];
+        /**
+         * Gets the description of an item in the perspective of a character, this is useful for when you want to know what an item looks like, or what it contains, etc...
+         * Worn/carried items, including nested contents and items on top, are identifiable through contact.
+         */
+        getDescriptionOfItem(item: DEItem | string, inPerspectiveOfCharacter: DECompleteCharacterReference | string): string;
     },
     world: {
+        /** Find a location slot by its globally unique ID. */
+        getLocationSlotById(slotId: string): DELocationSlot | null;
         newLocation(
             definition: Omit<DELocation, "id" | "scriptGivenId" | "slots">,
             slots: () => Array<Omit<DELocationSlot, "id">>,
@@ -3850,17 +3872,26 @@ declare interface DEUtils {
          * The list of all characters available in the current location of the world, including the user
          * @returns eg. [Luna, Kiro]
          */
-        allCharactersAtLocation(locationId: string): DECompleteCharacterReference[];
+        allCharactersAtLocation(locationId: DELocation | string): DECompleteCharacterReference[];
         /**
          * Boolean indicating if the provided location is a vehicle
          * @returns true or false
          */
-        locationIsVehicle(locationId: string): boolean;
+        locationIsVehicle(locationId: DELocation | string): boolean;
         /**
          * Boolean indicating if the provided location is a safe location
          * @returns true or false
          */
-        locationIsSafe(locationId: string): boolean;
+        locationIsSafe(locationId: DELocation | string): boolean;
+        /**
+         * Gets the description of a location, this is useful for when you want to know what a location looks like, or what it contains, etc...
+         * @param location Location reference or ID.
+         */
+        getDescriptionOfLocation(location: DELocation | string, inPerspectiveOf: DECompleteCharacterReference | string): Promise<string>;
+        /** Describe a slot using the observer's vision; accepts a slot reference or globally unique slot ID. */
+        getDescriptionOfLocationSlot(slot: DELocationSlot | string, inPerspectiveOf: DECompleteCharacterReference | string): Promise<string>;
+        /** Describe a slot within a particular location, validating that it belongs there. */
+        getDescriptionOfLocationSlot(location: DELocation | string, slot: DELocationSlot | string, inPerspectiveOf: DECompleteCharacterReference | string): Promise<string>;
     },
     characters: {
         /**
@@ -3926,10 +3957,10 @@ declare interface DEUtils {
         createVoice(voiceDescription: DEVoiceDescription): DEVoiceDescription;
     },
     conversations: {
-        getConversation(conversationId: string): Promise<DEConversation | null>;
-        getAllConversationsAtLocation(locationId: string): Promise<{conversations: DEConversation[], leftoverCharacters: string[], foundCharacters: string[]}>; // leftoverCharacters are characters that are at the location but not in any conversation
-        addMessage(conversationId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { unsafeMode?: boolean } = {}): Promise<DEConversationMessage>;
-        addMessageIntoTargetConversation(targetCharacterId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options?: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean, messageCommunicator?: { type: "new" | "inherit" | "remove"; communicatorName?: string; communicatorItemId?: string; } }): Promise<DEConversationMessage>;
+        getConversation(conversationId: DEConversation | string): Promise<DEConversation | null>;
+        getAllConversationsAtLocation(locationId: DELocation | string): Promise<{conversations: DEConversation[], leftoverCharacters: string[], foundCharacters: string[]}>; // leftoverCharacters are characters that are at the location but not in any conversation
+        addMessage(conversationId: DEConversation | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { unsafeMode?: boolean } = {}): Promise<DEConversationMessage>;
+        addMessageIntoTargetConversation(targetCharacterId: DECompleteCharacterReference | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options?: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean, messageCommunicator?: { type: "new" | "inherit" | "remove"; communicatorName?: string; communicatorItemId?: string; } }): Promise<DEConversationMessage>;
         /**
          * Broadcast a message, all characters at a given location (and beyond) will pick it up
          * 
@@ -3940,15 +3971,29 @@ declare interface DEUtils {
          * @param travelDistance 
          * @param travelDistaceType
          */
-        addMessageBroadcast(message: (distance: number) => Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, location: string, travelDistance: number, travelDistaceType: "meters" | "connections"): Promise<DEConversationMessage[]>;
+        addMessageBroadcast(message: (distance: number) => Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, location: DELocation | string, travelDistance: number, travelDistaceType: "meters" | "connections"): Promise<DEConversationMessage[]>;
         newConversation(conversation: Pick<DEConversation, "participants" | "communicators" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean } = {}): Promise<DEConversation>;
     },
     characterInfo: {
+        /** Group directly carried items by equality ignoring ids, returning the first item and count for each group. */
+        getRepresentativeCarrying(char: DECompleteCharacterReference | string): Array<{ item: DEItem; amount: number }>;
+        /** Group directly worn items by equality ignoring ids, returning the first item and count for each group. */
+        getRepresentativeWearing(char: DECompleteCharacterReference | string): Array<{ item: DEItem; amount: number }>;
+        whatCanTheyMakeOfAnotherCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf: DECompleteCharacterReference | string): {
+            canTellStates: boolean;
+            canTellNakedness: boolean;
+            canTellDetailsOfClothingOrCarriedItems: boolean;
+            canTellSpecies: boolean;
+            canTellGender: boolean;
+            canTellHeight: boolean;
+            canTellWeight: boolean;
+            hasLowPerception: boolean;
+            hasMediumPerception: boolean;
+            hasHighPerception: boolean;
+        };
         /** Same size/perception rules as canSeeItem; a character can always recognize themselves. */
         canSeeCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf?: DECompleteCharacterReference | string | null): DEVisibility;
-        /** Alias of canSeeCharacter. */
-        canSeeOtherCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf?: DECompleteCharacterReference | string | null): DEVisibility;
-        getExternalDescriptionOfCharacter(char: DECompleteCharacterReference, inPerspectiveOf: DECompleteCharacterReference, onlyBasics?: boolean, hideCurrentPosture?: boolean): Promise<string>;
+        getExternalDescriptionOfCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf: DECompleteCharacterReference | string, onlyBasics?: boolean, hideCurrentPosture?: boolean): Promise<string>;
 
         isWithinAttractionGroupFor(option: "male" | "female" | "ambiguous", char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
 
@@ -4015,7 +4060,7 @@ declare interface DEUtils {
          * Boolean indicating if the character has the specified item in their inventory
          * @returns true or false
          */
-        hasItem(char: string | DECompleteCharacterReference, itemName: string): boolean;
+        hasItem(char: string | DECompleteCharacterReference, item: DEItem | string): boolean;
         /**
          * String indicating the current posture of the character
          * @returns "standing" | "crawling" | "climbing" | "sitting" | "lying_down" | "crouching" | "kneeling" | "hanging" | "floating" | "flying" | "swimming"
@@ -4093,27 +4138,27 @@ declare interface DEUtils {
          * Get the list of social group members for the current character
          * @returns eg. [Arya, Thalon, Mira]
          */
-        getSocialGroup(char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
+        getSocialGroup(char: DECompleteCharacterReference | string, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
         /**
          * Get the list of social group members for the current character that are present at the same location as our character
          * @returns eg. [Arya, Thalon, Mira]
          */
-        getPresentSocialGroup(char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
+        getPresentSocialGroup(char: DECompleteCharacterReference | string, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
         /**
          * Get the list of social group members for the current character, that are not only present but also in a conversation with our character
          * @returns eg. [Thalon, Mira]
          */
-        getPresentConversingSocialGroup(char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): Promise<string[]>;
+        getPresentConversingSocialGroup(char: DECompleteCharacterReference | string, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): Promise<string[]>;
         /**
          * Get the difference between the provided list and the present social group members
          * @returns eg. [Arya, Thalon]
          */
-        getDifferenceOfPresentSocialGroup(char: DECompleteCharacterReference, list: string[]): string[];
+        getDifferenceOfPresentSocialGroup(char: DECompleteCharacterReference | string, list: Array<DECompleteCharacterReference | string>): string[];
         /**
          * Get the list of social group members that are gone forever (most likely dead) for the current character
          * @returns eg. [Thalon, Mira]
          */
-        getExSocialGroup(char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
+        getExSocialGroup(char: DECompleteCharacterReference | string, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
     },
     states: {
         charHasState(character: string | DECompleteCharacterReference, stateName: string): boolean;
@@ -4131,51 +4176,51 @@ declare interface DEUtils {
          * Removes a cause from a character state, this is used to keep track of what caused a state to be applied
          */
         removeCauseFromState(character: string | DECompleteCharacterReference | null, stateName: string, cause: DEStateCause): void;
-        removeCausantFromState(character: string | DECompleteCharacterReference | null, stateName: string, causant: string, causantType: "character" | "object"): void;
+        removeCausantFromState(character: string | DECompleteCharacterReference | null, stateName: string, causant: DECompleteCharacterReference | DEItem | string, causantType: "character" | "object"): void;
 
         /**
          * TODO does this work?
          * The name of the characters/users/objects that activated the state last
          * @returns eg. ["Aria", "Thalon", "Player", "The Ancient Sword"]
          */
-        getLastStateCausants(char: DECompleteCharacterReference, stateName: string): Promise<string[]>;
+        getLastStateCausants(char: DECompleteCharacterReference | string, stateName: string): Promise<string[]>;
         /**
          * TODO does this work?
          * The name of the characters only that activated the state last
          * @returns eg. ["Aria", "Thalon", "Player"]
          */
-        getLastStateCharacterCausants(char: DECompleteCharacterReference, stateName: string): Promise<string[]>;
+        getLastStateCharacterCausants(char: DECompleteCharacterReference | string, stateName: string): Promise<string[]>;
         /**
          * TODO does this work?
          * The name of the characters only that activated the state last
          * @returns eg. ["Aria", "Thalon", "Player"]
          */
-        getLastStateObjectCausants(char: DECompleteCharacterReference, stateName: string): Promise<string[]>;
+        getLastStateObjectCausants(char: DECompleteCharacterReference | string, stateName: string): Promise<string[]>;
         /**
          * Get the list of active states for the current character
          * @returns eg. [ANGRY, TIRED, HAPPY]
          */
-        getStates(char: DECompleteCharacterReference): string[];
+        getStates(char: DECompleteCharacterReference | string): string[];
         /**
          * Get the intensity of the specified active state for the current character, intensities are integer numbers from 0 to 4
          * @returns eg. 0, 1, 2, 3, 4
          */
-        getStateIntensity(char: DECompleteCharacterReference, stateName: string): number;
+        getStateIntensity(char: DECompleteCharacterReference | string, stateName: string): number;
         /**
          * Check if the current character has the specified active state
          * @returns eg. true or false
          */
-        hasState(char: DECompleteCharacterReference, stateName: string): boolean;
+        hasState(char: DECompleteCharacterReference | string, stateName: string): boolean;
         /**
          * Check if the current character has just activated the specified state in this interaction
          * @returns eg. true or false
          */
-        stateHasJustActivated(char: DECompleteCharacterReference, stateName: string): boolean;
+        stateHasJustActivated(char: DECompleteCharacterReference | string, stateName: string): boolean;
         /**
          * Get how many inference cycles ago the state was activated for the provided character
          * @returns eg. 3, it will return -1 if the state is not found ever
          */
-        getStateActivationCyclesAgo(char: DECompleteCharacterReference, stateName: string): Promise<number>;
+        getStateActivationCyclesAgo(char: DECompleteCharacterReference | string, stateName: string): Promise<number>;
     },
     triggersAndAccumulators: {
         /**
@@ -4297,12 +4342,13 @@ declare interface DEUtils {
             }
         ): string;
         /**
+         * Worn/carried items, including nested contents and items on top, retain their proper name through contact.
          * @param item the item to format
          * @param inPerspectiveOf Observer; null/omitted preserves unrestricted naming. Unresolved items get a generic, ID-stable label.
          * @param options Article type (default, definite), capitalization, and justName to return plain text instead of an identifier marker. The default article depends on item uniqueness.
          * @returns the formatted name of the item
          */
-        formatItemName(item: DEItem, inPerspectiveOf?: DECompleteCharacterReference | string | null, options?: { type?: "default" | "definite", capitalize?: boolean, justName?: boolean }): string;
+        formatItemName(item: DEItem | string, inPerspectiveOf?: DECompleteCharacterReference | string | null, options?: { type?: "default" | "definite" | "plain", capitalize?: boolean, justName?: boolean, amount?: number }): string;
         /**
          * Formats a location reference or ID as an identifier marker, or plain text with justName.
          * @param inPerspectiveOf Reserved for future perspective-dependent naming; currently ignored.
@@ -4325,7 +4371,7 @@ declare interface DEUtils {
          * The story message to parse
          * @param message The story message to parse
          */
-        parseNarration(message: string): Array<DEConversationMessageNarrationFragment>;
+        parseNarration(message: string): Promise<Array<DEConversationMessageNarrationFragment>>;
     };
 
     ramdom: {
@@ -4348,7 +4394,7 @@ declare interface DEUtils {
          * Provides one of the random options by using the character name and time as the seed, useful for generating consistent random choices per character that change over time
          * @returns string
          */
-        getRandomOptionFixedCharacter(char: DECompleteCharacterReference, options: string[]): string;
+        getRandomOptionFixedCharacter(char: DECompleteCharacterReference | string, options: string[]): string;
     },
 }
 
@@ -4459,8 +4505,20 @@ declare interface DEObject {
     database: DEDatabase;
 }
 
+/** A participant's recorded location, with the conversation that makes it potentially known. */
+declare type DEConversationLocationMatch = DEConversation["locations"][string] & {
+    conversationId: string;
+    participantId: string;
+};
+
 declare interface DEDatabaseConversationFns {
     getConversation(conversationId: string): Promise<DEConversation|null>;
+    /**
+     * Search every participant's recorded location/slot names in charId's conversations.
+     * Partial matching ignores case, accents, punctuation and spacing; empty searches return [].
+     * Newest first, one row per conversation and participant, retaining repeated locations.
+     */
+    getPossibleLocationsCharKnowsAlikeTo(charId: string, locationOrSlotName: string): Promise<DEConversationLocationMatch[]>;
     getConversationMessage(messageId: string): Promise<DEConversationMessage|null>;
     newConversation(conversation: Omit<DEConversation, "id">): Promise<DEConversation|null>;
     newConversationMessage(conversationId: string, message: Omit<DEConversationMessage, "id">): Promise<DEConversationMessage|null>;
