@@ -6,6 +6,7 @@ import { DEngine } from "./index.js";
 import { getNameIdentificationForOneCharacterTowardsAnother, getNameIdentificationForOneCharacterTowardsAnotherOnlyName } from "./util/messages.js";
 import { utilItemCount } from "./util/items.js";
 import { getSizeVisibility, getPerceivedItemLabel } from "./util/visibility.js";
+import { findBestIdentifier } from "./util/identifiers.js";
 
 // NOTE: DE.characters, DE.bonds, DE.stateFor are all keyed by character id (character.id), not character name.
 // DESingleBondDescription.towards is a character id.
@@ -140,9 +141,13 @@ async function getCausantsHelperLocal(DE, character, stateName) {
  */
 export const deEngineUtilsFn = (DE, engine) => ({
     id: {
-        characterIdGenerator() {
-            DE.counters.characterId++;
-            return "character-" + DE.counters.characterId;
+        async findBestIdentifier(id, name, characterEmitterId) {
+            return findBestIdentifier(DE, id, name, characterEmitterId);
+        },
+        characterIdGenerator(charName) {
+            const normalizedCharName = charName ? charName.toLowerCase().replace(/\s+/g, "-") : "character";
+            DE.counters.characterId[normalizedCharName] = (DE.counters.characterId[normalizedCharName] || 0) + 1;
+            return "character-" + normalizedCharName + "-" + DE.counters.characterId[normalizedCharName];
         },
         itemIdGenerator(itemName) {
             const normalizedItemName = itemName ? itemName.toLowerCase().replace(/\s+/g, "-") : "item";
@@ -381,7 +386,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             // Search for an existing character that has the same id
             const existingChar = Object.values(DE.characters).find(c => c.scriptGivenId === actualScriptGivenId);
             if (!existingChar) {
-                const id = DE.utils.id.characterIdGenerator();
+                const id = DE.utils.id.characterIdGenerator(characterDef.name);
                 const charWithId = { ...characterDef, id, scriptGivenId: actualScriptGivenId };
                 DE.characters[id] = charWithId;
                 return charWithId;
@@ -628,7 +633,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             }
             const conversations = (await Promise.all(Array.from(allConversationIds).map(id => DE.database.getConversation(id)))).filter(c => c !== null);
             const foundCharacters = allCharactersAtLocation.map(character => character.id);
-            const groupedCharacters = new Set(conversations.flatMap(c => [...c.participants, ...c.remoteParticipants]));
+            const groupedCharacters = new Set(conversations.flatMap(c => c.participants));
             return {
                 conversations,
                 foundCharacters,
@@ -637,13 +642,10 @@ export const deEngineUtilsFn = (DE, engine) => ({
         },
         async newConversation(conversation, options = {}) {
             const participants = conversation.participants;
-            const remoteParticipants = conversation.remoteParticipants;
 
             if ((!participants || participants.length === 0) && (!options.unsafeMode)) {
                 throw new Error("Conversation must have at least one participant");
             }
-
-            const location = conversation.location;
 
             if (!options.unsafeMode) {
                 // participants are character ids
@@ -653,20 +655,75 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     }
                 }
 
-                for (const remoteParticipant of remoteParticipants) {
-                    if (!DE.characters[remoteParticipant]) {
-                        throw new Error(`Remote participant ${remoteParticipant} does not exist in DE.characters`);
-                    }
-                }
-
-                const hasUserInvolved = participants.includes(DE.user) || remoteParticipants.includes(DE.user);
+                const hasUserInvolved = participants.includes(DE.user);
                 if (hasUserInvolved && conversation.pseudoConversation) {
                     throw new Error("Cannot create a pseudo-conversation with the user involved");
                 }
+            }
 
-                for (const participant of participants) {
-                    if (remoteParticipants.includes(participant)) {
-                        throw new Error(`Participant ${participant} cannot be both a participant and a remote participant`);
+            /**
+             * @type {Record<string, { locationId: string; locationNameAtTheTime: string; locationSlotId: string; locationSlotNameAtTheTime: string;}>}
+             */
+            const locationsRecord =
+                // @ts-ignore
+                options.__newLocationsMemorySaveHack || {};
+
+            // @ts-ignore
+            if (!options.__newLocationsMemorySaveHack) {
+
+                for (const participantId of participants) {
+                    const charState = DE.stateFor[participantId];
+                    if (!charState && !options.unsafeMode) {
+                        throw new Error(`Participant ${participantId} does not have a state in DE.stateFor`);
+                    }
+                    if (charState) {
+                        let expectedLocationId = charState.location;
+                        let expectedLocationSlotId = charState.locationSlot;
+                        if (options.teleportParticipantsTo) {
+                            if (typeof options.teleportParticipantsTo === "string") {
+                                expectedLocationId = options.teleportParticipantsTo;
+                                // pick a random slot in the location
+                                const location = DE.world.locations[expectedLocationId];
+                                if (!location) {
+                                    throw new Error(`Location ${expectedLocationId} does not exist in DE.world.locations`);
+                                }
+                                expectedLocationSlotId = Object.keys(location.slots)[Math.floor(Math.random() * Object.keys(location.slots).length)];
+                            } else if (Array.isArray(options.teleportParticipantsTo)) {
+                                expectedLocationId = options.teleportParticipantsTo[0];
+                                expectedLocationSlotId = options.teleportParticipantsTo[1];
+                            } else if (typeof options.teleportParticipantsTo === "function") {
+                                const value = options.teleportParticipantsTo(DE.characters[participantId]);
+                                if (typeof value === "string") {
+                                    expectedLocationId = value;
+                                    const location = DE.world.locations[expectedLocationId];
+                                    if (!location) {
+                                        throw new Error(`Location ${expectedLocationId} does not exist in DE.world.locations`);
+                                    }
+                                    expectedLocationSlotId = Object.keys(location.slots)[Math.floor(Math.random() * Object.keys(location.slots).length)];
+                                } else if (Array.isArray(value)) {
+                                    expectedLocationId = value[0];
+                                    expectedLocationSlotId = value[1];
+                                } else if (value === null) {
+                                    // do not teleport
+                                } else {
+                                    throw new Error(`Invalid teleportParticipantsTo value for participant ${participantId}`);
+                                }
+                            } else {
+                                throw new Error(`Invalid teleportParticipantsTo value`);
+                            }
+
+                            if (charState.location !== expectedLocationId || charState.locationSlot !== expectedLocationSlotId) {
+                                // teleport them
+                                charState.location = expectedLocationId;
+                                charState.locationSlot = expectedLocationSlotId;
+                            }
+                        }
+                        locationsRecord[participantId] = {
+                            locationId: expectedLocationId,
+                            locationNameAtTheTime: DE.world.locations[expectedLocationId]?.name || "Unknown Location",
+                            locationSlotId: expectedLocationSlotId,
+                            locationSlotNameAtTheTime: DE.world.locations[expectedLocationId]?.slots?.[expectedLocationSlotId]?.name || "Unknown Place",
+                        };
                     }
                 }
             }
@@ -676,8 +733,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 bondsAtEnd: null,
                 bondsAtStart: {},
                 participants: participants,
-                remoteParticipants: remoteParticipants,
-                location: location,
+                locations: locationsRecord,
+                communicators: conversation.communicators || {},
                 messages: [],
                 pseudoConversation: conversation.pseudoConversation || false,
                 previousConversationIdsPerParticipant: {},
@@ -693,29 +750,17 @@ export const deEngineUtilsFn = (DE, engine) => ({
              * @type {Array<(id: string) => void>}
              */
             const fnsToRunOnceIdIsKnown = [];
-
-            const participantAndRemoteParticipants = [...participants, ...remoteParticipants];
-
             const conversationsEnded = new Set();
 
-            for (const participantId of participantAndRemoteParticipants) {
+            for (const participantId of participants) {
                 // stateFor is keyed by character id
                 const charState = DE.stateFor[participantId];
-                const isRemoteParticipant = remoteParticipants.includes(participantId);
                 if (!charState && options.unsafeMode) {
                     console.warn(`Participant ${participantId} does not have a state in DE.stateFor`);
                     continue;
                 }
                 if (charState.deadEnded) {
                     console.warn(`Participant ${participantId} is dead-ended`);
-                }
-
-                if (charState.location !== location && !isRemoteParticipant) {
-                    if (options.teleportParticipants) {
-                        // TODO teleport participants
-                    } else if (!options.unsafeMode) {
-                        throw new Error(`Participant ${participantId} is not in the specified location ${location}`);
-                    }
                 }
 
                 const oldConversation = charState.conversationId ? (
@@ -752,36 +797,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     continue;
                 }
 
-                let participantsLeft = endedConversation.participants.filter(p => !participantAndRemoteParticipants.includes(p));
-                let remoteParticipantsLeft = endedConversation.remoteParticipants.filter(p => !participantAndRemoteParticipants.includes(p));
+                const participantsLeft = endedConversation.participants.filter(p => !participants.includes(p));
 
-                if (participantsLeft.length !== 0 || remoteParticipantsLeft.length !== 0) {
-                    // DE.user is a character id
-                    const deUserInRemoteParticipantsLeft = remoteParticipantsLeft.includes(DE.user);
-                    if (deUserInRemoteParticipantsLeft) {
-                        const newHost = DE.user;
-                        remoteParticipantsLeft.splice(remoteParticipantsLeft.indexOf(newHost), 1);
-                        for (const p of participantsLeft) {
-                            remoteParticipantsLeft.push(p);
-                        }
-                        participantsLeft = [newHost];
-                    }
-
-                    const onlyRemoteParticipantsLeft = participantsLeft.length === 0 && remoteParticipantsLeft.length > 0;
-                    if (onlyRemoteParticipantsLeft) {
-                        const newHost = remoteParticipantsLeft[Math.floor(Math.random() * remoteParticipantsLeft.length)];
-                        participantsLeft.push(newHost);
-                        remoteParticipantsLeft.splice(remoteParticipantsLeft.indexOf(newHost), 1);
-                    }
-
-                    for (const remoteParticipantId of remoteParticipantsLeft) {
-                        const remoteParticipantState = DE.stateFor[remoteParticipantId];
-                        if (remoteParticipantState && remoteParticipantState.location === endedConversation.location) {
-                            participantsLeft.push(remoteParticipantId);
-                            remoteParticipantsLeft.splice(remoteParticipantsLeft.indexOf(remoteParticipantId), 1);
-                        }
-                    }
-
+                if (participantsLeft.length !== 0) {
                     /** @type {Omit<DEConversation, "id">} */
                     const newConversationForRemainingParticipants = {
                         bondsAtEnd: null,
@@ -790,8 +808,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         previousConversationIdsPerParticipant: {},
                         startTime: { ...DE.currentTime },
                         participants: participantsLeft,
-                        remoteParticipants: remoteParticipantsLeft,
-                        location: endedConversation.location,
+                        communicators: endedConversation.communicators,
+                        locations: endedConversation.locations,
                         messages: [],
                         pseudoConversation: participantsLeft.includes(DE.user) ? false : true,
                         metadata: {},
@@ -805,7 +823,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         throw new Error("Failed to add new conversation for remaining participants to the database");
                     }
 
-                    for (const allParticipantId of [...participantsLeft, ...remoteParticipantsLeft]) {
+                    for (const allParticipantId of participantsLeft) {
                         const charState = DE.stateFor[allParticipantId];
                         charState.conversationId = actualNewConversationForRemainingParticipants.id;
                         newConversationForRemainingParticipants.bondsAtStart[allParticipantId] = {
@@ -851,10 +869,6 @@ export const deEngineUtilsFn = (DE, engine) => ({
 
                     message.characterId &&
                     !conversationObject.participants.includes(message.characterId) &&
-                    !(
-                        conversationObject.remoteParticipants &&
-                        conversationObject.remoteParticipants.includes(message.characterId)
-                    ) &&
                     !options.unsafeMode &&
                     !message.isStoryMasterMessage
 
@@ -891,11 +905,11 @@ export const deEngineUtilsFn = (DE, engine) => ({
             });
             return addedMessage;
         },
-        async addMessageIntoTargetConversation(target, message, options = {}) {
+        async addMessageIntoTargetConversation(targetCharacterId, message, options = {}) {
             // target is a character id
-            const targetChar = DE.stateFor[target];
+            const targetChar = DE.stateFor[targetCharacterId];
             if (!targetChar) {
-                throw new Error(`Target character state not found for target ${target}`);
+                throw new Error(`Target character state not found for target ${targetCharacterId}`);
             }
 
             // message.sender is a character id
@@ -933,52 +947,135 @@ export const deEngineUtilsFn = (DE, engine) => ({
 
             /** @type {Array<string>} */
             let newParticipants = [];
-            /** @type {Array<string>} */
-            let newRemoteParticipants = [];
+            /**
+             * @type {Record<string, { locationId: string; locationNameAtTheTime: string; locationSlotId: string; locationSlotNameAtTheTime: string;}>}
+             */
+            const newLocationsOfParticipants = {};
+            /**
+             * @type {Record<string, { communicatorName: string; communicatorItemId?: string; }>}
+             */
+            const newCommunicators = {};
             if (!senderIsGhost && message.characterId) {
                 if (options.isolation === "isolate") {
-                    newParticipants = Array.from(new Set([target, message.characterId]));
+                    newParticipants = Array.from(new Set([targetCharacterId, message.characterId].filter(Boolean)));
                 } else {
                     const currentConversationIdOfSender = senderChar && options.isolation === "merge-groups" ? senderChar.conversationId : null;
                     const participantsOfCurrentConversationOfTarget = currentConversationIdOfTarget ? (await getConversation(currentConversationIdOfTarget)).participants : [];
-                    const remoteParticipantsOfCurrentConversationOfTarget = currentConversationIdOfTarget ? (await getConversation(currentConversationIdOfTarget)).remoteParticipants : [];
                     const participantsOfCurrentConversationOfSender = currentConversationIdOfSender ? (await getConversation(currentConversationIdOfSender)).participants : [];
-                    const remoteParticipantsOfCurrentConversationOfSender = currentConversationIdOfSender ? (await getConversation(currentConversationIdOfSender)).remoteParticipants : [];
-                    newParticipants = Array.from(new Set([target, message.characterId, ...participantsOfCurrentConversationOfTarget, ...participantsOfCurrentConversationOfSender]));
-                    newRemoteParticipants = Array.from(new Set([...remoteParticipantsOfCurrentConversationOfTarget, ...remoteParticipantsOfCurrentConversationOfSender]));
-
-                    newRemoteParticipants = newRemoteParticipants.filter(rp => !newParticipants.includes(rp));
-
-                    for (const remoteParticipantId of newRemoteParticipants) {
-                        const remoteParticipantState = DE.stateFor[remoteParticipantId];
-                        if (remoteParticipantState && remoteParticipantState.location === targetChar.location) {
-                            newParticipants.push(remoteParticipantId);
-                            newRemoteParticipants.splice(newRemoteParticipants.indexOf(remoteParticipantId), 1);
-                        }
-                    }
+                    newParticipants = Array.from(new Set([targetCharacterId, message.characterId, ...participantsOfCurrentConversationOfTarget, ...participantsOfCurrentConversationOfSender]));
                 }
             } else {
                 if (options.isolation === "isolate") {
-                    newParticipants = [target];
+                    newParticipants = [targetCharacterId];
                 } else {
                     const participantsOfCurrentConversationOfTarget = currentConversationIdOfTarget ? (await getConversation(currentConversationIdOfTarget)).participants : [];
-                    const remoteParticipantsOfCurrentConversationOfTarget = currentConversationIdOfTarget ? (await getConversation(currentConversationIdOfTarget)).remoteParticipants : [];
                     newParticipants = participantsOfCurrentConversationOfTarget;
-                    newRemoteParticipants = remoteParticipantsOfCurrentConversationOfTarget;
                 }
             }
 
-            const currentConversationOfTarget = currentConversationIdOfTarget ? await getConversation(currentConversationIdOfTarget) : null;
-            const currentConversationHasAllParticipantsAndRemoteParticipants = currentConversationOfTarget ?
-                newParticipants.every(p => currentConversationOfTarget.participants.includes(p) || currentConversationOfTarget.remoteParticipants.includes(p)) &&
-                newRemoteParticipants.every(rp => currentConversationOfTarget.participants.includes(rp) || currentConversationOfTarget.remoteParticipants.includes(rp)) : false;
+            // now let's calculate the newLocationsOfParticipants based on the newParticipants and their current locations
+            for (const participantId of newParticipants) {
+                if (participantId === message.characterId && typeof options.messageCommunicator === "object" && options.messageCommunicator.type !== "inherit") {
+                    if (options.messageCommunicator.type === "remove") {
+                        // do nothing;
+                    } else {
+                        newCommunicators[participantId] = {
+                            communicatorName: options.messageCommunicator.communicatorName || "Unknown Communicator",
+                            communicatorItemId: options.messageCommunicator.communicatorItemId,
+                        };
+                    }
+                } else {
+                    // copy the same communicator from the current conversation of the participant, if any
+                    const currentConversationIdOfParticipant = DE.stateFor[participantId].conversationId;
+                    const conversationOfParticipant = currentConversationIdOfParticipant ? await getConversation(currentConversationIdOfParticipant) : null;
+                    if (conversationOfParticipant?.communicators[participantId]) {
+                        newCommunicators[participantId] = {
+                            communicatorName: conversationOfParticipant.communicators[participantId].communicatorName,
+                            communicatorItemId: conversationOfParticipant.communicators[participantId].communicatorItemId,
+                        };
+                    }
+                }
 
-            const targetConversation = currentConversationHasAllParticipantsAndRemoteParticipants && currentConversationOfTarget ? currentConversationOfTarget : await DE.utils.conversations.newConversation({
+                const participantChar = DE.stateFor[participantId];
+                if (!participantChar) {
+                    throw new Error(`Participant character state not found for participant ${participantId}`);
+                }
+
+                let expectedLocationId = participantChar.location;
+                let expectedLocationSlotId = participantChar.locationSlot;
+
+                if (options.teleportParticipantsTo) {
+                    if (typeof options.teleportParticipantsTo === "string") {
+                        expectedLocationId = options.teleportParticipantsTo;
+                        // pick a random slot in the location
+                        const location = DE.world.locations[expectedLocationId];
+                        if (!location) {
+                            throw new Error(`Location ${expectedLocationId} does not exist in DE.world.locations`);
+                        }
+                        expectedLocationSlotId = Object.keys(location.slots)[Math.floor(Math.random() * Object.keys(location.slots).length)];
+                    } else if (Array.isArray(options.teleportParticipantsTo)) {
+                        expectedLocationId = options.teleportParticipantsTo[0];
+                        expectedLocationSlotId = options.teleportParticipantsTo[1];
+                    } else if (typeof options.teleportParticipantsTo === "function") {
+                        const value = options.teleportParticipantsTo(DE.characters[participantId]);
+                        if (typeof value === "string") {
+                            expectedLocationId = value;
+                            const location = DE.world.locations[expectedLocationId];
+                            if (!location) {
+                                throw new Error(`Location ${expectedLocationId} does not exist in DE.world.locations`);
+                            }
+                            expectedLocationSlotId = Object.keys(location.slots)[Math.floor(Math.random() * Object.keys(location.slots).length)];
+                        } else if (Array.isArray(value)) {
+                            expectedLocationId = value[0];
+                            expectedLocationSlotId = value[1];
+                        } else if (value === null) {
+                            // do not teleport
+                        } else {
+                            throw new Error(`Invalid teleportParticipantsTo value for participant ${participantId}`);
+                        }
+                    } else {
+                        throw new Error(`Invalid teleportParticipantsTo value`);
+                    }
+                }
+
+                if (participantChar.location !== expectedLocationId || participantChar.locationSlot !== expectedLocationSlotId) {
+                    // teleport them
+                    participantChar.location = expectedLocationId;
+                    participantChar.locationSlot = expectedLocationSlotId;
+                }
+
+                newLocationsOfParticipants[participantId] = {
+                    locationId: participantChar.location,
+                    locationNameAtTheTime: DE.world.locations[participantChar.location]?.name || "Unknown Location",
+                    locationSlotId: participantChar.locationSlot,
+                    locationSlotNameAtTheTime: DE.world.locations[participantChar.location]?.slots?.[participantChar.locationSlot]?.name || "Unknown Place",
+                };
+            }
+
+            const currentConversationOfTarget = currentConversationIdOfTarget ? await getConversation(currentConversationIdOfTarget) : null;
+            const currentConversationHasAllParticipants = currentConversationOfTarget ?
+                newParticipants.every(p => currentConversationOfTarget.participants.includes(p)) : false;
+
+            const currentConversationHasAllTheLocationsEqual = currentConversationOfTarget ?
+                currentConversationOfTarget.locations && Object.keys(currentConversationOfTarget.locations).every(p => {
+                    const loc = currentConversationOfTarget.locations[p];
+                    const newLoc = newLocationsOfParticipants[p];
+                    return loc && newLoc && loc.locationId === newLoc.locationId && loc.locationSlotId === newLoc.locationSlotId;
+                }) : false;
+
+            const currentConversationHasAllTheCommunicatorsEqual = currentConversationOfTarget ?
+                currentConversationOfTarget.communicators && Object.keys(currentConversationOfTarget.communicators).every(p => {
+                    const comm = currentConversationOfTarget.communicators[p];
+                    const newComm = newCommunicators[p];
+                    return comm && newComm && comm.communicatorName === newComm.communicatorName && comm.communicatorItemId === newComm.communicatorItemId;
+                }) : false;
+
+            const targetConversation = currentConversationHasAllParticipants && currentConversationHasAllTheLocationsEqual && currentConversationHasAllTheCommunicatorsEqual && currentConversationOfTarget ? currentConversationOfTarget : await DE.utils.conversations.newConversation({
                 participants: newParticipants,
-                remoteParticipants: newRemoteParticipants,
-                location: targetChar.location,
-                pseudoConversation: newParticipants.includes(DE.user) || newRemoteParticipants.includes(DE.user) ? false : true,
-            }, options);
+                communicators: newCommunicators,
+                pseudoConversation: newParticipants.includes(DE.user) ? false : true,
+                // @ts-ignore
+            }, { ...options, __newLocationsMemorySaveHack: newLocationsOfParticipants });
 
             return DE.utils.conversations.addMessage(targetConversation.id, message, {
                 unsafeMode: options.unsafeMode || senderIsGhost || message.isStoryMasterMessage || false,
@@ -1025,7 +1122,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     finalConversationeMessages.push(await DE.utils.conversations.addMessage(conversationId, m.message, { unsafeMode: true }));
                 }
                 for (const charId of charactersWithoutConversation) {
-                    finalConversationeMessages.push(await DE.utils.conversations.addMessageIntoTargetConversation(charId, m.message, { unsafeMode: true, ghost: true, teleportParticipants: false }));
+                    finalConversationeMessages.push(await DE.utils.conversations.addMessageIntoTargetConversation(charId, m.message, { unsafeMode: true, ghost: true }));
                 }
             });
 

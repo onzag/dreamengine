@@ -3440,21 +3440,35 @@ declare interface DEConversation {
      */
     participants: Array<string>;
     /**
-     * List of the remote participants in the conversation, a list of ids
-     * these are participants that are not physically present in the same location as the other participants
-     * for example, if two characters are talking on the phone
-     */
-    remoteParticipants: Array<string>;
-    /**
      * The previous conversation IDs for each participant before this conversation started
      * This basically specifies the chain of conversations that led to this one
      * for each participant individually
      */
     previousConversationIdsPerParticipant: Record<string, string | null>;
     /**
-     * The location where the conversation is happening
+     * The locations of each participant at the time of the conversation, this is used to keep track of where each participant was during the conversation
      */
-    location: string;
+    locations: Record<string, {
+        locationId: string;
+        locationNameAtTheTime: string;
+        locationSlotId: string;
+        locationSlotNameAtTheTime: string;
+    }>;
+    /**
+     * Communicator used to establish the conversation, this is used to keep track of what the participants were using to communicate with each other
+     */
+    communicators: Record<string, {
+        /**
+         * The character ID of the communicator, this is the character that is actually communicating with the other participants
+         * for example, if a character is using a phone to communicate with another character, the communicator is the character that is actually speaking on the phone
+         */
+        communicatorName: string;
+        /**
+         * The id of the communicator at the time of the conversation, this is used to keep track of what the communicator was called at the time of the conversation
+         * this could be, for example, a phone
+         */
+        communicatorItemId?: string;
+    }>;
     /**
      * The start time of the conversation
      */
@@ -3757,8 +3771,18 @@ declare interface DENarrationStyle {
 
 declare interface DEUtils {
     id: {
+        /**
+         * Resolve a possibly malformed or swapped ID/name pair to an identifier
+         * fragment. Direct character/location/slot matches return immediately.
+         * Well-formed item ID/name pairs are trusted without searching items.
+         * Recovery widens from local to nearby to distant scopes with fixed visit
+         * limits, using names/aliases, partial names, and small spelling errors.
+         * Always returns a fragment; unresolved inputs are preserved as an item.
+         * Does not create IDs or modify entities; fills missing names when found.
+         */
+        findBestIdentifier(id: string, name: string, characterEmitterId: string | null): Promise<DEConversationMessageFragmentIdentifier>;
         itemIdGenerator(itemName: string): string;
-        characterIdGenerator(): string;
+        characterIdGenerator(charName: string): string;
         locationIdGenerator(locationName: string): string;
     },
     items: {
@@ -3905,7 +3929,7 @@ declare interface DEUtils {
         getConversation(conversationId: string): Promise<DEConversation | null>;
         getAllConversationsAtLocation(locationId: string): Promise<{conversations: DEConversation[], leftoverCharacters: string[], foundCharacters: string[]}>; // leftoverCharacters are characters that are at the location but not in any conversation
         addMessage(conversationId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { unsafeMode?: boolean } = {}): Promise<DEConversationMessage>;
-        addMessageIntoTargetConversation(targetCharacterId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { teleportParticipants?: boolean, unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean } = {}): Promise<DEConversationMessage>;
+        addMessageIntoTargetConversation(targetCharacterId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options?: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean, messageCommunicator?: { type: "new" | "inherit" | "remove"; communicatorName?: string; communicatorItemId?: string; } }): Promise<DEConversationMessage>;
         /**
          * Broadcast a message, all characters at a given location (and beyond) will pick it up
          * 
@@ -3917,7 +3941,7 @@ declare interface DEUtils {
          * @param travelDistaceType
          */
         addMessageBroadcast(message: (distance: number) => Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, location: string, travelDistance: number, travelDistaceType: "meters" | "connections"): Promise<DEConversationMessage[]>;
-        newConversation(conversation: Pick<DEConversation, "participants" | "remoteParticipants" | "location" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipants?: boolean, unsafeMode?: boolean } = {}): Promise<DEConversation>;
+        newConversation(conversation: Pick<DEConversation, "participants" | "communicators" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean } = {}): Promise<DEConversation>;
     },
     characterInfo: {
         /** Same size/perception rules as canSeeItem; a character can always recognize themselves. */
@@ -4407,7 +4431,9 @@ declare interface DEObject {
      * we don't use uuids because they are harder for the LLM and we just need to guarantee uniqueness within the world
      */
     counters: {
-        characterId: number;
+        characterId: {
+            [charName: string]: number;
+        };
         itemId: {
             [itemName: string]: number;
         };

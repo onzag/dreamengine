@@ -186,8 +186,9 @@ export async function* getHistoryForCharacter(engine, character, options) {
         const conversationMessages = currentConversationObject.messages.filter(msg => (options.includeRejectedMessages || !msg.isRejectedMessage) && (options.includeDebugMessages || !msg.isDebugMessage) && (options.includeHiddenMessages || !msg.isHiddenMessage) &&
             (!msg.canOnlyBeSeenByCharacter || msg.canOnlyBeSeenByCharacter === character.id));
 
-        const conversationLocationId = currentConversationObject.location;
-        const conversationLocationName = engine.getDEObject().world.locations[conversationLocationId]?.name || "an Unknown Location";
+        const conversationLocation = currentConversationObject.locations[character.id];
+        const conversationLocationId = conversationLocation.locationId;
+        const conversationLocationName = conversationLocation.locationNameAtTheTime;
         const conversationStartTime = currentConversationObject.startTime;
         const firstMessageIsStoryMaster = conversationMessages.length > 0 && conversationMessages[0].isStoryMasterMessage;
 

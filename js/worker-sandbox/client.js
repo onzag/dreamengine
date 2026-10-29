@@ -227,7 +227,7 @@ export class EngineWorkerClient {
     setWorldRulesDisabled(args) { return this.#call("setWorldRulesDisabled", args); }
     enableSchizophreniaModeForUser() { return this.#call("enableSchizophreniaModeForUser"); }
 
-    /** @param {{ user: DEMinimalCharacterReference | null, playMode: "player" | "narrator" | "voice-in-the-head" }} args */
+    /** @param {{ user: Omit<DEMinimalCharacterReference, "id" | "scriptGivenId" | "script"> | null, playMode: "player" | "narrator" | "voice-in-the-head" }} args */
     initialize(args) { return this.#call("initialize", args); }
     endSimulation() { return this.#call("endSimulation"); }
     /** @param {{ charId: string }} args */

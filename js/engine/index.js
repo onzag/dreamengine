@@ -106,7 +106,7 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
  */
 
 /**
- * @param {DEMinimalCharacterReference} character 
+ * @param {Partial<DEMinimalCharacterReference>} character 
  * @return {DEMinimalCharacterReference}
  */
 export function repairPotentialUserWithDefaults(character) {
@@ -115,6 +115,13 @@ export function repairPotentialUserWithDefaults(character) {
     const sex = character.sex || "intersex";
     return ({
         ...character,
+
+        id: character.id || "???",
+        clothing: character.clothing || "auto",
+        metadata: character.metadata || {},
+        script: character.script || "",
+        unknownName: character.unknownName || "Unknown Creature",
+        scriptGivenId: character.scriptGivenId || "",
 
         ageYears: character.ageYears || 30,
         attractiveness: typeof character.attractiveness === "number" ? character.attractiveness : 0.5,
@@ -167,9 +174,9 @@ export function repairPotentialUserWithDefaults(character) {
  */
 export function createCharacterFromUser(user) {
     return {
-        id: "character-0",
-        script: "",
-        scriptGivenId: "",
+        id: user.id,
+        script: user.script,
+        scriptGivenId: user.scriptGivenId,
         unknownName: user.species === "human" ? "Stranger" : "Unknown Creature",
         adventurousness: 0,
         antagonism: 0,
@@ -516,7 +523,7 @@ export class DEngine {
     }
 
     /**
-     * @param {DEMinimalCharacterReference|null} user
+     * @param {Omit<DEMinimalCharacterReference, "id" | "scriptGivenId" | "script"> | null} user
      * @param {"player" | "narrator" | "voice-in-the-head"} playMode
      */
     async initialize(user, playMode = "player") {
@@ -527,13 +534,13 @@ export class DEngine {
         if (!this.dataManager) {
             throw new Error("Data manager not set, cannot initialize");
         }
+
         /**
          * @type {DETimeDescription}
          */
         const defaultTimeDEFormat = millisecondsToTime((new Date()).getTime());
-        const userValue = user ? repairPotentialUserWithDefaults(user) : repairPotentialUserWithDefaults(/**@type {DEMinimalCharacterReference} */({ name: "Player" }));
         this.deObject = {
-            user: userValue.id,
+            user: "",
             party: [],
             world: {
                 metadata: {},
@@ -573,7 +580,7 @@ export class DEngine {
             state: {},
             stability: 0,
             counters: {
-                characterId: 0,
+                characterId: {},
                 itemId: {},
                 locationId: {},
             },
@@ -583,10 +590,17 @@ export class DEngine {
 
         await this.dataManager.newDatabase();
 
-        // @ts-ignore
         this.deObject.utils = deEngineUtilsFn(this.deObject, this);
 
         this.backupDEObject();
+
+        const userValue = user ? repairPotentialUserWithDefaults(user) : repairPotentialUserWithDefaults({ name: "Player" });
+        const actualUserId = this.deObject.utils.id.characterIdGenerator(userValue.name);
+        this.deObject.user = actualUserId;
+
+        userValue.id = actualUserId;
+        userValue.scriptGivenId = "@engine-" + actualUserId;
+        userValue.script = "@engine";
 
         const userCharacter = user ? createCharacterFromUser(userValue) : null;
         if (userCharacter) {
