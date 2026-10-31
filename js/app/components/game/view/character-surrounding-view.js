@@ -1,5 +1,7 @@
 import '../../world-image.js';
 import './tooltip.js';
+import { createNarrationNodes } from './narration.js';
+import { openIdentifierDialog } from './identifier-dialog.js';
 import { buildSurroundingGroups } from './surrounding-groups.js';
 
 /** @typedef {import('./surrounding-groups.js').SurroundingCharacter} SurroundingCharacter */
@@ -110,24 +112,29 @@ export class CharacterSurroundingView extends HTMLElement {
         const characters = await Promise.all([...characterIds].map(async id => {
             const visibility = await client.queryDEObject({ path: ['utils', 'characterInfo', 'canSeeCharacter'], call: [id, userId] });
             if (visibility === 'invisible') return null;
-            const hasConversation = scene.conversations.some(c => c.participants.includes(id));
-            const [name, metadata, state, externalDescription] = await Promise.all([
+            const [name, metadata, state, externalDescription, position] = await Promise.all([
                 client.queryDEObject({ path: ['utils', 'templates', 'formatCharacterName'], call: [
                     { __type: 'char', value: id }, { __type: 'char', value: userId },
                     { __type: 'object', value: { justName: true, type: 'indefinite', capitalize: true } },
                 ] }),
                 client.queryDEObject({ path: ['characters', id, 'metadata'], pick: ['assets'] }),
-                client.queryDEObject({ path: ['stateFor', id], pick: hasConversation ? ['conversationId'] : ['conversationId', 'locationSlot'] }),
+                client.queryDEObject({ path: ['stateFor', id], pick: ['conversationId', 'locationSlot'] }),
                 client.queryDEObject({ path: ['utils', 'characterInfo', 'getExternalDescriptionOfCharacter'], call: [
                     { __type: 'char', value: id }, { __type: 'char', value: userId }, true, false,
                 ] }),
+                client.queryDEObject({ path: ['utils', 'characterInfo', 'getExternalDescriptionOfCharacterLocationSpecifics'], call: [id, userId, false, true] }),
             ]);
-            const locationSlotName = !hasConversation && state?.locationSlot ? await client.queryDEObject({
-                path: ['utils', 'templates', 'formatLocationSlotName'],
-                call: [state.locationSlot, userId, { __type: 'object', value: { type: 'default', justName: true } }],
-            }) : '';
-            return { id, name: name || 'Unknown character', image: metadata?.assets?.neutral || '',
-                locationSlotName: locationSlotName || '',
+            /** @type {DEConversationMessageNarrationFragment[]} */
+            let positionFragments = position ? [position] : [];
+            if (position) {
+                try {
+                    positionFragments = await client.queryDEObject({ path: ['utils', 'templates', 'parseNarration'], call: [position] });
+                } catch (error) {
+                    console.warn('Unable to parse character location description', error);
+                }
+            }
+            return { id, positionFragments, name: name || 'Unknown character', image: metadata?.assets?.neutral || '',
+                locationSlotName: '',
                 locationSlot: state?.locationSlot || '', conversationId: state?.conversationId || null,
                 remote: false, communicatorName: '',
                 visibility, externalDescription: externalDescription || '' };
@@ -283,18 +290,27 @@ export class CharacterSurroundingView extends HTMLElement {
                     const element = document.createElement('figure');
                     element.className = 'character';
                     element.dataset.characterId = character.id;
-                    element.innerHTML = '<app-game-tooltip class="portrait-tooltip" align-with="bottom" tabindex="0"><app-world-image no-transition="true" default-image="./images/default-profile.png" aria-hidden="true"></app-world-image></app-game-tooltip><figcaption><span class="name"></span><span class="slot"></span><span class="communicator"></span></figcaption>';
+                    element.innerHTML = '<app-game-tooltip class="portrait-tooltip" align-with="bottom" tabindex="0"><app-world-image no-transition="true" default-image="./images/default-profile.png" aria-hidden="true"></app-world-image></app-game-tooltip><figcaption><span class="name"></span><span class="position"></span><span class="communicator"></span></figcaption>';
                     card = { element, placement: target.placement, primary: group.primary };
                     this.cards.set(character.id, card);
                     entering.add(character.id);
                 }
                 card.primary = group.primary;
                 const name = card.element.querySelector('.name');
-                const slot = card.element.querySelector('.slot');
+                const position = card.element.querySelector('.position');
                 const communicator = card.element.querySelector('.communicator');
                 card.element.classList.toggle('remote', character.remote);
                 if (name) name.textContent = character.name;
-                if (slot) slot.textContent = character.remote ? 'Remote' : character.locationSlotName;
+                if (position instanceof HTMLElement) {
+                    const narrationKey = JSON.stringify(character.positionFragments);
+                    if (position.dataset.narration !== narrationKey) {
+                        position.replaceChildren(...createNarrationNodes(character.positionFragments, (id, foundAs) => {
+                            const trigger = this.root.activeElement;
+                            openIdentifierDialog(id, foundAs, trigger instanceof HTMLElement ? trigger : this);
+                        }));
+                        position.dataset.narration = narrationKey;
+                    }
+                }
                 if (communicator) communicator.textContent = character.communicatorName ? `Via ${character.communicatorName}` : '';
                 const tooltip = card.element.querySelector('.portrait-tooltip');
                 if (tooltip) {

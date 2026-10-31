@@ -1,6 +1,7 @@
 import { IdentifierDetail } from './identifier-detail.js';
 import { getItemTreeContext, loadItemNode, loadItemGroups } from './item-tree-data.js';
-import { createItemTree, createItemTags } from './item-node.js';
+import { createItemTree } from './item-node.js';
+import { createItemTags } from './item-tags.js';
 
 export class ItemDialog extends IdentifierDetail {
     constructor() { super(); this.kind = 'Item'; this.layout = 'item'; }

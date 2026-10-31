@@ -1,60 +1,10 @@
 import '../../world-image.js';
+import { createItemTags } from './item-tags.js';
 import { loadItemGroups } from './item-tree-data.js';
 
-/** @typedef {import('./item-tree-data.js').ItemNodeData} ItemNodeData */
+/** @typedef {import('./item-tree-data.js').ItemNodeData | import('./item-tree-data.js').CharacterNodeData} ItemNodeData */
 /** @typedef {import('./item-tree-data.js').ItemTreeContext} ItemTreeContext */
 /** @typedef {import('./item-tree-data.js').ItemGroupData} ItemGroupData */
-
-/** @type {Record<import('./item-tree-data.js').ItemTagIcon, string>} */
-const tagIcons = {
-    communicator: 'M8 5h8v14H8zM10 8h4M11 16h2M5 8a7 7 0 0 0 0 8M19 8a7 7 0 0 1 0 8',
-    consumable: 'M12 21s-7-4-7-9a7 7 0 0 1 14 0c0 5-7 9-7 9ZM12 5V2m0 3c0-3 3-3 4-3',
-    container: 'm3 7 9-4 9 4v10l-9 4-9-4V7Zm0 0 9 4 9-4M12 11v10',
-    open: 'M4 10h16v11H4zM3 6l17-3 1 4-17 3M8 14h8',
-    closed: 'M4 8h16v13H4zM3 4h18v4H3zM9 12h6',
-    locked: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4M12 15v2',
-    eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Zm7 0a3 3 0 1 0 6 0 3 3 0 1 0-6 0',
-    'eye-off': 'm3 3 18 18M10 5a12 12 0 0 1 12 7 16 16 0 0 1-3 4M6 6a17 17 0 0 0-4 6s4 7 10 7a14 14 0 0 0 5-1M9 9a4 4 0 0 0 6 6',
-    rigid: 'M4 4h16v16H4zM4 9h16M9 4v16',
-    flexible: 'M7 3h10l-2 4c5 4 6 7 6 10 0 3-4 4-9 4s-9-1-9-4c0-3 1-6 6-10L7 3Zm2 4h6M8 12c-2 3 0 4-1 6M15 12c-1 2 2 4 1 6',
-    tag: 'M3 3h8l10 10-8 8L3 11V3ZM7 7h.01',
-};
-
-/** Compact badges shared by tree rows and the selected item's details.
- * @param {import('./item-tree-data.js').ItemTagData[]} tags
- */
-export function createItemTags(tags) {
-    const row = document.createElement('span');
-    row.className = 'item-tags';
-    row.hidden = !tags.length;
-    for (const tag of tags) {
-        const badge = document.createElement('span');
-        badge.className = `item-tag item-tag-${tag.source}`;
-        badge.dataset.tagType = tag.type;
-        let category = tag.source === 'state' ? 'State tag' : ['open', 'closed', 'locked'].includes(tag.type) ? 'Container state' : 'Item property';
-        if (tag.type === 'weight') category = 'Weight';
-        if (tag.type === 'volume') category = 'Volume';
-        if (tag.type === 'capacity-weight') category = 'Container weight capacity';
-        if (tag.type === 'capacity-volume') category = 'Container volume capacity';
-        badge.title = `${category}: ${tag.label}${tag.description ? `; ${tag.description}` : ''}`;
-        badge.setAttribute('aria-label', badge.title);
-        const icons = tag.icons || (Object.prototype.hasOwnProperty.call(tagIcons, tag.type) ? [/** @type {import('./item-tree-data.js').ItemTagIcon} */ (tag.type)] : []);
-        for (const iconName of icons) {
-            const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            icon.setAttribute('viewBox', '0 0 24 24');
-            icon.setAttribute('aria-hidden', 'true');
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', tagIcons[iconName]);
-            icon.append(path);
-            badge.append(icon);
-        }
-        const label = document.createElement('span');
-        label.textContent = tag.label;
-        badge.append(label);
-        row.append(badge);
-    }
-    return row;
-}
 
 /** @type {Map<string, boolean>} */
 const expansionMemory = new Map();
@@ -107,7 +57,7 @@ function createGroups(groups, context, depth, ancestors) {
             list.setAttribute('aria-label', group.label);
             for (const item of group.items) {
                 const entry = document.createElement('li');
-                if (ancestors.includes(item.id)) {
+                if (item.kind !== 'character' && ancestors.includes(item.id)) {
                     entry.append(message('This item is already shown above.'));
                 } else {
                     const node = /** @type {ItemNode} */ (document.createElement('app-item-node'));
@@ -178,10 +128,20 @@ export class ItemNode extends HTMLElement {
             <div id="children" class="item-node-children" hidden></div>`;
         this.dataset.blindness = this.context.blindness;
         const image = /** @type {HTMLElement} */ (this.root.querySelector('app-asset-image'));
-        image.setAttribute('default-image', new URL('../../../images/default-item.png', import.meta.url).href);
+        image.setAttribute('default-image', new URL(this.data.kind === 'character' ? '../../../images/default-profile.png' : '../../../images/default-item.png', import.meta.url).href);
         image.setAttribute('image-url', this.data.asset);
         const label = /** @type {HTMLElement} */ (this.root.querySelector('.item-node-label'));
         label.textContent = this.data.label;
+        if (this.data.kind === 'character' && this.data.descriptionFragments?.length) {
+            const description = document.createElement('span');
+            description.className = 'item-node-description';
+            // Resolve rich identifiers to their visible text; the row itself
+            // opens the character, so it must not contain nested controls.
+            const text = this.data.descriptionFragments.map(fragment =>
+                typeof fragment === 'string' ? fragment : fragment.text).join('');
+            description.textContent = ` - ${text}`;
+            this.root.querySelector('.item-node-title')?.append(description);
+        }
         this.root.querySelector('.item-node-text')?.append(createItemTags(this.data.tags));
         const count = /** @type {HTMLElement} */ (this.root.querySelector('.item-node-count'));
         count.textContent = this.data.amount > 1 ? `(x${this.data.amount})` : '';
@@ -190,14 +150,19 @@ export class ItemNode extends HTMLElement {
         const open = /** @type {HTMLButtonElement} */ (this.root.querySelector('.item-open'));
         open.title = `View ${this.data.label}`;
         open.addEventListener('click', () => this.dispatchEvent(new CustomEvent('identifier-navigate', {
-            bubbles: true, composed: true, detail: { identifier: this.data?.id, foundAs: 'item' },
+            bubbles: true, composed: true, detail: { identifier: this.data?.id, foundAs: this.data?.kind === 'character' ? 'character' : 'item' },
         })));
         this.root.querySelector('.item-toggle')?.addEventListener('click', () => {
             if (!this.context || !this.data) return;
             rememberItemExpansion(this.context, this.data.id, !this.expanded);
             this.setExpanded(!this.expanded);
         });
-        this.setExpanded(isItemExpanded(this.context, this.data.id, this.depth));
+        if (this.data.kind === 'character') {
+            const toggle = /** @type {HTMLButtonElement} */ (this.root.querySelector('.item-toggle'));
+            toggle.hidden = true;
+        } else {
+            this.setExpanded(isItemExpanded(this.context, this.data.id, this.depth));
+        }
     }
 
     disconnectedCallback() { this.version++; }
@@ -215,7 +180,7 @@ export class ItemNode extends HTMLElement {
     }
 
     async loadChildren() {
-        if (!this.data || !this.context) return;
+        if (!this.data || !this.context || this.data.kind === 'character') return;
         const version = this.version;
         this.loading = true;
         const children = /** @type {HTMLElement} */ (this.root.getElementById('children'));

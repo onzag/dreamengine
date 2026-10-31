@@ -17,6 +17,7 @@ import { getSizeVisibility } from "./visibility.js";
  *    itemPath: Array<string | number> | null,
  *    itemPathEnd: "containingCharacters" | "ontopCharacters" | null,
  *    item: DEItem | null,
+ *    relativePosition: string | null,
  * } | null}
  */
 export function getBeingCarriedByCharacter(deObject, characterId) {
@@ -30,7 +31,8 @@ export function getBeingCarriedByCharacter(deObject, characterId) {
             continue;
         }
 
-        if (otherCharState.carryingCharactersDirectly && otherCharState.carryingCharactersDirectly.some(c => c.id === characterId)) {
+        const foundCarry = otherCharState.carryingCharactersDirectly && otherCharState.carryingCharactersDirectly.find(c => c.id === characterId);
+        if (foundCarry) {
             return {
                 carrierId: otherCharId,
                 carrierLocation: otherCharState.location,
@@ -40,6 +42,7 @@ export function getBeingCarriedByCharacter(deObject, characterId) {
                 itemPath: null,
                 itemPathEnd: null,
                 item: null,
+                relativePosition: foundCarry.relativePosition || null,
             };
         }
 
@@ -54,6 +57,7 @@ export function getBeingCarriedByCharacter(deObject, characterId) {
                 itemPath: found.path,
                 itemPathEnd: found.end,
                 item: found.item,
+                relativePosition: found.relativePosition || null,
             };
         }
 
@@ -68,6 +72,7 @@ export function getBeingCarriedByCharacter(deObject, characterId) {
                 itemPath: found2.path,
                 itemPathEnd: found2.end,
                 item: found2.item,
+                relativePosition: found2.relativePosition || null,
             };
         }
     }
@@ -85,24 +90,31 @@ export function getBeingCarriedByCharacter(deObject, characterId) {
  *   accumulatedItems: Array<DEItem>,
  *   end: "containingCharacters" | "ontopCharacters",
  *   item: DEItem,
+ *   relativePosition: string | null,
  * } | null}
  */
 export function findLocationOfCharInsideOrAtopItemRecursive(otherCharacterId, list, pathSoFar, accumulatedItemsSoFar) {
     for (let i = 0; i < list.length; i++) {
         const item = list[i];
-        if (item.containingCharacters && item.containingCharacters.some(c => c.id === otherCharacterId)) {
+        const foundContaining = item.containingCharacters && item.containingCharacters.find(c => c.id === otherCharacterId);
+        if (foundContaining) {
             return {
                 path: [...pathSoFar, i],
                 accumulatedItems: [...accumulatedItemsSoFar, item],
                 end: "containingCharacters",
                 item: item,
+                relativePosition: foundContaining.relativePosition || null,
             }
-        } else if (item.ontopCharacters && item.ontopCharacters.some(c => c.id === otherCharacterId)) {
+        }
+
+        const foundOntop = item.ontopCharacters && item.ontopCharacters.find(c => c.id === otherCharacterId);
+        if (foundOntop) {
             return {
                 path: [...pathSoFar, i],
                 accumulatedItems: [...accumulatedItemsSoFar, item],
                 end: "ontopCharacters",
                 item: item,
+                relativePosition: foundOntop.relativePosition || null,
             }
         } else {
             const found = findLocationOfCharInsideOrAtopItemRecursive(otherCharacterId, item.containing, [...pathSoFar, i, "containing"], [...accumulatedItemsSoFar, item]);
@@ -175,6 +187,7 @@ export function findLocationOfAnyCharInsideOrAtopItemRecursive(list, pathSoFar, 
  *   accumulatedItems: Array<DEItem>,
  *   item: DEItem | null,
  *   itemPathEnd: "containingCharacters" | "ontopCharacters" | null,
+ *   relativePosition: string | null,
  * }}
  */
 export function getCharacterExactLocation(deObject, characterId) {
@@ -191,6 +204,7 @@ export function getCharacterExactLocation(deObject, characterId) {
             itemPath: beingCarriedInfo.itemPath,
             item: beingCarriedInfo.item,
             itemPathEnd: beingCarriedInfo.itemPathEnd,
+            relativePosition: beingCarriedInfo.relativePosition || null,
         };
     }
     const location = charState.location;
@@ -205,6 +219,7 @@ export function getCharacterExactLocation(deObject, characterId) {
                 itemPath: foundChar.path,
                 item: foundChar.item,
                 itemPathEnd: foundChar.end,
+                relativePosition: foundChar.relativePosition || null,
             };
         }
     }
@@ -215,6 +230,7 @@ export function getCharacterExactLocation(deObject, characterId) {
         itemPath: null,
         item: null,
         itemPathEnd: null,
+        relativePosition: null,
     };
 }
 
@@ -599,7 +615,7 @@ export function whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharac
     let canTellGender = true;
     let canTellHeight = true;
     let canTellWeight = true;
-    
+
     const hasHighPerception = inPerspectiveCharacterPerception >= 0.75 ||
         character.id === inPerspectiveCharacter.id ||
         inPerspectiveCharacterBlindness === "partial-good" ||
@@ -654,7 +670,7 @@ export function whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharac
  */
 export function whatCanTheyMakeOfALocation(location, inPerspectiveCharacter) {
     const inPerspectiveCharacterPerception = inPerspectiveCharacter.perception;
-    
+
     const hasHighPerception = inPerspectiveCharacterPerception >= 0.75 || inPerspectiveCharacter.blindness === "partial-good" || inPerspectiveCharacter.blindness === "no";
     const hasLowPerception = inPerspectiveCharacterPerception < 0.5 && !hasHighPerception;
     const hasMediumPerception = inPerspectiveCharacterPerception >= 0.5 && inPerspectiveCharacterPerception < 0.75 && !hasHighPerception;
@@ -722,7 +738,7 @@ export function whatCanTheyMakeOfAnItem(deObject, item, inPerspectiveCharacter) 
     const canTellTheirWeight = visibility === "perceived" || visibility === "visible" || theyAreAwareOfTheItemInGeneral;
 
     const inPerspectiveCharacterPerception = inPerspectiveCharacter.perception;
-    
+
     const hasHighPerception = inPerspectiveCharacterPerception >= 0.75 || theyAreAwareOfTheItemInGeneral ||
         inPerspectiveCharacter.blindness === "partial-good" || inPerspectiveCharacter.blindness === "no";
     const hasLowPerception = inPerspectiveCharacterPerception < 0.5 && !hasHighPerception;
@@ -790,7 +806,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
 
     const sameSpeciesAsPerspective = characterSpecies === inPerspectiveCharacter.species;
 
-    const characterSpeciesFromPerspective = sameSpeciesAsPerspective ?  "fellow " + characterSpecies : characterSpecies;
+    const characterSpeciesFromPerspective = sameSpeciesAsPerspective ? "fellow " + characterSpecies : characterSpecies;
 
     const descriptionsOfSpeciesType = {
         "humanoid": "a humanoid creature",
@@ -938,7 +954,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
         const hasItemsCoveringTopNakenessThatAreNotUnderwear = characterState.wearing.some(item => item.wearableProperties && item.wearableProperties.coversTopNakedness && !item.wearableProperties.underwear);
 
         if (characterState.wearing.length > 0) {
-                if (whatCanTheyMakeOf.canTellDetailsOfClothingOrCarriedItems) {
+            if (whatCanTheyMakeOf.canTellDetailsOfClothingOrCarriedItems) {
                 const visibleWornItems = characterState.wearing.filter(item => {
                     if (!item.wearableProperties) {
                         return false;
@@ -985,9 +1001,9 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
 
         if (characterExactLocation.beingCarriedById) {
             // if (whatCanTheyMakeOf.canTellDetailsOfClothingOrCarriedItems) {
-                finalDescription += ` Being carried by ${deObject.utils.templates.formatCharacterName(characterExactLocation.beingCarriedById, inPerspectiveCharacter, {
-                    type: "definite",
-                })}.`;
+            finalDescription += ` Being carried by ${deObject.utils.templates.formatCharacterName(characterExactLocation.beingCarriedById, inPerspectiveCharacter, {
+                type: "definite",
+            })}.`;
             // } else {
             //     finalDescription += ` Being carried by someone, but cannot make out the details of who it is.`;
             // }
@@ -1012,9 +1028,10 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
  * @param {string} characterId 
  * @param {string} inPerspectiveOfCharacterId
  * @param {boolean} hideCurrentPosture
+ * @param {boolean} noName
  * @returns {string}
  */
-export function getExternalDescriptionOfCharacterPostureOnly(deObject, characterId, inPerspectiveOfCharacterId, hideCurrentPosture = false) {
+export function getExternalDescriptionOfCharacterPostureOnly(deObject, characterId, inPerspectiveOfCharacterId, hideCurrentPosture = false, noName = false) {
     const character = deObject.characters[characterId];
     if (!character) {
         throw new Error(`Character ${characterId} not found.`);
@@ -1034,24 +1051,48 @@ export function getExternalDescriptionOfCharacterPostureOnly(deObject, character
     const characterExactLocation = getCharacterExactLocation(deObject, characterId);
 
     const slotValue = deObject.world.locations[characterState.location].slots[characterState.locationSlot];
-    const formattedSlotName = deObject.utils.templates.formatLocationSlotName(slotValue, inPerspectiveOfCharacterId, {type: "definite"})
+    const formattedSlotName = deObject.utils.templates.formatLocationSlotName(slotValue, inPerspectiveOfCharacterId, { type: "definite" })
 
     let postureAppliedOnDescription = (posturesThatDoNotSpecifyGround.includes(characterState.posture)) ? "at " + formattedSlotName : "on the ground at " + formattedSlotName;
     if (characterExactLocation.itemPathEnd === "ontopCharacters" && characterExactLocation.itemPath) {
-        postureAppliedOnDescription = locationPathToMessage(deObject, characterId, inPerspectiveOfCharacterId, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
+        postureAppliedOnDescription = locationPathToMessage(
+            deObject,
+            characterId,
+            inPerspectiveOfCharacterId,
+            characterState.location,
+            [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]
+        );
     } else if (characterExactLocation.itemPathEnd === "containingCharacters" && characterExactLocation.itemPath) {
-        postureAppliedOnDescription = locationPathToMessage(deObject, characterId, inPerspectiveOfCharacterId, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
+        postureAppliedOnDescription = locationPathToMessage(
+            deObject,
+            characterId,
+            inPerspectiveOfCharacterId,
+            characterState.location,
+            [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]
+        );
     }
-    
+
     const inPerspectiveOfCharacterName = deObject.utils.templates.formatCharacterName(character, inPerspectiveOfCharacterId, {
         capitalize: true,
         type: "definite",
     });
+
+    let messageFinal = "";
     if (!hideCurrentPosture) {
-        return inPerspectiveOfCharacterName + " is " + postureToText(characterState.posture) + " " + postureAppliedOnDescription + ".";
+        messageFinal = postureToText(characterState.posture) + " " + postureAppliedOnDescription + ".";
     } else {
-        return inPerspectiveOfCharacterName + " is " + postureAppliedOnDescription + ".";
+        messageFinal = postureAppliedOnDescription + ".";
     }
+    if (!noName) {
+        messageFinal = inPerspectiveOfCharacterName + " is " + messageFinal;
+    }
+
+    if (characterExactLocation.relativePosition) {
+        // capitalize the first letter of the relative position
+        messageFinal += " " + characterExactLocation.relativePosition.charAt(0).toUpperCase() + characterExactLocation.relativePosition.slice(1) + ".";
+    }
+
+    return messageFinal;
 }
 
 /**
@@ -1386,7 +1427,7 @@ export async function getCharacterCanSee(deObject, characterId) {
     } else {
         for (const slotId of slotIds) {
             const slot = location.slots[slotId];
-            finalDescription += `## Items at ${deObject.utils.templates.formatLocationSlotName(slot, null, {type: "definite"})}:\n\n`;
+            finalDescription += `## Items at ${deObject.utils.templates.formatLocationSlotName(slot, null, { type: "definite" })}:\n\n`;
             listItemArray("", true, slot.items, null);
             finalDescription += "\n";
         }
@@ -2375,13 +2416,13 @@ export async function getSysPromptForCharacter(engine, characterId) {
     let scenario = "";
     const currentLocation = engine.deObject.world.locations[engine.deObject.stateFor[characterId].location];
     if (currentLocation) {
-        scenario = `## Location:\n\n${engine.deObject.utils.templates.formatLocationName(engine.deObject.stateFor[characterId].location, characterId, {type: "default"})}, ` + (typeof currentLocation.description === "string" ? currentLocation.description : await currentLocation.description({
+        scenario = `## Location:\n\n${engine.deObject.utils.templates.formatLocationName(engine.deObject.stateFor[characterId].location, characterId, { type: "default" })}, ` + (typeof currentLocation.description === "string" ? currentLocation.description : await currentLocation.description({
             char: character,
         }));
     }
     const currentLocationSlot = currentLocation.slots[engine.deObject.stateFor[characterId].locationSlot];
     if (currentLocationSlot) {
-        scenario += `\n\nSpecifically at ${engine.deObject.utils.templates.formatLocationSlotName(currentLocationSlot, characterId, {type: "definite"})}, ` + (typeof currentLocationSlot.description === "string" ? currentLocationSlot.description : await currentLocationSlot.description({
+        scenario += `\n\nSpecifically at ${engine.deObject.utils.templates.formatLocationSlotName(currentLocationSlot, characterId, { type: "definite" })}, ` + (typeof currentLocationSlot.description === "string" ? currentLocationSlot.description : await currentLocationSlot.description({
             char: character,
         }));
     }

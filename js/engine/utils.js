@@ -1,4 +1,4 @@
-import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter, whatCanTheyMakeOfALocation, whatCanTheyMakeOfAnotherCharacter, whatCanTheyMakeOfAnItem, getCharacterExactLocation } from "./util/character-info.js";
+import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter, whatCanTheyMakeOfALocation, whatCanTheyMakeOfAnotherCharacter, whatCanTheyMakeOfAnItem, getCharacterExactLocation, getExternalDescriptionOfCharacterPostureOnly } from "./util/character-info.js";
 import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/random.js";
 import { getCharacterVolume, getCharacterWeight } from "./util/weight-and-volume.js";
 import { emotions } from "./util/emotions.js";
@@ -542,6 +542,18 @@ export const deEngineUtilsFn = (DE, engine) => ({
         },
         getLocationSlotById(slotId) {
             return resolveLocationSlot(DE, slotId) || null;
+        },
+        getCharacterIdsAtLocationSlot(slot) {
+            const resolvedSlot = resolveLocationSlot(DE, slot);
+            if (!resolvedSlot) throw new Error(`Location slot ${slot} not found`);
+            return Object.keys(DE.stateFor).filter(id => {
+                const state = DE.stateFor[id];
+                if (state.deadEnded || !DE.characters[id]) return false;
+                const location = getCharacterExactLocation(DE, id);
+                const slotId = location.itemPath?.[0] === 'slots' ? location.itemPath[1]
+                    : location.beingCarriedById ? DE.stateFor[location.beingCarriedById].locationSlot : state.locationSlot;
+                return slotId === resolvedSlot.id;
+            });
         },
         getRepresentativeItemsAtLocationSlot(slot) {
             const resolvedSlot = resolveLocationSlot(DE, slot);
@@ -1540,6 +1552,17 @@ export const deEngineUtilsFn = (DE, engine) => ({
             const target = requireCharacter(DE, char);
             const observer = requireCharacter(DE, inPerspectiveOf);
             return getExternalDescriptionOfCharacter(DE, target.id, observer.id, onlyBasics, hideCurrentPosture);
+        },
+        getExternalDescriptionOfCharacterLocationSpecifics(char, inPerspectiveOf, hideCurrentPosture, noName) {
+            const target = requireCharacter(DE, char);
+            const observer = requireCharacter(DE, inPerspectiveOf);
+            return getExternalDescriptionOfCharacterPostureOnly(
+                DE,
+                target.id,
+                observer.id,
+                hideCurrentPosture,
+                noName,
+            );
         },
         isWithinAttractionGroupFor(opt, char1, char2) {
             const char1Ref = resolveCharacter(DE, char1);

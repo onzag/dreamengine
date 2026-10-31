@@ -3883,6 +3883,7 @@ declare interface DEUtils {
         /** Find a location slot by its globally unique ID. */
         getLocationSlotById(slotId: string): DELocationSlot | null;
         /** Group a slot's direct items by equality ignoring ids, returning the first item and count for each group. */
+        getCharacterIdsAtLocationSlot(slot: DELocationSlot | string): string[];
         getRepresentativeItemsAtLocationSlot(slot: DELocationSlot | string): Array<{ item: DEItem; amount: number }>;
         newLocation(
             definition: Omit<DELocation, "id" | "scriptGivenId" | "slots">,
@@ -4043,6 +4044,7 @@ declare interface DEUtils {
         /** Resolve character visibility using location, sensory resolution and awareness of conversation partners or carriers. */
         canSeeCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf?: DECompleteCharacterReference | string | null): DEVisibility;
         getExternalDescriptionOfCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf: DECompleteCharacterReference | string, onlyBasics?: boolean, hideCurrentPosture?: boolean): Promise<string>;
+        getExternalDescriptionOfCharacterLocationSpecifics(char: DECompleteCharacterReference | string, inPerspectiveOf: DECompleteCharacterReference | string, hideCurrentPosture?: boolean, noName?: boolean): string;
 
         isWithinAttractionGroupFor(option: "male" | "female" | "ambiguous", char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
 

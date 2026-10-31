@@ -1,4 +1,4 @@
-/** @typedef {{id: string, name: string, image: string, externalDescription: string, locationSlot: string, locationSlotName: string, conversationId: string|null, visibility: DEVisibility, remote: boolean, communicatorName: string}} SurroundingCharacter */
+/** @typedef {{id: string, name: string, image: string, positionFragments: DEConversationMessageNarrationFragment[], externalDescription: string, locationSlot: string, locationSlotName: string, conversationId: string|null, visibility: DEVisibility, remote: boolean, communicatorName: string}} SurroundingCharacter */
 /** @typedef {{id: string, primary: boolean, characters: SurroundingCharacter[]}} SurroundingGroup */
 /** @typedef {Pick<DEConversation, 'id'|'participants'|'locations'|'communicators'>} SurroundingConversation */
 /** @typedef {{conversations: SurroundingConversation[], foundCharacters: string[], leftoverCharacters: string[]}} SurroundingScene */

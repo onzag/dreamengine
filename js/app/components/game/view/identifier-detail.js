@@ -1,4 +1,5 @@
 import '../../world-image.js';
+import { createStatTags } from './item-tags.js';
 import { createNarrationNodes } from './narration.js';
 
 /** @typedef {{name: string, description: string, portrait?: string, banner?: string, content?: HTMLElement, stats?: Array<{label: string, value: string, icon: string}>}} IdentifierDetailData */
@@ -55,24 +56,7 @@ export class IdentifierDetail extends HTMLElement {
             hero.hidden = !images.length;
             this.root.querySelector('.character-stats')?.remove();
             if (data.stats?.length) {
-                const stats = document.createElement('dl');
-                stats.className = 'character-stats';
-                stats.setAttribute('aria-label', 'Character details');
-                for (const stat of data.stats) {
-                    const row = document.createElement('div');
-                    const label = document.createElement('dt');
-                    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                    icon.setAttribute('viewBox', '0 0 24 24');
-                    icon.setAttribute('aria-hidden', 'true');
-                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                    path.setAttribute('d', stat.icon);
-                    icon.append(path);
-                    label.append(icon, stat.label);
-                    const value = document.createElement('dd');
-                    value.textContent = stat.value;
-                    row.append(label, value);
-                    stats.append(row);
-                }
+                const stats = createStatTags(data.stats);
                 description.before(stats);
             }
             description.removeAttribute('role');

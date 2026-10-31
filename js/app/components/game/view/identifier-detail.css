@@ -1,5 +1,6 @@
 @import './shared.css';
 @import './identifier-links.css';
+@import './item-tags.css';
 :host { display: block; --ink: #edf6ff; --muted: #b3c7da; --accent: #a7d9ff; color: var(--ink); }
 .detail { --image-blur: 0vh; min-width: 0; padding: 0 1vh 2vh; }
 .detail[data-blindness="partial-good"] { --image-blur: .45vh; }
@@ -15,12 +16,7 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
 .character .with-banner { padding-bottom: 10vh; }
 .character .with-banner .portrait { position: absolute; bottom: 0; left: 3vh; }
 .copy { min-width: 0; }
-.character-stats { display: flex; flex-direction: column; margin: 0 0 2vh; border: .1vh solid rgba(167, 217, 255, .25); border-radius: .8vh; background: rgba(20, 43, 65, .45); }
-.character-stats > div { display: grid; grid-template-columns: 14vh minmax(0, 1fr); align-items: baseline; gap: 1.5vh; padding: 1.2vh 1.5vh; }
-.character-stats > div + div { border-top: .1vh solid rgba(167, 217, 255, .15); }
-.character-stats dt { display: flex; align-items: center; gap: .8vh; color: var(--muted); font-size: 1.8vh; }
-.character-stats svg { width: 2.3vh; height: 2.3vh; flex-shrink: 0; fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.character-stats dd { margin: 0; font-size: 2.2vh; line-height: 1.4; overflow-wrap: anywhere; }
+.character-stats { margin: 0 0 2vh; }
 .description { font-size: 2.7vh; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 80ch; }
 .item { display: grid; grid-template-columns: 24vh minmax(0, 1fr); gap: 0 3vh; }
 .detail-extra { grid-column: 1 / -1; min-width: 0; margin-top: 2vh; }
