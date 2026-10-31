@@ -23,4 +23,5 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
 .character-stats dd { margin: 0; font-size: 2.2vh; line-height: 1.4; overflow-wrap: anywhere; }
 .description { font-size: 2.7vh; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 80ch; }
 .item { display: grid; grid-template-columns: 24vh minmax(0, 1fr); gap: 0 3vh; }
+.detail-extra { grid-column: 1 / -1; min-width: 0; margin-top: 2vh; }
 @media (max-width: 700px) { .item { grid-template-columns: minmax(0, 1fr); } .banner { height: 20vh; } .portrait { width: 18vh; height: 18vh; } }

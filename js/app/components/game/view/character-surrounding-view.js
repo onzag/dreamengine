@@ -1,17 +1,19 @@
 import '../../world-image.js';
 import './tooltip.js';
-import { buildSurroundingGroups, getVisibleSurroundingGroups } from './surrounding-groups.js';
+import { buildSurroundingGroups } from './surrounding-groups.js';
 
 /** @typedef {import('./surrounding-groups.js').SurroundingCharacter} SurroundingCharacter */
 /** @typedef {import('./surrounding-groups.js').SurroundingGroup} SurroundingGroup */
-/** @typedef {{location: string, userId: string, userName: string, blindness: DECompleteCharacterReference['blindness'], groups: SurroundingGroup[]}} SurroundingsDisplayData */
+/** @typedef {{location: string, locationName: string, userId: string, userName: string, blindness: DECompleteCharacterReference['blindness'], hasHighPerception: boolean, groups: SurroundingGroup[]}} SurroundingsDisplayData */
 /**
  * Live engine snapshot before grouping.
  * @typedef {object} SurroundingsSceneState
  * @property {string} location
+ * @property {string} locationName
  * @property {string} userId
  * @property {string} userName
  * @property {DECompleteCharacterReference['blindness']} blindness
+ * @property {boolean} hasHighPerception
  * @property {import('./surrounding-groups.js').SurroundingScene} scene
  * @property {SurroundingCharacter[]} characters
  */
@@ -75,8 +77,8 @@ export class CharacterSurroundingView extends HTMLElement {
 
     /** @returns {Promise<SurroundingsDisplayData>} */
     async getDisplayData() {
-        const { location, userId, userName, blindness, scene, characters } = await this.getLiveSceneState();
-        return { location, userId, userName, blindness, groups: buildSurroundingGroups(scene, userId, characters, location) };
+        const { location, locationName, userId, userName, blindness, hasHighPerception, scene, characters } = await this.getLiveSceneState();
+        return { location, locationName, userId, userName, blindness, hasHighPerception, groups: buildSurroundingGroups(scene, userId, characters) };
     }
 
     /** @returns {Promise<SurroundingsSceneState>} */
@@ -84,35 +86,38 @@ export class CharacterSurroundingView extends HTMLElement {
         const client = window.ENGINE_WORKER_CLIENT;
         /** @type {string} */
         const userId = await client.queryDEObject({ path: ['user'] });
-        const [userState, userCharacter] = await Promise.all([
-            client.queryDEObject({ path: ['stateFor', userId], pick: ['location', 'conversationId'] }),
-            client.queryDEObject({ path: ['characters', userId], pick: ['name', 'blindness'] }),
+        const [userState, userCharacter, userName] = await Promise.all([
+            client.queryDEObject({ path: ['stateFor', userId], pick: ['location'] }),
+            client.queryDEObject({ path: ['characters', userId], pick: ['blindness'] }),
+            client.queryDEObject({ path: ['utils', 'templates', 'formatCharacterName'], call: [userId, userId,
+                { __type: 'object', value: { justName: true, type: 'definite', capitalize: true } }] }),
         ]);
         /** @type {SurroundingsSceneState['blindness']} */
         const blindness = userCharacter?.blindness || 'no';
-        const userName = userCharacter?.name || String(userId || 'The character');
         const location = userState?.location || '';
-        if (!location) return { location, userId, userName, blindness, characters: [], scene: { conversations: [], foundCharacters: [], leftoverCharacters: [] } };
-        /** @type {SurroundingsSceneState['scene']} */
-        const scene = await client.queryDEObject({
-            path: ['utils', 'conversations', 'getAllConversationsAtLocation'],
-            call: [location], pick: ['conversations', 'foundCharacters', 'leftoverCharacters'],
-        });
-        const userConversation = scene.conversations.find(c => c.id === userState?.conversationId && c.participants.includes(userId))
-            || scene.conversations.find(c => c.participants.includes(userId));
-        const characterIds = new Set([...scene.foundCharacters, ...(userConversation?.participants || [])]);
+        if (!location) return { location, locationName: '', userId, userName, blindness, hasHighPerception: false, characters: [], scene: { conversations: [], foundCharacters: [], leftoverCharacters: [] } };
+        /** @type {[SurroundingsSceneState['scene'], string, {hasHighPerception: boolean}]} */
+        const [scene, locationName, { hasHighPerception }] = await Promise.all([
+            client.queryDEObject({
+                path: ['utils', 'conversations', 'getAllConversationsAtLocation'],
+                call: [location], pick: ['conversations', 'foundCharacters', 'leftoverCharacters'],
+            }),
+            client.queryDEObject({ path: ['utils', 'templates', 'formatLocationName'], call: [location, userId,
+                { __type: 'object', value: { justName: true } }] }),
+            client.queryDEObject({ path: ['utils', 'world', 'whatCanTheyMakeOfALocation'], call: [location, userId], pick: ['hasHighPerception'] }),
+        ]);
+        const characterIds = new Set(scene.foundCharacters);
         const characters = await Promise.all([...characterIds].map(async id => {
+            const visibility = await client.queryDEObject({ path: ['utils', 'characterInfo', 'canSeeCharacter'], call: [id, userId] });
+            if (visibility === 'invisible') return null;
             const hasConversation = scene.conversations.some(c => c.participants.includes(id));
-            const [name, metadata, state, visibility, externalDescription] = await Promise.all([
+            const [name, metadata, state, externalDescription] = await Promise.all([
                 client.queryDEObject({ path: ['utils', 'templates', 'formatCharacterName'], call: [
                     { __type: 'char', value: id }, { __type: 'char', value: userId },
                     { __type: 'object', value: { justName: true, type: 'indefinite', capitalize: true } },
                 ] }),
                 client.queryDEObject({ path: ['characters', id, 'metadata'], pick: ['assets'] }),
                 client.queryDEObject({ path: ['stateFor', id], pick: hasConversation ? ['conversationId'] : ['conversationId', 'locationSlot'] }),
-                client.queryDEObject({ path: ['utils', 'characterInfo', 'canSeeCharacter'], call: [
-                    { __type: 'char', value: id }, { __type: 'char', value: userId },
-                ] }),
                 client.queryDEObject({ path: ['utils', 'characterInfo', 'getExternalDescriptionOfCharacter'], call: [
                     { __type: 'char', value: id }, { __type: 'char', value: userId }, true, false,
                 ] }),
@@ -127,7 +132,7 @@ export class CharacterSurroundingView extends HTMLElement {
                 remote: false, communicatorName: '',
                 visibility, externalDescription: externalDescription || '' };
         }));
-        return { location, userId, userName, blindness, scene, characters };
+        return { location, locationName, userId, userName, blindness, hasHighPerception, scene, characters: characters.filter(character => character !== null) };
     }
 
     /** Queue the latest engine snapshot for the animation pipeline.
@@ -178,7 +183,7 @@ export class CharacterSurroundingView extends HTMLElement {
         /** @type {Map<string, {character: SurroundingCharacter, group: SurroundingGroup, placement: string}>} */
         const desired = new Map();
         // Keep at most one portrait per character while groups change.
-        const groups = getVisibleSurroundingGroups(data.groups, data.userId);
+        const groups = data.groups;
         for (const group of groups) for (const character of group.characters) {
             if (!desired.has(character.id)) desired.set(character.id, {
                 character, group, placement: JSON.stringify([data.location, group.id, character.remote ? 'remote' : character.locationSlot]),
@@ -198,12 +203,20 @@ export class CharacterSurroundingView extends HTMLElement {
 
         const notice = this.root.querySelector('.blindness-notice');
         if (notice instanceof HTMLElement) {
-            const uncertain = (data.blindness === 'partial-bad' || data.blindness === 'full')
-                && !groups.some(group => !group.primary);
-            notice.hidden = !uncertain;
-            notice.textContent = uncertain
-                ? `${data.userName} is ${data.blindness === 'full' ? 'totally' : 'partially'} blind so is unsure if there are other characters around.`
-                : '';
+            let message = '';
+            if (data.location) {
+                if (data.hasHighPerception) {
+                    if (!groups.length) message = `There are no other characters at ${data.locationName}.`;
+                } else {
+                    const reason = data.blindness === 'full' ? ' due to blindness'
+                        : data.blindness !== 'no' ? ' due to limited vision' : '';
+                    message = groups.length
+                        ? `${data.userName} might be missing some other characters${reason}.`
+                        : `${data.userName} cannot see anyone else${reason}.`;
+                }
+            }
+            notice.hidden = !message;
+            notice.textContent = message;
         }
 
         /** @type {Map<string, HTMLElement>} */

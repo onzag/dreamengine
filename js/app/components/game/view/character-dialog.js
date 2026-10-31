@@ -1,4 +1,6 @@
 import { IdentifierDetail } from './identifier-detail.js';
+import { getItemTreeContext, loadCharacterItemGroups } from './item-tree-data.js';
+import { createItemTree } from './item-node.js';
 
 const icons = {
     gender: 'M16 9a5 5 0 1 1-10 0 5 5 0 0 1 10 0ZM11 14v7m-3-3h6m1-13 5-3m-4 0h4v4',
@@ -37,7 +39,7 @@ export class CharacterDialog extends IdentifierDetail {
         const id = this.getAttribute('identifier-id') || '';
         const [character, name, description, visibility, user] = await Promise.all([
             client.queryDEObject({ path: ['characters', id], pick: ['metadata', 'gender', 'heightCm', 'weightKg', 'species', 'speciesType'] }),
-            client.queryDEObject({ path: ['utils', 'templates', 'formatCharacterName'], call: [id, userId, { __type: 'object', value: { justName: true, capitalize: true, type: "indefinite" } }] }),
+            client.queryDEObject({ path: ['utils', 'templates', 'formatCharacterName'], call: [id, userId, { __type: 'object', value: { justName: true, capitalize: true } }] }),
             client.queryDEObject({ path: ['utils', 'characterInfo', 'getExternalDescriptionOfCharacter'], call: [id, userId] }),
             client.queryDEObject({ path: ['utils', 'characterInfo', 'whatCanTheyMakeOfAnotherCharacter'], call: [id, userId] }),
             client.queryDEObject({ path: ['characters', userId], pick: ['name', 'heightCm', 'weightKg'] }),
@@ -64,7 +66,9 @@ export class CharacterDialog extends IdentifierDetail {
             }
             add(kind === 'height' ? 'Height' : 'Weight', label, icons[kind]);
         }
-        return { name, description, stats, portrait: character?.metadata?.assets?.neutral || '', banner: character?.metadata?.banner || '' };
+        const context = await getItemTreeContext(userId);
+        const content = createItemTree(await loadCharacterItemGroups(id, context), context);
+        return { name, description, stats, portrait: character?.metadata?.assets?.neutral || '', banner: character?.metadata?.banner || '', content };
     }
 }
 customElements.define('app-game-character-dialog', CharacterDialog);

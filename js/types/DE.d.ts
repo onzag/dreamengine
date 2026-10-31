@@ -2382,6 +2382,11 @@ declare interface DEItem {
      */
     id: string;
     /**
+     * A classification for this item, this is useful for grouping items together, for example, a sword may have a class of "weapon", or a potion may have a class of "consumable", etc...
+     * mostly used to force items to fit into another container, for example a magazine pouch may only fit items of class "magazine", or a weapon rack may only fit items of class "weapon", etc...
+     */
+    classes?: Array<string> | null;
+    /**
      * The name of the item, this is what the character will refer to when talking about it, and what the character will use to identify it in their inventory or when interacting with it
      */
     name: string;
@@ -2398,7 +2403,11 @@ declare interface DEItem {
     volumeLiters: number;
     weightKg: number;
     description: string;
-    state: Record<string, any>;
+    state: {
+        opened?: boolean;
+        tags?: Array<string>;
+        [key: string]: any;
+    };
     metadata: Record<string, any>;
     consumableProperties?: {
         calories: number;
@@ -2501,6 +2510,21 @@ declare interface DEItem {
          * Whether it can be closed again after being opened
          */
         openableResealable: boolean;
+        /**
+         * Whether the container has a lock or not, for example, a box may have a lock, but a bag may not
+         * use (locked: true) or (locked: false) in the item state to specify if the container is locked or unlocked
+         */
+        usesLock?: boolean;
+        /**
+         * Normally the LLM will handle state updates for openable containers, but if you want to handle it yourself, set this to true and the LLM will not handle it
+         * you must have a script that handles the update themselves, this might be reasonable, for example, for a keyed lockbox or some magical container that requires a special action to open or close, and the LLM cannot handle it properly
+         */
+        openableScriptHandled?: boolean;
+        /**
+         * Limit the classes of items that can be put inside this container, for example, a magazine pouch may only accept items of class "magazine", or a weapon rack may only accept items of class "weapon", etc...
+         * if null or not specified, any item can be put inside the container provided it fits in volume and weight
+         */
+        onlyAcceptsClasses?: Array<string> | null;
         /**
          * Whether the container is rigid or flexible, a rigid container does not take
          * more volume when more items are put inside it, while a flexible container grows in volume with the items put inside it
@@ -3778,6 +3802,20 @@ declare interface DENarrationStyle {
     maxParagraphs: number;
 }
 
+/** What an observer can discern about an item, including access to its children. */
+declare interface DEItemPerception {
+    /** Includes items nested inside or on top of the observer's carried or worn items. */
+    isItemCarriedOrWornByCharacter: boolean;
+    canTellTheirExactDescription: boolean;
+    canTellTheirVolume: boolean;
+    canTellTheirWeight: boolean;
+    canSeeContents: "YES" | "NO" | "NO_BECAUSE_CLOSED" | "NO_BECAUSE_BAD_VISION" | "NOT_A_CONTAINER";
+    canSeeOntop: "YES" | "NO_BECAUSE_BAD_VISION";
+    hasLowPerception: boolean;
+    hasMediumPerception: boolean;
+    hasHighPerception: boolean;
+}
+
 declare interface DEUtils {
     id: {
         /**
@@ -3795,13 +3833,15 @@ declare interface DEUtils {
         locationIdGenerator(locationName: string): string;
     },
     items: {
+        /** Resolve an item and observer by reference or ID, then evaluate item perception. */
+        whatCanTheyMakeOfAnItem(item: DEItem | string, inPerspectiveOf: DECompleteCharacterReference | string): DEItemPerception;
         /** Find an item anywhere in character inventories or location slots, including nested contents. */
         getItemById(itemId: string): DEItem | null;
         /** Group direct contents by equality ignoring ids, returning the first item and count for each group. */
         getRepresentativeContents(item: DEItem | string): Array<{ item: DEItem; amount: number }>;
         /** Group items directly on top by equality ignoring ids, returning the first item and count for each group. */
         getRepresentativeOntop(item: DEItem | string): Array<{ item: DEItem; amount: number }>;
-        /** Resolve an item's sensory visibility using its volume versus the observer's body volume.
+        /** Resolve item visibility using location, container access, personal awareness and sensory resolution.
          * Null/omitted perspective is an unrestricted narrator.
          */
         canSeeItem(item: DEItem | string, inPerspectiveOf?: DECompleteCharacterReference | string | null): DEVisibility;
@@ -3833,8 +3873,17 @@ declare interface DEUtils {
         getDescriptionOfItem(item: DEItem | string, inPerspectiveOfCharacter: DECompleteCharacterReference | string): string;
     },
     world: {
+        /** Evaluate perception of a location or slot, including confidence in its item list. */
+        whatCanTheyMakeOfALocation(locationOrSlot: DELocation | DELocationSlot | string, inPerspectiveOf: DECompleteCharacterReference | string): {
+            isUnclear: boolean;
+            hasLowPerception: boolean;
+            hasMediumPerception: boolean;
+            hasHighPerception: boolean;
+        };
         /** Find a location slot by its globally unique ID. */
         getLocationSlotById(slotId: string): DELocationSlot | null;
+        /** Group a slot's direct items by equality ignoring ids, returning the first item and count for each group. */
+        getRepresentativeItemsAtLocationSlot(slot: DELocationSlot | string): Array<{ item: DEItem; amount: number }>;
         newLocation(
             definition: Omit<DELocation, "id" | "scriptGivenId" | "slots">,
             slots: () => Array<Omit<DELocationSlot, "id">>,
@@ -3991,7 +4040,7 @@ declare interface DEUtils {
             hasMediumPerception: boolean;
             hasHighPerception: boolean;
         };
-        /** Same size/perception rules as canSeeItem; a character can always recognize themselves. */
+        /** Resolve character visibility using location, sensory resolution and awareness of conversation partners or carriers. */
         canSeeCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf?: DECompleteCharacterReference | string | null): DEVisibility;
         getExternalDescriptionOfCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf: DECompleteCharacterReference | string, onlyBasics?: boolean, hideCurrentPosture?: boolean): Promise<string>;
 
@@ -4349,6 +4398,8 @@ declare interface DEUtils {
          * @returns the formatted name of the item
          */
         formatItemName(item: DEItem | string, inPerspectiveOf?: DECompleteCharacterReference | string | null, options?: { type?: "default" | "definite" | "plain", capitalize?: boolean, justName?: boolean, amount?: number }): string;
+        /** Observer-aware item label; accepts the same options as formatItemName, including justName. */
+        formatItemLabel: DEUtils['templates']['formatItemName'];
         /**
          * Formats a location reference or ID as an identifier marker, or plain text with justName.
          * @param inPerspectiveOf Reserved for future perspective-dependent naming; currently ignored.

@@ -1,14 +1,15 @@
-﻿@import './shared.css';
-@import './item-list.css';
-:host { display: block; }
-article { display: grid; grid-template-columns: 12vh minmax(0, 1fr); border: 1px solid var(--border); border-radius: var(--radius); background: #ffffff05; overflow: hidden; }
-.picture { overflow: hidden; background: #3c5148; }
-img { display: block; width: 100%; height: 100%; min-height: 14vh; object-fit: cover; opacity: .7; filter: saturate(.45); }
-:host([variant="b"]) img { filter: sepia(.5); object-position: 20%; transform: scale(1.3); }
-:host([variant="c"]) img { filter: hue-rotate(25deg) brightness(.7); transform: scaleX(-1); }
-.content { padding: 1.4vh; min-width: 0; }
-header { display: flex; justify-content: space-between; align-items: center; gap: 1vh; }
-h3 { font: inherit; font-size: 1.1em; margin: 0; }
-small { font: inherit; font-size: .75em; color: var(--accent); }
-p { color: var(--muted); font-size: .8em; margin: .4vh 0 1vh; }
-@media (max-width: 400px) { article { grid-template-columns: 18vw minmax(0, 1fr); } }
+@import './shared.css';
+:host { display: block; min-width: 0; font-size: 2vh; --slot-image-blur: 0vh; }
+:host([data-blindness="partial-good"]) { --slot-image-blur: .45vh; }
+:host([data-blindness="partial-bad"]) { --slot-image-blur: 1.2vh; }
+:host([data-blindness="full"]) { --slot-image-blur: 3vh; }
+article { min-width: 0; border: 1px solid var(--border, #a7d9ff40); border-radius: .8vh; background: #ffffff05; }
+h3 { margin: 0; font-size: 2.5vh; }
+.slot-link { display: flex; align-items: center; gap: 1.2vh; width: 100%; min-width: 0; border: 0; border-bottom: 1px solid var(--border, #a7d9ff40); background: #ffffff04; padding: 1vh 1.4vh; font-size: 2.5vh; font-weight: 600; text-align: left; border-radius: .8vh .8vh 0 0; }
+.slot-link:hover { background: #a7d9ff12; }
+.slot-name { min-width: 0; overflow-wrap: anywhere; }
+.open-icon { margin-left: auto; color: var(--accent, #a7d9ff); font-size: 2.5vh; }
+app-asset-image { display: block; width: 7vh; height: 6vh; flex: 0 0 7vh; --asset-image-border-width: .1vh; }
+app-asset-image::part(asset-image) { filter: blur(var(--slot-image-blur)); border-radius: .5vh; }
+app-asset-image::part(asset-image-container) { border-radius: .5vh; }
+.items { min-width: 0; padding: 0 1.4vh 1.4vh; font-size: 2vh; line-height: 1.5; }

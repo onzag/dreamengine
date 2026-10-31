@@ -129,6 +129,26 @@ engine.exports = {
             ],
         };
 
+        const forkFactory = DE.utils.items.newClonableItemFactory(() => ({
+            name: "Fork",
+            description: "A standard eating utensil with four tines, used for picking up and eating food",
+            weightKg: 0.1,
+            volumeLiters: 0.05,
+            state: {},
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/fork.jpg",
+            }),
+            consumableProperties: null,
+            containing: [],
+            ontop: [],
+            containingCharacters: [],
+            maxVolumeOnTopLiters: 1,
+            maxWeightOnTopKg: 10,
+            ontopCharacters: [],
+            owner: null,
+            communicator: null,
+        }));
+
         const spaceSuitFactory = DE.utils.items.newClonableItemFactory(() => ({
             name: "Space Suit",
             description: "A bulky space suit designed for extra-vehicular activity on the lunar surface. It provides life support and protection from the harsh environment of space",
@@ -140,7 +160,10 @@ engine.exports = {
             }),
             consumableProperties: null,
             containing: [],
-            ontop: [],
+            ontop: [
+                // put a fork on top for testing purposes
+                ...forkFactory(1)
+            ],
             containingCharacters: [],
             maxVolumeOnTopLiters: 10,
             maxWeightOnTopKg: 40,
@@ -176,6 +199,8 @@ engine.exports = {
                 capacityLiters: 1000,
                 structure: "rigid",
                 canSeeContentsFromOutside: false,
+                openable: true,
+                openableResealable: true,
             },
             metadata: standardApp.buildItemMetadata({
                 asset: "@assets/worlds/simple-lunar-station/locker.jpg",
@@ -201,7 +226,9 @@ engine.exports = {
                 capacityKg: 100,
                 capacityLiters: 20,
                 structure: "rigid",
-                canSeeContentsFromOutside: false,
+                canSeeContentsFromOutside: true,
+                openable: true,
+                openableResealable: true,
             },
             metadata: standardApp.buildItemMetadata({
                 asset: "@assets/worlds/simple-lunar-station/stove.jpg",
@@ -213,26 +240,6 @@ engine.exports = {
             containingCharacters: [],
             maxVolumeOnTopLiters: 100,
             maxWeightOnTopKg: 100,
-            owner: null,
-            communicator: null,
-        }));
-
-        const forkFactory = DE.utils.items.newClonableItemFactory(() => ({
-            name: "Fork",
-            description: "A standard eating utensil with four tines, used for picking up and eating food",
-            weightKg: 0.1,
-            volumeLiters: 0.05,
-            state: {},
-            metadata: standardApp.buildItemMetadata({
-                asset: "@assets/worlds/simple-lunar-station/fork.jpg",
-            }),
-            consumableProperties: null,
-            containing: [],
-            ontop: [],
-            containingCharacters: [],
-            maxVolumeOnTopLiters: 1,
-            maxWeightOnTopKg: 10,
-            ontopCharacters: [],
             owner: null,
             communicator: null,
         }));
@@ -268,6 +275,8 @@ engine.exports = {
                 capacityLiters: 20,
                 structure: "rigid",
                 canSeeContentsFromOutside: false,
+                openable: true,
+                openableResealable: true,
             },
             metadata: standardApp.buildItemMetadata({
                 asset: "@assets/worlds/simple-lunar-station/cabinet_drawer.jpg",
@@ -300,6 +309,8 @@ engine.exports = {
                 capacityLiters: 0.5,
                 structure: "rigid",
                 canSeeContentsFromOutside: false,
+                openable: true,
+                openableResealable: true,
             },
             consumableProperties: null,
             containing: [],
@@ -323,6 +334,8 @@ engine.exports = {
                 capacityLiters: 20,
                 structure: "rigid",
                 canSeeContentsFromOutside: false,
+                openable: true,
+                openableResealable: true,
             },
             metadata: standardApp.buildItemMetadata({
                 asset: "@assets/worlds/simple-lunar-station/cabinet_drawer.jpg",
@@ -354,6 +367,8 @@ engine.exports = {
                 capacityLiters: 200,
                 structure: "rigid",
                 canSeeContentsFromOutside: false,
+                openable: true,
+                openableResealable: true,
             },
             ontop: [],
             containingCharacters: [],
@@ -406,6 +421,8 @@ engine.exports = {
                     capacityLiters: (spaceFood[0].volumeLiters * 100) + 100,
                     structure: "rigid",
                     canSeeContentsFromOutside: false,
+                    openable: true,
+                    openableResealable: true,
                 },
                 metadata: standardApp.buildItemMetadata({
                     asset: "@assets/worlds/simple-lunar-station/large_cabinet.jpg",

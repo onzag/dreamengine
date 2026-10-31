@@ -1,4 +1,4 @@
-import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter, whatCanTheyMakeOfALocation, whatCanTheyMakeOfAnotherCharacter, whatCanTheyMakeOfAnItem } from "./util/character-info.js";
+import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter, whatCanTheyMakeOfALocation, whatCanTheyMakeOfAnotherCharacter, whatCanTheyMakeOfAnItem, getCharacterExactLocation } from "./util/character-info.js";
 import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/random.js";
 import { getCharacterVolume, getCharacterWeight } from "./util/weight-and-volume.js";
 import { emotions } from "./util/emotions.js";
@@ -326,6 +326,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     items: {
+        whatCanTheyMakeOfAnItem(item, inPerspectiveOf) {
+            return whatCanTheyMakeOfAnItem(DE, requireItem(DE, item), requireCharacter(DE, inPerspectiveOf));
+        },
         getItemById(itemId) {
             return resolveItem(DE, itemId) || null;
         },
@@ -352,7 +355,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (sizeVisibility === "invisible") {
                 return perspectiveCharacterName + " cannot see " + DE.utils.templates.formatItemName(itemResolved, perspectiveCharacter, { capitalize: false });
             } else if (sizeVisibility === "perceived") {
-                return perspectiveCharacterName + " cannot see " + DE.utils.templates.formatItemName(itemResolved, perspectiveCharacter, { capitalize: false });
+                return perspectiveCharacterName + " knows but cannot see " + DE.utils.templates.formatItemName(itemResolved, perspectiveCharacter, { capitalize: false });
             } else {
                 return itemResolved.description;
             }
@@ -361,7 +364,103 @@ export const deEngineUtilsFn = (DE, engine) => ({
             const resolvedItem = requireItem(DE, item);
             const observer = resolveCharacter(DE, inPerspectiveOf ?? null);
             if (inPerspectiveOf && !observer) throw new Error(`Character ${inPerspectiveOf} not found`);
-            return getSizeVisibility(resolvedItem.volumeLiters, observer || null);
+
+            const sizeVisibility = getSizeVisibility(resolvedItem.volumeLiters, observer || null);
+
+            if (observer) {
+                const observerLocation = DE.stateFor[observer.id].location;
+
+                /**
+                 * @param {DEItem[]} items
+                 * @param {Array<string | DEItem>} accumulator
+                 * @returns {Array<string | DEItem> | null}
+                 */
+                const findItemInList = (items, accumulator) => {
+                    for (const i of items) {
+                        if (i.id === resolvedItem.id) {
+                            return accumulator;
+                        }
+
+                        if (i.containing) {
+                            const currentPath = [...accumulator, i, "containing"];
+                            const foundInContaining = findItemInList(i.containing, currentPath);
+                            if (foundInContaining) {
+                                return foundInContaining;
+                            }
+                        }
+
+                        if (i.ontop) {
+                            const currentPath = [...accumulator, i, "ontop"];
+                            const foundInOntop = findItemInList(i.ontop, currentPath);
+                            if (foundInOntop) {
+                                return foundInOntop;
+                            }
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * @type {Array<string | DEItem> | null}
+                 */
+                let foundAtLocation = null;
+                for (const slot of Object.keys(DE.world.locations[observerLocation].slots)) {
+                    foundAtLocation = findItemInList(DE.world.locations[observerLocation].slots[slot].items, ["slots", slot, "items"]);
+                    if (foundAtLocation) {
+                        break;
+                    }
+                }
+
+                if (!foundAtLocation) {
+                    const charactersAtLocation = DE.utils.world.allCharactersAtLocation(observerLocation);
+                    for (const char of charactersAtLocation) {
+                        foundAtLocation = findItemInList(DE.stateFor[char.id].carrying, ["characters", char.id, "carrying"]) || findItemInList(DE.stateFor[char.id].wearing, ["characters", char.id, "wearing"]);
+                        if (foundAtLocation) {
+                            break;
+                        }
+                    }
+                }
+
+                if (!foundAtLocation) {
+                    return "invisible";
+                }
+
+                // secondly we must check if the observer is carrying that item or wearing it, that guarantees at least a perceived visibility
+                const observerIsCarryingOrWearingIt = foundAtLocation[0] === "characters" && foundAtLocation[1] === observer.id;
+                if (observerIsCarryingOrWearingIt) {
+                    return sizeVisibility === "invisible" ? "perceived" : sizeVisibility;
+                }
+
+                // lastly we must check if the observer is insideOrAtop the item recursively
+                const observerExactLocation = getCharacterExactLocation(DE, observer.id);
+                if (observerExactLocation.accumulatedItems.some(itemInPath => itemInPath.id === resolvedItem.id)) {
+                    return sizeVisibility === "invisible" ? "perceived" : sizeVisibility;
+                }
+
+                // now to force this invisible situation, if the item is inside a closed opaque container
+                const closedOpaqueContainerInPath = foundAtLocation.some((pathElement, index) => {
+                    if (typeof pathElement === "string") return false;
+
+                    // not a container
+                    if (!pathElement.containerProperties) return false;
+
+                    // not a container that can be open and closed
+                    if (!pathElement.containerProperties.openable) return false;
+
+                    const nextPathElement = foundAtLocation[index + 1];
+                    // not inside the container
+                    if (nextPathElement !== "containing") return false;
+
+                    // closed and opaque, so the observer cannot see inside it
+                    return (!pathElement.state.opened && !pathElement.containerProperties.canSeeContentsFromOutside);
+                });
+
+                if (closedOpaqueContainerInPath) {
+                    return "invisible";
+                }
+            }
+
+            return sizeVisibility;
         },
         newItem(definition) {
             const id = DE.utils.id.itemIdGenerator(definition.name);
@@ -434,8 +533,20 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     world: {
+        whatCanTheyMakeOfALocation(locationOrSlot, inPerspectiveOf) {
+            const place = typeof locationOrSlot === "string"
+                ? resolveLocation(DE, locationOrSlot) || resolveLocationSlot(DE, locationOrSlot)
+                : locationOrSlot;
+            if (!place) throw new Error(`Location or slot ${locationOrSlot} not found`);
+            return whatCanTheyMakeOfALocation(place, requireCharacter(DE, inPerspectiveOf));
+        },
         getLocationSlotById(slotId) {
             return resolveLocationSlot(DE, slotId) || null;
+        },
+        getRepresentativeItemsAtLocationSlot(slot) {
+            const resolvedSlot = resolveLocationSlot(DE, slot);
+            if (!resolvedSlot) throw new Error(`Location slot ${slot} not found`);
+            return getRepresentativeItems(resolvedSlot.items);
         },
         async getDescriptionOfLocation(location, inPerspectiveOf) {
             const resolvedLocation = resolveLocation(DE, location);
@@ -1391,7 +1502,39 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (!target) throw new Error(`Character ${char} not found`);
             if (inPerspectiveOf && !observer) throw new Error(`Character ${inPerspectiveOf} not found`);
             if (observer?.id === target.id) return "visible";
-            return getSizeVisibility(target.weightKg, observer || null);
+
+            if (observer) {
+                const targetState = DE.stateFor[target.id];
+                const observerState = DE.stateFor[observer.id];
+
+                // if the target and observer are not in the same location, then the target is invisible to the observer
+                if (targetState.location !== observerState.location) {
+                    return "invisible";
+                }
+            }
+
+            const sizeVisibility = getSizeVisibility(target.weightKg, observer || null);
+
+            if (observer) {
+                const characterLocation = getCharacterExactLocation(DE, target.id);
+                const observerLocation = getCharacterExactLocation(DE, observer.id);
+
+                // if our observer is carrying the target or vice-versa, then they can perceive them regardless of size visibility
+                if (characterLocation.beingCarriedById === observer.id || observerLocation.beingCarriedById === target.id) {
+                    return sizeVisibility === "invisible" ? "perceived" : sizeVisibility;
+                }
+
+                const targetState = DE.stateFor[target.id];
+                const observerState = DE.stateFor[observer.id];
+
+                // now we must check if they are conversing together and grab the current conversation of the perspective character if
+                // they share a conversation then they can see each other regardless of size visibility, perceived is the worst visibility they can have
+                if (observerState && targetState && observerState.conversationId && targetState.conversationId && observerState.conversationId === targetState.conversationId) {
+                    return sizeVisibility === "invisible" ? "perceived" : sizeVisibility;
+                }
+            }
+
+            return sizeVisibility;
         },
         getExternalDescriptionOfCharacter(char, inPerspectiveOf, onlyBasics, hideCurrentPosture) {
             const target = requireCharacter(DE, char);
@@ -2572,6 +2715,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 return nameGiven;
             }
             return "<" + ourChar.id + ":" + nameGiven + ">";
+        },
+        formatItemLabel(item, inPerspectiveOf, options) {
+            return DE.utils.templates.formatItemName(item, inPerspectiveOf, options);
         },
         formatItemName(item, inPerspectiveOf, options) {
             item = requireItem(DE, item);

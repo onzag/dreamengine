@@ -1,4 +1,5 @@
 import { playCancelSound, playHoverSound, playPauseSound } from '../sound.js';
+import { registerDialog, unregisterDialog } from './dialog-state.js';
 
 class Dialog extends HTMLElement {
     static get observedAttributes() { return ['dialog-title']; }
@@ -24,6 +25,7 @@ class Dialog extends HTMLElement {
     }
 
     connectedCallback() {
+        registerDialog(this);
         this.render();
         this.root.querySelector('.dialog-close')?.addEventListener('click', this.onCancelButtonClick);
         this.root.querySelector('.dialog-close')?.addEventListener('mouseenter', playHoverSound);
@@ -53,7 +55,10 @@ class Dialog extends HTMLElement {
      * @param {KeyboardEvent} e 
      */
     onDocumentKeydown(e) {
-        if (e.key === "Escape") {
+        if (e.key === "Escape" && !e.defaultPrevented && !this.closest('[hidden], [inert]')) {
+            // Covered dialogs stay mounted; only the visible dialog handles Escape.
+            e.preventDefault();
+            e.stopImmediatePropagation();
             this.onCloseDialog();
             playCancelSound();
         }
@@ -84,6 +89,7 @@ class Dialog extends HTMLElement {
     }
 
     disconnectedCallback() {
+        unregisterDialog(this);
         document.removeEventListener("keydown", this.onDocumentKeydown);
     }
 

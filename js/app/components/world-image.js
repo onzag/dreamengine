@@ -139,6 +139,8 @@ class AssetImage extends HTMLElement {
                 .asset-image-back  { z-index: 1; }
                 .asset-image-front { z-index: 2; opacity: 0; }
                 .asset-image-container {
+                    /* Keep the crossfade layers below surrounding UI, such as sticky headers. */
+                    isolation: isolate;
                     width: 100%;
                     height: 100%;
                     overflow: hidden;

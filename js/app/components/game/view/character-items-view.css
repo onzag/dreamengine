@@ -1,10 +1,6 @@
-﻿@import './shared.css';
-@import './item-list.css';
-:host { display: grid; gap: 1vh; }
-.character { display: flex; align-items: center; gap: 1.5vh; padding: 1.4vh; background: linear-gradient(120deg, rgba(140, 190, 240, .12), transparent); border: 1px solid var(--border); border-radius: var(--radius); }
-img { width: 5vh; height: 6vh; object-fit: cover; opacity: .7; filter: saturate(.3); }
-.character span { color: var(--muted); font-style: italic; }
-section { border: 1px solid var(--border); border-radius: var(--radius); padding: 1.4vh; background: #ffffff05; }
-header { display: flex; justify-content: space-between; align-items: center; gap: 1vh; }
-h3 { font: inherit; font-size: 1.1em; margin: 0; }
-header span { font-size: .8em; color: var(--muted); }
+@import './shared.css';
+:host { display: block; min-width: 0; font-size: 2vh; }
+.inventory { font-size: 2vh; line-height: 1.5; }
+.item-tree { display: grid; gap: 1.5vh; }
+.inventory .item-tree-group { margin: 0; border: 1px solid var(--border, #a7d9ff40); border-radius: .8vh; padding: 1.4vh; background: #ffffff05; }
+.inventory .item-tree-group > h3 { font-size: 2.3vh; }

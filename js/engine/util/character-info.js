@@ -1,5 +1,5 @@
 import { DEngine } from "../index.js";
-import { makeTimestamp, getNameIdentificationForOneCharacterTowardsAnother, getNameIdentificationForOneCharacterTowardsAnotherOnlyName } from "./messages.js";
+import { makeTimestamp, getNameIdentificationForOneCharacterTowardsAnother } from "./messages.js";
 import { getItemsContiguousDescription } from "./items.js";
 import { getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage } from "./weight-and-volume.js";
 import { getWeatherSystemForLocationAndWeather } from "./world.js";
@@ -9,10 +9,11 @@ import { getSizeVisibility } from "./visibility.js";
  * @param {DEObject} deObject 
  * @param {string} characterId
  * @return {{
- *    carrierName: string,
+ *    carrierId: string,
  *    carrierLocation: string,
  *    carrierLocationSlot: string,
  *    directlyCarried: boolean,
+ *    accumulatedItems: Array<DEItem>,
  *    itemPath: Array<string | number> | null,
  *    itemPathEnd: "containingCharacters" | "ontopCharacters" | null,
  *    item: DEItem | null,
@@ -23,17 +24,18 @@ export function getBeingCarriedByCharacter(deObject, characterId) {
     if (!charState) {
         throw new Error(`Character ${characterId} not found in engine state.`);
     }
-    for (const otherCharName in deObject.stateFor) {
-        const otherCharState = deObject.stateFor[otherCharName];
-        if (otherCharName === characterId || charState.location !== otherCharState.location || otherCharState.deadEnded) {
+    for (const otherCharId in deObject.stateFor) {
+        const otherCharState = deObject.stateFor[otherCharId];
+        if (otherCharId === characterId || charState.location !== otherCharState.location || otherCharState.deadEnded) {
             continue;
         }
 
         if (otherCharState.carryingCharactersDirectly && otherCharState.carryingCharactersDirectly.some(c => c.id === characterId)) {
             return {
-                carrierName: otherCharName,
+                carrierId: otherCharId,
                 carrierLocation: otherCharState.location,
                 carrierLocationSlot: otherCharState.locationSlot,
+                accumulatedItems: [],
                 directlyCarried: true,
                 itemPath: null,
                 itemPathEnd: null,
@@ -41,16 +43,31 @@ export function getBeingCarriedByCharacter(deObject, characterId) {
             };
         }
 
-        const found = findLocationOfCharInsideOrAtopItemRecursive(characterId, otherCharState.carrying, ["characters", otherCharName, "carrying"]);
+        const found = findLocationOfCharInsideOrAtopItemRecursive(characterId, otherCharState.carrying, ["characters", otherCharId, "carrying"], []);
         if (found) {
             return {
-                carrierName: otherCharName,
+                carrierId: otherCharId,
                 carrierLocation: otherCharState.location,
                 carrierLocationSlot: otherCharState.locationSlot,
+                accumulatedItems: found.accumulatedItems,
                 directlyCarried: false,
                 itemPath: found.path,
                 itemPathEnd: found.end,
                 item: found.item,
+            };
+        }
+
+        const found2 = findLocationOfCharInsideOrAtopItemRecursive(characterId, otherCharState.wearing, ["characters", otherCharId, "wearing"], []);
+        if (found2) {
+            return {
+                carrierId: otherCharId,
+                carrierLocation: otherCharState.location,
+                carrierLocationSlot: otherCharState.locationSlot,
+                accumulatedItems: found2.accumulatedItems,
+                directlyCarried: false,
+                itemPath: found2.path,
+                itemPathEnd: found2.end,
+                item: found2.item,
             };
         }
     }
@@ -62,33 +79,37 @@ export function getBeingCarriedByCharacter(deObject, characterId) {
  * @param {string} otherCharacterId
  * @param {DEItem[]} list
  * @param {Array<string | number>} pathSoFar
+ * @param {Array<DEItem>} accumulatedItemsSoFar
  * @returns {{
  *   path: Array<string | number>,
+ *   accumulatedItems: Array<DEItem>,
  *   end: "containingCharacters" | "ontopCharacters",
  *   item: DEItem,
  * } | null}
  */
-export function findLocationOfCharInsideOrAtopItemRecursive(otherCharacterId, list, pathSoFar) {
+export function findLocationOfCharInsideOrAtopItemRecursive(otherCharacterId, list, pathSoFar, accumulatedItemsSoFar) {
     for (let i = 0; i < list.length; i++) {
         const item = list[i];
         if (item.containingCharacters && item.containingCharacters.some(c => c.id === otherCharacterId)) {
             return {
                 path: [...pathSoFar, i],
+                accumulatedItems: [...accumulatedItemsSoFar, item],
                 end: "containingCharacters",
                 item: item,
             }
         } else if (item.ontopCharacters && item.ontopCharacters.some(c => c.id === otherCharacterId)) {
             return {
                 path: [...pathSoFar, i],
+                accumulatedItems: [...accumulatedItemsSoFar, item],
                 end: "ontopCharacters",
                 item: item,
             }
         } else {
-            const found = findLocationOfCharInsideOrAtopItemRecursive(otherCharacterId, item.containing, [...pathSoFar, i, "containing"]);
+            const found = findLocationOfCharInsideOrAtopItemRecursive(otherCharacterId, item.containing, [...pathSoFar, i, "containing"], [...accumulatedItemsSoFar, item]);
             if (found) {
                 return found;
             }
-            const foundAtop = findLocationOfCharInsideOrAtopItemRecursive(otherCharacterId, item.ontop, [...pathSoFar, i, "ontop"]);
+            const foundAtop = findLocationOfCharInsideOrAtopItemRecursive(otherCharacterId, item.ontop, [...pathSoFar, i, "ontop"], [...accumulatedItemsSoFar, item]);
             if (foundAtop) {
                 return foundAtop;
             }
@@ -149,8 +170,9 @@ export function findLocationOfAnyCharInsideOrAtopItemRecursive(list, pathSoFar, 
  * @param {string} characterId 
  * @returns {{
  *   location: string,
- *   beingCarriedBy: string | null,
+ *   beingCarriedById: string | null,
  *   itemPath: Array<string | number> | null,
+ *   accumulatedItems: Array<DEItem>,
  *   item: DEItem | null,
  *   itemPathEnd: "containingCharacters" | "ontopCharacters" | null,
  * }}
@@ -164,7 +186,8 @@ export function getCharacterExactLocation(deObject, characterId) {
     if (beingCarriedInfo) {
         return {
             location: beingCarriedInfo.carrierLocation,
-            beingCarriedBy: beingCarriedInfo.carrierName,
+            beingCarriedById: beingCarriedInfo.carrierId,
+            accumulatedItems: beingCarriedInfo.accumulatedItems,
             itemPath: beingCarriedInfo.itemPath,
             item: beingCarriedInfo.item,
             itemPathEnd: beingCarriedInfo.itemPathEnd,
@@ -173,11 +196,12 @@ export function getCharacterExactLocation(deObject, characterId) {
     const location = charState.location;
     for (const slot in deObject.world.locations[location].slots) {
         const slotInfo = deObject.world.locations[location].slots[slot];
-        const foundChar = findLocationOfCharInsideOrAtopItemRecursive(characterId, slotInfo.items, ["slots", slot, "items"]);
+        const foundChar = findLocationOfCharInsideOrAtopItemRecursive(characterId, slotInfo.items, ["slots", slot, "items"], []);
         if (foundChar) {
             return {
                 location: location,
-                beingCarriedBy: null,
+                beingCarriedById: null,
+                accumulatedItems: foundChar.accumulatedItems,
                 itemPath: foundChar.path,
                 item: foundChar.item,
                 itemPathEnd: foundChar.end,
@@ -186,7 +210,8 @@ export function getCharacterExactLocation(deObject, characterId) {
     }
     return {
         location: location,
-        beingCarriedBy: null,
+        beingCarriedById: null,
+        accumulatedItems: [],
         itemPath: null,
         item: null,
         itemPathEnd: null,
@@ -575,7 +600,10 @@ export function whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharac
     let canTellHeight = true;
     let canTellWeight = true;
     
-    const hasHighPerception = inPerspectiveCharacterPerception >= 0.75 || character.id === inPerspectiveCharacter.id; // a character can always tell their own details, even if they are blind or have low perception
+    const hasHighPerception = inPerspectiveCharacterPerception >= 0.75 ||
+        character.id === inPerspectiveCharacter.id ||
+        inPerspectiveCharacterBlindness === "partial-good" ||
+        inPerspectiveCharacterBlindness === "no"; // a character can always tell their own details, even if they are blind or have low perception
     const hasLowPerception = inPerspectiveCharacterPerception < 0.5 && !hasHighPerception;
     const hasMediumPerception = inPerspectiveCharacterPerception >= 0.5 && inPerspectiveCharacterPerception < 0.75 && !hasHighPerception;
     if (inPerspectiveCharacterBlindness === "full") {
@@ -626,9 +654,10 @@ export function whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharac
  */
 export function whatCanTheyMakeOfALocation(location, inPerspectiveCharacter) {
     const inPerspectiveCharacterPerception = inPerspectiveCharacter.perception;
-    const hasLowPerception = inPerspectiveCharacterPerception < 0.5;
-    const hasMediumPerception = inPerspectiveCharacterPerception >= 0.5 && inPerspectiveCharacterPerception < 0.75;
-    const hasHighPerception = inPerspectiveCharacterPerception >= 0.75;
+    
+    const hasHighPerception = inPerspectiveCharacterPerception >= 0.75 || inPerspectiveCharacter.blindness === "partial-good" || inPerspectiveCharacter.blindness === "no";
+    const hasLowPerception = inPerspectiveCharacterPerception < 0.5 && !hasHighPerception;
+    const hasMediumPerception = inPerspectiveCharacterPerception >= 0.5 && inPerspectiveCharacterPerception < 0.75 && !hasHighPerception;
 
     let isUnclear = false;
     if (inPerspectiveCharacter.blindness === "full") {
@@ -655,6 +684,7 @@ export function whatCanTheyMakeOfALocation(location, inPerspectiveCharacter) {
  * @param {DEObject} deObject
  * @param {DEItem} item 
  * @param {DECompleteCharacterReference} inPerspectiveCharacter 
+ * @returns {DEItemPerception}
  */
 export function whatCanTheyMakeOfAnItem(deObject, item, inPerspectiveCharacter) {
     const visibility = getSizeVisibility(item.volumeLiters, inPerspectiveCharacter || null);
@@ -682,31 +712,35 @@ export function whatCanTheyMakeOfAnItem(deObject, item, inPerspectiveCharacter) 
         return false;
     }
 
-    const isItemCarriedOrWornByCharacter = checkItemList(charState.carrying) || checkItemList(charState.wearing);
+    const charExactLocation = getCharacterExactLocation(deObject, inPerspectiveCharacter.id);
+    const theyAreAwareOfTheItemByVirtueOfCarryingOrWearingIt = checkItemList(charState.carrying) || checkItemList(charState.wearing);
+    const theyAreAwareOfTheItemByVirtueOfBeingInsideOrAtopIt = charExactLocation.accumulatedItems.some(accumulatedItem => accumulatedItem.id === item.id);
+    const theyAreAwareOfTheItemInGeneral = theyAreAwareOfTheItemByVirtueOfCarryingOrWearingIt || theyAreAwareOfTheItemByVirtueOfBeingInsideOrAtopIt;
 
-    const canTellTheirExactDescription = visibility === "visible" || isItemCarriedOrWornByCharacter;
-    const canTellTheirVolume = visibility === "perceived" || visibility === "visible" || isItemCarriedOrWornByCharacter;
-    const canTellTheirWeight = visibility === "perceived" || visibility === "visible" || isItemCarriedOrWornByCharacter;
+    const canTellTheirExactDescription = visibility === "visible" || theyAreAwareOfTheItemInGeneral;
+    const canTellTheirVolume = visibility === "perceived" || visibility === "visible" || theyAreAwareOfTheItemInGeneral;
+    const canTellTheirWeight = visibility === "perceived" || visibility === "visible" || theyAreAwareOfTheItemInGeneral;
 
     const inPerspectiveCharacterPerception = inPerspectiveCharacter.perception;
     
-    const hasHighPerception = inPerspectiveCharacterPerception >= 0.75 || isItemCarriedOrWornByCharacter;
+    const hasHighPerception = inPerspectiveCharacterPerception >= 0.75 || theyAreAwareOfTheItemInGeneral ||
+        inPerspectiveCharacter.blindness === "partial-good" || inPerspectiveCharacter.blindness === "no";
     const hasLowPerception = inPerspectiveCharacterPerception < 0.5 && !hasHighPerception;
     const hasMediumPerception = inPerspectiveCharacterPerception >= 0.5 && inPerspectiveCharacterPerception < 0.75 && !hasHighPerception;
 
     /**
-     * @type {"YES" | "NO_BECAUSE_CLOSED" | "NO_BECAUSE_BAD_VISION" | "NOT_A_CONTAINER"}
+     * @type {"YES" | "NO" | "NO_BECAUSE_CLOSED" | "NO_BECAUSE_BAD_VISION" | "NOT_A_CONTAINER"}
      */
-    const canSeeContents = item.containerProperties ? (item.containerProperties?.canSeeContentsFromOutside ? (
-        visibility === "perceived" || visibility === "invisible" ? "NO_BECAUSE_BAD_VISION" : "YES"
+    const canSeeContents = !item.containerProperties ? "NOT_A_CONTAINER" : (theyAreAwareOfTheItemInGeneral ? "YES" : (item.containerProperties.canSeeContentsFromOutside ? (
+        (visibility === "perceived" || visibility === "invisible") ? "NO_BECAUSE_BAD_VISION" : "YES"
     ) : (
-        item.state.opened || item.state.open ? "YES" : "NO_BECAUSE_CLOSED"
-    )) : "NOT_A_CONTAINER";
+        item.containerProperties.openable ? (item.state.opened ? "YES" : "NO_BECAUSE_CLOSED") : "NO"
+    )));
 
-    const canSeeOntop = visibility === "perceived" || visibility === "invisible" ? "NO_BECAUSE_BAD_VISION" : "YES";
+    const canSeeOntop = theyAreAwareOfTheItemInGeneral ? "YES" : (visibility === "perceived" || visibility === "invisible" ? "NO_BECAUSE_BAD_VISION" : "YES");
 
     return {
-        canSeeItIsThere: visibility === "visible" || visibility === "perceived",
+        isItemCarriedOrWornByCharacter: theyAreAwareOfTheItemByVirtueOfCarryingOrWearingIt,
         canTellTheirExactDescription,
         canTellTheirVolume,
         canTellTheirWeight,
@@ -949,12 +983,14 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
             }
         }
 
-        if (characterExactLocation.beingCarriedBy) {
-            if (whatCanTheyMakeOf.canTellDetailsOfClothingOrCarriedItems) {
-                finalDescription += ` Being carried by ${characterExactLocation.beingCarriedBy}.`;
-            } else {
-                finalDescription += ` Being carried by someone, but cannot make out the details of who it is.`;
-            }
+        if (characterExactLocation.beingCarriedById) {
+            // if (whatCanTheyMakeOf.canTellDetailsOfClothingOrCarriedItems) {
+                finalDescription += ` Being carried by ${deObject.utils.templates.formatCharacterName(characterExactLocation.beingCarriedById, inPerspectiveCharacter, {
+                    type: "definite",
+                })}.`;
+            // } else {
+            //     finalDescription += ` Being carried by someone, but cannot make out the details of who it is.`;
+            // }
         }
 
         const carriedCharacters = getListOfCarriedCharactersByCharacter(deObject, characterId);

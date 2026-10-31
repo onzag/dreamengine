@@ -1,7 +1,7 @@
 import '../../world-image.js';
 import { createNarrationNodes } from './narration.js';
 
-/** @typedef {{name: string, description: string, portrait?: string, banner?: string, stats?: Array<{label: string, value: string, icon: string}>}} IdentifierDetailData */
+/** @typedef {{name: string, description: string, portrait?: string, banner?: string, content?: HTMLElement, stats?: Array<{label: string, value: string, icon: string}>}} IdentifierDetailData */
 
 /** Shared loading, vision treatment and narration for the four detail views. */
 export class IdentifierDetail extends HTMLElement {
@@ -77,6 +77,11 @@ export class IdentifierDetail extends HTMLElement {
             }
             description.removeAttribute('role');
             description.textContent = data.description || 'No description available.';
+            this.root.querySelector('.detail-extra')?.remove();
+            if (data.content) {
+                data.content.classList.add('detail-extra');
+                article.append(data.content);
+            }
             if (data.description) {
                 // Keep the description readable if narration parsing is temporarily unavailable.
                 try {

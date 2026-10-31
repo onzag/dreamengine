@@ -1,5 +1,6 @@
 import { openIdentifierDialog } from './identifier-dialog.js';
 import { createNarrationNodes } from './narration.js';
+import { DIALOG_OPENED_EVENT, hasOpenDialogs } from '../../dialog-state.js';
 
 /** A top-layer tooltip: scroll containers never clip its content. */
 export class GameTooltip extends HTMLElement {
@@ -19,19 +20,34 @@ export class GameTooltip extends HTMLElement {
         this.hideTimer = 0;
         this.geometry = '';
         this.textVersion = 0;
+        this.dismissedForDialog = false;
+        this.shownForFocus = false;
     }
 
     connectedCallback() {
         this.controller = new AbortController();
         const { signal } = this.controller;
+        this.dismissedForDialog = hasOpenDialogs();
+        document.addEventListener(DIALOG_OPENED_EVENT, () => this.dismissForDialog(), { signal });
         void this.renderText();
         this.addEventListener('pointerenter', () => this.show(), { signal });
-        this.addEventListener('pointerleave', () => this.scheduleHide(), { signal });
-        this.addEventListener('focusin', () => this.show(), { signal });
-        this.addEventListener('focusout', () => this.scheduleHide(), { signal });
+        this.addEventListener('pointermove', () => {
+            // A restored focus or a backdrop disappearing is not a new hover intent.
+            if (this.dismissedForDialog && !hasOpenDialogs()) {
+                this.dismissedForDialog = false;
+                this.show();
+            }
+        }, { signal });
+        const leave = () => {
+            if (!hasOpenDialogs()) this.dismissedForDialog = false;
+            this.scheduleHide();
+        };
+        this.addEventListener('pointerleave', leave, { signal });
+        this.addEventListener('focusin', () => this.show('focus'), { signal });
+        this.addEventListener('focusout', leave, { signal });
         this.tip.addEventListener('pointerenter', () => window.clearTimeout(this.hideTimer), { signal });
         this.tip.addEventListener('pointerleave', () => this.scheduleHide(), { signal });
-        this.root.addEventListener('focusout', () => this.scheduleHide(), { signal });
+        this.root.addEventListener('focusout', leave, { signal });
         // Portrait tooltips opt into opening their own entity; tooltip links open theirs.
         this.addEventListener('click', event => {
             if (!event.composedPath().includes(this.tip)) this.openTarget();
@@ -102,14 +118,16 @@ export class GameTooltip extends HTMLElement {
 
     /** @param {string} identifier @param {DEConversationMessageFragmentIdentifier['foundAs']} foundAs */
     openIdentifier(identifier, foundAs) {
-        this.hide();
+        this.dismissForDialog();
         const trigger = this.querySelector('[tabindex], button, a');
         openIdentifierDialog(identifier, foundAs, trigger instanceof HTMLElement ? trigger : this);
     }
 
-    show() {
+    /** @param {'pointer' | 'focus'} [source] */
+    show(source = 'pointer') {
         window.clearTimeout(this.hideTimer);
-        if (!this.isConnected || !this.tip.textContent.trim()) return;
+        if (hasOpenDialogs() || this.dismissedForDialog || !this.isConnected || !this.tip.textContent.trim()) return;
+        this.shownForFocus = source === 'focus';
         if (this.tip.matches(':popover-open')) return;
         this.tip.style.visibility = 'hidden';
         this.tip.showPopover();
@@ -141,11 +159,18 @@ export class GameTooltip extends HTMLElement {
         window.clearTimeout(this.hideTimer);
         // Allow the pointer to cross the 1vh gap to scroll long descriptions.
         this.hideTimer = window.setTimeout(() => {
-            if (!this.matches(':hover, :focus-within') && !this.tip.matches(':hover, :focus-within')) this.hide();
+            const keepForFocus = this.shownForFocus && this.matches(':focus-within');
+            if (!this.matches(':hover') && !keepForFocus && !this.tip.matches(':hover, :focus-within')) this.hide();
         }, 120);
     }
 
+    dismissForDialog() {
+        this.dismissedForDialog = true;
+        this.hide();
+    }
+
     hide() {
+        this.shownForFocus = false;
         this.tracking?.abort();
         this.tracking = null;
         window.clearTimeout(this.hideTimer);
