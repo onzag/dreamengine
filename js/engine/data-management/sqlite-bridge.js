@@ -4,6 +4,7 @@ import { BaseDataManager } from "./base.js";
 const conversationFields = {
     participants: "json",
     previousConversationIdsPerParticipant: "json",
+    nextConversationIdsPerParticipant: "json",
     locations: "json",
     communicators: "json",
     startTime: "json",
@@ -29,6 +30,7 @@ const messageFields = {
     duration: "json",
     endTime: "json",
     untimed: "boolean",
+    isProcessingSideEffects: "boolean",
     canOnlyBeSeenByCharacter: "text",
     singleSummary: "text",
     perspectiveSummaryIds: "json",
@@ -190,6 +192,43 @@ export class SQLiteBridge extends BaseDataManager {
                 }
                 for (const sql of statements) {
                     await this.databaseController.runQuery(id, sql);
+                }
+            });
+        } catch (error) {
+            await this.closeCurrentDatabase();
+            throw error;
+        }
+    }
+
+    /** @param {string} loadName */
+    async loadDatabase(loadName) {
+        await super.loadDatabase(loadName);
+        try {
+            await this.withTransaction(async (id) => {
+                const additions = [
+                    ["engine_conversations", "nextConversationIdsPerParticipant",
+                        "TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(nextConversationIdsPerParticipant))"],
+                    ["engine_conversation_messages", "isProcessingSideEffects",
+                        "INTEGER NOT NULL DEFAULT 0 CHECK (isProcessingSideEffects IN (0, 1))"],
+                ];
+                for (const [table, name, definition] of additions) {
+                    const columns = await this.databaseController.runQuery(id, `PRAGMA table_info(${table})`);
+                    if (!columns.some(column => column.name === name)) {
+                        if (name === "isProcessingSideEffects" && columns.some(column => column.name === "streaming")) {
+                            await this.databaseController.runQuery(id,
+                                `ALTER TABLE ${table} RENAME COLUMN streaming TO isProcessingSideEffects`);
+                            continue;
+                        }
+                        await this.databaseController.runQuery(id, `ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+                        if (name === "nextConversationIdsPerParticipant") {
+                            await this.databaseController.runQuery(id, `
+                                UPDATE engine_conversations
+                                SET nextConversationIdsPerParticipant = (
+                                    SELECT json_group_object(value, NULL) FROM json_each(participants)
+                                )
+                            `);
+                        }
+                    }
                 }
             });
         } catch (error) {
@@ -437,12 +476,13 @@ export class SQLiteBridge extends BaseDataManager {
 
     /**
      * Append a message with a monotonically increasing ID, independent of timestamps.
+     * New messages process side effects until explicitly completed by an update.
      * @param {string} conversationId
-     * @param {Omit<DEConversationMessage, "id">} message
+     * @param {Omit<DEConversationMessage, "id" | "isProcessingSideEffects">} message
      * @returns {Promise<DEConversationMessage | null>}
      */
     async newConversationMessage(conversationId, message) {
-        const values = fieldValues(messageFields, message);
+        const values = fieldValues(messageFields, { ...message, isProcessingSideEffects: true });
         return this.withDatabase(id =>
             this.insertMessage(id, numericId(conversationId, "C"), values));
     }
@@ -499,6 +539,7 @@ export class SQLiteBridge extends BaseDataManager {
 
     /**
      * Update supplied fields without changing the message's ID or insertion order.
+     * Completed messages cannot be modified; return null if an update is refused.
      * @param {string} messageId
      * @param {Partial<Omit<DEConversationMessage, "id">>} message
      * @returns {Promise<DEConversationMessage | null>}
@@ -512,7 +553,7 @@ export class SQLiteBridge extends BaseDataManager {
             const query = values.length ? `
                 UPDATE engine_conversation_messages
                 SET ${Object.keys(fields).map(name => `${name} = ?`).join(", ")}
-                WHERE id = ? RETURNING *
+                WHERE id = ? AND isProcessingSideEffects = 1 RETURNING *
             ` : "SELECT * FROM engine_conversation_messages WHERE id = ?";
             const rows = await this.databaseController.runQuery(id, query,
                 [...values, numericId(messageId, "M")]);

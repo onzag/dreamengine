@@ -371,11 +371,12 @@ export class DEngine {
     }
 
     /**
-     * 
+     * @param {DEConversation} conversation
      * @param {Omit<DEConversationMessage, "id">} conversationMessageToBeGenerated 
+     * @param {"pre-side-effects" | "post-side-effects"} phase
      * @returns {Promise<Record<string, any>>}
      */
-    async callConversationMessageMetadataGenerator(conversationMessageToBeGenerated) {
+    async callConversationMessageMetadataGenerator(conversation, conversationMessageToBeGenerated, phase) {
         if (!this.jsEngine) {
             throw new Error("JS engine not set");
         }
@@ -1146,19 +1147,18 @@ export class DEngine {
                 char: this.deObject.characters[this.deObject.user],
             });
 
-            const narrationParsed = this.deObject.utils.templates.parseNarration(narration);
+            const narrationParsed = await this.deObject.utils.templates.parseNarration(narration);
 
             const conversation = await this.deObject.utils.conversations.newConversation({
-                location: sceneObject.location,
                 participants: expectedParticipants,
                 pseudoConversation: false,
-                remoteParticipants: [],
+                communicators: {},
             }, {
-                teleportParticipants: true,
+                teleportParticipantsTo: sceneObject.location,
                 unsafeMode: false,
             });
 
-            await this.deObject.utils.conversations.addMessage(conversation.id, {
+            const messageObj = await this.deObject.utils.conversations.addMessageToConversation(conversation.id, {
                 canOnlyBeSeenByCharacter: null,
                 content: [
                     {
@@ -1200,7 +1200,7 @@ export class DEngine {
                 // some normalization
                 const actualMessages = messages.map((text) => text.trim()).filter((text) => text.length > 0).join("\n\n").split("\n\n");
 
-                await this.deObject.utils.conversations.addMessage(conversation.id, {
+                await this.deObject.utils.conversations.addMessageToConversation(conversation.id, {
                     canOnlyBeSeenByCharacter: userOnly ? this.deObject.user : null,
                     content: actualMessages.map((text) => ({ type: "narration", fragments: [text] })),
                     characterId: null,

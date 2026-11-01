@@ -3358,6 +3358,11 @@ declare interface DEConversationMessage {
      */
     untimed: boolean;
     /**
+     * Whether side effects for the message are still being processed
+     * A message whose side effects have finished processing cannot be modified as it is deemed complete and final
+     */
+    isProcessingSideEffects: boolean;
+    /**
      * If the message can only be seen by a specific character, their Id
      * eg. for private thoughts, state changes, or secret messages; basically representing the character's internal monologue
      * Also true for schizophrenic characters that hear voices that no one else can hear
@@ -3399,6 +3404,13 @@ declare interface DEConversationMessage {
      */
     interactingCharacters: Array<string>;
 
+    /**
+     * Arbitrary metadata for the message, this can be used to store any additional information that is not part of the message itself but is useful for the game logic
+     * this one is very particularly useful metadata to store information about the state during this message, at start and at the end
+     * check the onMessageBeganStreaming and onMessageEndedStreaming events to attach information to the message metadata these are engine
+     * controls to determine what UI to display during the message, as the state of the game updates as messages are streaming, eg. time changes, object changes,
+     * and your game might not run in real time
+     */
     metadata: Record<string, any>;
 
     /**
@@ -3479,6 +3491,12 @@ declare interface DEConversation {
      */
     previousConversationIdsPerParticipant: Record<string, string | null>;
     /**
+     * The next conversation IDs for each participant after this conversation ended
+     * This basically specifies the chain of conversations that led to this one
+     * for each participant individually
+     */
+    nextConversationIdsPerParticipant: Record<string, string | null>;
+    /**
      * The locations of each participant at the time of the conversation, this is used to keep track of where each participant was during the conversation
      */
     locations: Record<string, {
@@ -3543,6 +3561,10 @@ declare interface DEConversation {
      * to avoid having to generate them on demand later
      */
     pseudoConversationSummary?: string | null;
+    /**
+     * Arbitrary metadata of the conversation that can be used for various purposes
+     * mostly meant to use with whatever dreamengine client is used
+     */
     metadata: Record<string, any>;
 }
 
@@ -3816,6 +3838,134 @@ declare interface DEItemPerception {
     hasHighPerception: boolean;
 }
 
+declare interface DECharacterPerspectiveItem {
+
+}
+
+declare interface DECharacterPerspectiveCharacter {
+    characterMetadata: Record<string, any>;
+    characterId: string;
+    characterName: string;
+    characterAllNames: string[];
+    bond: number;
+    bond2: number;
+    stranger: boolean;
+    familyRelation: DEFamilyRelation | null;
+    bondDescription: string;
+    characterHeightCm: number;
+    characterWeightKg: number;
+    characterExternalDescription: string;
+    characterPerceptiveDescription: string;
+    perceptionForm: "visible" | "perceived";
+    characterCarryingItems: Array<DEItem>;
+    characterWearingItems: Array<DEItem>;
+    characterCarryingOtherCharactersIds: string[];
+}
+
+declare interface DEItemInPerspective extends DEItem {
+    ontop: Array<DEItemInPerspective>;
+    containing: Array<DEItemInPerspective>;
+    containingCharacters: Array<string>;
+    ontopCharacters: Array<string>;
+    canSeeContents: "YES" | "NO" | "NO_BECAUSE_CLOSED" | "NO_BECAUSE_BAD_VISION" | "NOT_A_CONTAINER";
+    canSeeOntop: "YES" | "NO_BECAUSE_BAD_VISION";
+}
+
+/**
+ * A location slot in perspective, including the items and characters that are in it, as well as the metadata of the slot
+ */
+declare interface DECharacterPerspectiveLocationSlot {
+    /**
+     * the metadata of the location slot that is in perspective at that moment in time
+     */
+    slotMetadata: Record<string, any>;
+    /**
+     * the location slot ID of the location slot that is in perspective at that moment in time
+     */
+    slotId: string;
+    /**
+     * the location slot name of the location slot that is in perspective at that moment in time
+     */
+    slotName: string;
+    /**
+     * The items that are in the location slot at that moment in time
+     */
+    items: Array<DEItemInPerspective>;
+    itemListsAreUnclear: false | string;
+    characters: Array<DECharacterPerspectiveCharacter>;
+    characterListsAreUnclear: false | string;
+}
+
+/**
+ * Location in perspective
+ */
+declare interface DECharacterPerspectiveLocation {
+    /**
+     * The metadata of the location that is in perspective at that moment in time
+     */
+    locationMetadata: Record<string, any>;
+    /**
+     * The location ID of the location that is in perspective at that moment in time
+     */
+    locationId: string;
+    /**
+     * The location name of the location that is in perspective at that moment in time
+     */
+    locationName: string;
+    /**
+     * The weather name of the location that is in perspective at that moment in time
+     */
+    weatherName: string;
+    /**
+     * The available slots in the location
+     */
+    slots: Array<DECharacterPerspectiveLocationSlot>;
+}
+
+/**
+ * For a given character, what they can perceive about the world around them at that moment in time
+ * perspective is a snapshot of the world from the character's point of view, including their own state, the state of other characters, and the state of locations and items they can perceive
+ * as they perceive them; one character's perspective is not necessarily the same as another's.
+ */
+declare interface DECharacterPerspective {
+    /**
+     * Metadata of the character that is in perspective at that moment in time
+     */
+    ownMetadata: Record<string, any>;
+    /**
+     * The character ID of the character that is in perspective at that moment in time
+     */
+    ownId: string;
+    /**
+     * The character name of the character that is in perspective at that moment in time
+     */
+    ownName: string;
+    /**
+     * The character location ID of the character that is in perspective at that moment in time
+     */
+    ownLocationId: string;
+    /**
+     * The character location name of the character that is in perspective at that moment in time
+     */
+    ownLocationName: string;
+    /**
+     * The character location slot ID of the character that is in perspective at that moment in time
+     */
+    ownLocationSlotId: string;
+    /**
+     * The character location slot name of the character that is in perspective at that moment in time
+     */
+    ownLocationSlotName: string;
+    /**
+     * The current location of the character in perspective
+     */
+    ownLocation: DECharacterPerspectiveLocation;
+    /**
+     * Whether the character is perceiving the world blind or not
+     */
+    ownCharacterBlindness: "no" | "partial-good" | "partial-bad" | "full";
+}
+
 declare interface DEUtils {
     id: {
         /**
@@ -4009,8 +4159,8 @@ declare interface DEUtils {
     conversations: {
         getConversation(conversationId: DEConversation | string): Promise<DEConversation | null>;
         getAllConversationsAtLocation(locationId: DELocation | string): Promise<{conversations: DEConversation[], leftoverCharacters: string[], foundCharacters: string[]}>; // leftoverCharacters are characters that are at the location but not in any conversation
-        addMessage(conversationId: DEConversation | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { unsafeMode?: boolean } = {}): Promise<DEConversationMessage>;
-        addMessageIntoTargetConversation(targetCharacterId: DECompleteCharacterReference | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options?: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean, messageCommunicator?: { type: "new" | "inherit" | "remove"; communicatorName?: string; communicatorItemId?: string; } }): Promise<DEConversationMessage>;
+        addMessageToConversation(conversationId: DEConversation | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects">, options: { unsafeMode?: boolean } = {}): Promise<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>;
+        addMessageIntoCharactersConversation(targetCharacterId: DECompleteCharacterReference | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects">, options?: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean, messageCommunicator?: { type: "new" | "inherit" | "remove"; communicatorName?: string; communicatorItemId?: string; } }): Promise<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>;
         /**
          * Broadcast a message, all characters at a given location (and beyond) will pick it up
          * 
@@ -4021,10 +4171,11 @@ declare interface DEUtils {
          * @param travelDistance 
          * @param travelDistaceType
          */
-        addMessageBroadcast(message: (distance: number) => Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, location: DELocation | string, travelDistance: number, travelDistaceType: "meters" | "connections"): Promise<DEConversationMessage[]>;
+        broadcastMessage(message: (distance: number) => Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects">, location: DELocation | string, travelDistance: number, travelDistaceType: "meters" | "connections"): Promise<Array<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>>;
         newConversation(conversation: Pick<DEConversation, "participants" | "communicators" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean } = {}): Promise<DEConversation>;
     },
     characterInfo: {
+        getPerspective(char: DECompleteCharacterReference | string): DECharacterPerspective;
         /** Group directly carried items by equality ignoring ids, returning the first item and count for each group. */
         getRepresentativeCarrying(char: DECompleteCharacterReference | string): Array<{ item: DEItem; amount: number }>;
         /** Group directly worn items by equality ignoring ids, returning the first item and count for each group. */
@@ -4574,7 +4725,7 @@ declare interface DEDatabaseConversationFns {
     getPossibleLocationsCharKnowsAlikeTo(charId: string, locationOrSlotName: string): Promise<DEConversationLocationMatch[]>;
     getConversationMessage(messageId: string): Promise<DEConversationMessage|null>;
     newConversation(conversation: Omit<DEConversation, "id">): Promise<DEConversation|null>;
-    newConversationMessage(conversationId: string, message: Omit<DEConversationMessage, "id">): Promise<DEConversationMessage|null>;
+    newConversationMessage(conversationId: string, message: Omit<DEConversationMessage, "id" | "isProcessingSideEffects">): Promise<DEConversationMessage|null>;
     /** Update supplied fields without changing the conversation's ID or messages. */
     updateConversation(conversationId: string, conversation: Partial<Omit<DEConversation, "id" | "messages">>): Promise<DEConversation|null>;
     /** Update supplied fields without changing the message's ID or insertion order. */

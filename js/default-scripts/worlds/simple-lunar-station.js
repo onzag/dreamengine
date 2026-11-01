@@ -19,9 +19,9 @@ engine.exports = {
             description: "Whether the character is a robot or not. Robots are impervious to the vaccuum of space weather system",
         }
     },
-    onSceneStarted(DE, scene) {
+    async onSceneStarted(DE, scene) {
         // TODO remove this testing stuff
-        DE.utils.conversations.addMessageIntoTargetConversation(DE.user, {
+        const result = await DE.utils.conversations.addMessageIntoCharactersConversation(DE.user, {
             metadata: {},
             canOnlyBeSeenByCharacter: null,
             content: [
@@ -66,6 +66,7 @@ engine.exports = {
         }, {
             ghost: true,
         });
+        await result.sideEffectsReady();
     },
     initialize(DE) {
         /**

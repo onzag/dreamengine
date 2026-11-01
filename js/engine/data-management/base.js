@@ -127,8 +127,9 @@ export class BaseDataManager {
     }
 
     /**
+     * Append a new message with isProcessingSideEffects set to true.
      * @param {string} conversationId
-     * @param {Omit<DEConversationMessage, "id">} message 
+     * @param {Omit<DEConversationMessage, "id" | "isProcessingSideEffects">} message
      * @returns {Promise<DEConversationMessage|null>}
      */
     async newConversationMessage(conversationId, message) {
@@ -149,6 +150,7 @@ export class BaseDataManager {
 
     /**
      * Update supplied fields while preserving the message's ID and insertion order.
+     * Completed messages cannot be modified; return null if an update is refused.
      * @param {string} messageId
      * @param {Partial<Omit<DEConversationMessage, "id">>} message
      * @returns {Promise<DEConversationMessage|null>}

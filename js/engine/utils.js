@@ -1105,6 +1105,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 endTime: null,
                 pseudoConversationSummary: conversation.pseudoConversationSummary,
                 metadata: {},
+                nextConversationIdsPerParticipant: {},
             };
 
             newConversation.metadata = await engine.callConversationMetadataGenerator(newConversation);
@@ -1113,7 +1114,10 @@ export const deEngineUtilsFn = (DE, engine) => ({
              * @type {Array<(id: string) => void>}
              */
             const fnsToRunOnceIdIsKnown = [];
-            const conversationsEnded = new Set();
+            /**
+             * @type {Array<DEConversation>}
+             */
+            const conversationsEnded = [];
 
             for (const participantId of participants) {
                 // stateFor is keyed by character id
@@ -1139,27 +1143,18 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     ex: DE.bonds[participantId].ex.map(b => ({ ...b })),
                 };
                 if (oldConversation) {
-                    conversationsEnded.add(oldConversation.id);
-                    oldConversation.bondsAtEnd = oldConversation.bondsAtEnd || {};
-                    oldConversation.bondsAtEnd[participantId] = newConversation.bondsAtStart[participantId];
+                    let existingOldConversation = conversationsEnded.find(c => c.id === oldConversation.id);
+                    if (!existingOldConversation) {
+                        conversationsEnded.push(oldConversation);
+                        existingOldConversation = oldConversation;
+                    }
+                    existingOldConversation.bondsAtEnd = oldConversation.bondsAtEnd || {};
+                    existingOldConversation.bondsAtEnd[participantId] = newConversation.bondsAtStart[participantId];
                 }
                 newConversation.previousConversationIdsPerParticipant[participantId] = oldConversation ? oldConversation.id : null;
             }
 
-            for (const endedConversationId of conversationsEnded) {
-                const endedConversation = await DE.utils.conversations.getConversation(endedConversationId);
-                if (endedConversation && !endedConversation.endTime) {
-                    endedConversation.endTime = { ...DE.currentTime };
-                    await DE.database.updateConversation(endedConversationId, {
-                        endTime: endedConversation.endTime,
-                    });
-                }
-
-                if (!endedConversation) {
-                    console.warn(`Ended conversation with id ${endedConversationId} not found`);
-                    continue;
-                }
-
+            for (const endedConversation of conversationsEnded) {
                 const participantsLeft = endedConversation.participants.filter(p => !participants.includes(p));
 
                 if (participantsLeft.length !== 0) {
@@ -1176,6 +1171,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         messages: [],
                         pseudoConversation: participantsLeft.includes(DE.user) ? false : true,
                         metadata: {},
+                        nextConversationIdsPerParticipant: {},
                     };
 
                     newConversationForRemainingParticipants.metadata = await engine.callConversationMetadataGenerator(newConversationForRemainingParticipants);
@@ -1193,13 +1189,27 @@ export const deEngineUtilsFn = (DE, engine) => ({
                             active: DE.bonds[allParticipantId].active.map(b => ({ ...b })),
                             ex: DE.bonds[allParticipantId].ex.map(b => ({ ...b })),
                         };
-                        newConversationForRemainingParticipants.previousConversationIdsPerParticipant[allParticipantId] = endedConversationId;
+                        newConversationForRemainingParticipants.previousConversationIdsPerParticipant[allParticipantId] = endedConversation.id;
+                        endedConversation.nextConversationIdsPerParticipant[allParticipantId] = actualNewConversationForRemainingParticipants.id;
                     }
 
                     engine.triggerConversationMessageUpdate(DE, {
                         event: "new-conversation",
                         conversationId: actualNewConversationForRemainingParticipants.id,
                         obj: actualNewConversationForRemainingParticipants,
+                    });
+                }
+                
+                if (endedConversation && !endedConversation.endTime) {
+                    endedConversation.endTime = { ...DE.currentTime };
+                    await DE.database.updateConversation(endedConversation.id, {
+                        endTime: endedConversation.endTime,
+                        bondsAtEnd: endedConversation.bondsAtEnd,
+                        nextConversationIdsPerParticipant: endedConversation.nextConversationIdsPerParticipant,
+                    });
+                } else {
+                    await DE.database.updateConversation(endedConversation.id, {
+                        nextConversationIdsPerParticipant: endedConversation.nextConversationIdsPerParticipant,
                     });
                 }
             }
@@ -1221,7 +1231,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             });
             return addedConversation;
         },
-        async addMessage(conversationId, message, options = {}) {
+        async addMessageToConversation(conversationId, message, options = {}) {
             const conversationObject = await DE.utils.conversations.getConversation(conversationId);
             if (!conversationObject) {
                 throw new Error(`Conversation with ID ${conversationId} not found`);
@@ -1253,7 +1263,13 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 },
                 endTime: { ...DE.currentTime },
                 untimed: true,
+                isProcessingSideEffects: true,
             };
+
+            const preResults = await engine.callConversationMessageMetadataGenerator(conversationObject, newMessage, "pre-side-effects");
+            if (preResults) {
+                newMessage.metadata = preResults;
+            }
 
             const addedMessage = await DE.database.newConversationMessage(conversationId, newMessage);
 
@@ -1267,9 +1283,20 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 messageId: addedMessage.id,
                 obj: addedMessage,
             });
-            return addedMessage;
+            return {
+                message: addedMessage,
+                sideEffectsReady: async () => {
+                    const postResult = await engine.callConversationMessageMetadataGenerator(conversationObject, addedMessage, "post-side-effects");
+                    if (postResult) {
+                        addedMessage.metadata = postResult;
+                        await DE.database.updateConversationMessage(addedMessage.id, {
+                            metadata: addedMessage.metadata,
+                        });
+                    }
+                }
+            };
         },
-        async addMessageIntoTargetConversation(targetCharacterId, message, options = {}) {
+        async addMessageIntoCharactersConversation(targetCharacterId, message, options = {}) {
             targetCharacterId = typeof targetCharacterId === "string" ? targetCharacterId : targetCharacterId.id;
             // target is a character id
             const targetChar = DE.stateFor[targetCharacterId];
@@ -1442,11 +1469,11 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 // @ts-ignore
             }, { ...options, __newLocationsMemorySaveHack: newLocationsOfParticipants });
 
-            return DE.utils.conversations.addMessage(targetConversation.id, message, {
+            return DE.utils.conversations.addMessageToConversation(targetConversation.id, message, {
                 unsafeMode: options.unsafeMode || senderIsGhost || message.isStoryMasterMessage || false,
             });
         },
-        async addMessageBroadcast(message, location, travelDistance, travelDistanceType) {
+        async broadcastMessage(message, location, travelDistance, travelDistanceType) {
             location = typeof location === "string" ? location : location.id;
             const locationsToBroadcast = new Set([
                 {
@@ -1467,7 +1494,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 distance: loc.distance,
             }));
 
-            /** @type {DEConversationMessage[]} */
+            /** @type {Array<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>} */
             const finalConversationeMessages = [];
 
             messagesToBroadcast.forEach(async m => {
@@ -1485,10 +1512,10 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 }
 
                 for (const conversationId of allRelevantConversationIds) {
-                    finalConversationeMessages.push(await DE.utils.conversations.addMessage(conversationId, m.message, { unsafeMode: true }));
+                    finalConversationeMessages.push(await DE.utils.conversations.addMessageToConversation(conversationId, m.message, { unsafeMode: true }));
                 }
                 for (const charId of charactersWithoutConversation) {
-                    finalConversationeMessages.push(await DE.utils.conversations.addMessageIntoTargetConversation(charId, m.message, { unsafeMode: true, ghost: true }));
+                    finalConversationeMessages.push(await DE.utils.conversations.addMessageIntoCharactersConversation(charId, m.message, { unsafeMode: true, ghost: true }));
                 }
             });
 
