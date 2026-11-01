@@ -47,20 +47,6 @@ function resolveCharacter(DE, c) {
     return typeof c === "string" ? DE.characters[c] : c;
 }
 
-const unspecificQualifiersSoloWorlds = [
-    "he", "him", "his", "himself",
-    "she", "her", "hers", "herself",
-    "they", "them", "their", "theirs", "themself", "themselves",
-    "it", "its", "itself",
-];
-/**
- * 
- * @param {string} text
- */
-function isUnspecificText(text) {
-    return unspecificQualifiersSoloWorlds.includes(text.toLowerCase().trim());
-}
-
 /**
  * @param {DEObject} DE
  * @param {DEItem | string} item
@@ -2611,69 +2597,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             const resolvedEmitter = resolveCharacter(DE, emitterCharacter);
             const resolvedPerspective = resolveCharacter(DE, perspectiveCharacter);
 
-            /** @type {Array<DEConversationMessageNarrationFragment>} */
-            const fragments = [];
-            let lastIndex = 0;
-
-            // Match entity identifiers paired with their readable names.
-            // Leave incomplete markers and other angle-bracketed text untouched.
-            for (const match of message.matchAll(/<([^<>:\s]+):([^<>]+)>/g)) {
-                const identifier = match[1];
-                const name = match[2];
-
-                if (match.index > lastIndex) {
-                    fragments.push(message.slice(lastIndex, match.index));
-                }
-
-                const result = await findBestIdentifier(DE, identifier, name, resolvedEmitter?.id || null);
-
-                if (result.foundAs === "character" && resolvedPerspective) {
-                    // unspecific will be eg. he, him, she, her, they, them, etc.
-                    const isUnspecific = isUnspecificText(result.text);
-                    if (!isUnspecific) {
-                        // okay so it is not a highly unspecifc pronoun, which means it might contain
-                        // unknown information, we must check it, by using the emitterCharacter, the targetCharacter, and the perspectiveCharacter
-                        const targetCharacter = DE.characters[result.identifier];
-                        if (targetCharacter) {
-                            let perspectiveCanReferToTargetAs = [];
-                            if (!resolvedPerspective || resolvedPerspective.id === targetCharacter.id) {
-                                perspectiveCanReferToTargetAs.push(targetCharacter.name);
-                            } else {
-                                const perspectiveToTargetBond = DE.bonds[resolvedPerspective.id]?.active.find(b => b.towards === targetCharacter.id) ||
-                                    DE.bonds[resolvedPerspective.id]?.ex.find(b => b.towards === targetCharacter.id);
-                                if (perspectiveToTargetBond) {
-                                    perspectiveCanReferToTargetAs.push(...perspectiveToTargetBond.knowsAs.map(k => k.name));
-                                }
-                            }
-
-                            perspectiveCanReferToTargetAs = perspectiveCanReferToTargetAs.map(name => name.replace(/^(the|a|an)\s+/i, "").trim());
-
-                            // now we must find what the emitter might have referred to them as
-                            let emitterMightHaveReferredToTargetAs = [];
-                            if (!resolvedEmitter || resolvedEmitter.id === targetCharacter.id) {
-                                emitterMightHaveReferredToTargetAs.push(targetCharacter.name);
-                            } else {
-                                const emitterToTargetBond = DE.bonds[resolvedEmitter.id]?.active.find(b => b.towards === targetCharacter.id) ||
-                                    DE.bonds[resolvedEmitter.id]?.ex.find(b => b.towards === targetCharacter.id);
-                                if (emitterToTargetBond) {
-                                    emitterMightHaveReferredToTargetAs.push(...emitterToTargetBond.knowsAs.map(k => k.name));
-                                }
-                            }
-
-                            // remove things like the or a from the start if any
-                            emitterMightHaveReferredToTargetAs = emitterMightHaveReferredToTargetAs.map(name => name.replace(/^(the|a|an)\s+/i, "").trim());
-                        }
-                    }
-                }
-
-                fragments.push(result);
-
-                lastIndex = match.index + match[0].length;
-            }
-            if (lastIndex < message.length) {
-                fragments.push(message.slice(lastIndex));
-            }
-            return fragments;
+            
         },
         breakDownCharactersAndCausesTemplate(info) {
             return async (info2) => {
