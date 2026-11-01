@@ -4575,7 +4575,7 @@ declare interface DEUtils {
          * The story message to parse
          * @param message The story message to parse
          */
-        parseNarration(message: string): Promise<Array<DEConversationMessageNarrationFragment>>;
+        parseNarration(message: string, emitterCharacter: DECompleteCharacterReference | string | null, perspectiveCharacter: DECompleteCharacterReference | string | null): Promise<Array<DEConversationMessageNarrationFragment>>;
     };
 
     ramdom: {

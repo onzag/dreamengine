@@ -192,9 +192,6 @@ export const INFERENCE_ADAPTERS = {
         }),
         buildConfig: async (getConfigValue) => {
             const host = await getConfigValue("host");
-            if (!host) {
-                return null;
-            }
             return {
                 host,
                 embeddingHost: await getConfigValue("embeddingHost"),
