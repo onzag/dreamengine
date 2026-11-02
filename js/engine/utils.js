@@ -8,6 +8,7 @@ import { itemsEqualIgnoringId, utilItemCount } from "./util/items.js";
 import { getSizeVisibility, getPerceivedItemLabel } from "./util/visibility.js";
 import { findBestIdentifier } from "./util/identifiers.js";
 import { parseNarration, parseDialogue, putNarrationInPerspective, putDialogueInPerspective } from "./util/narration-and-dialogue.js";
+import { getPerspective } from "./util/perspective.js";
 
 // NOTE: DE.characters, DE.bonds, DE.stateFor are all keyed by character id (character.id), not character name.
 // DESingleBondDescription.towards is a character id.
@@ -1245,7 +1246,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
 
                 )
             ) {
-                throw new Error(`Sender ${message.characterId} is not a participant nor a remote participant of conversation ${conversationId}`);
+                throw new Error(`Sender ${message.characterId} is not a participant of conversation ${conversationId}`);
             }
 
             /** @type {Omit<DEConversationMessage, "id">} */
@@ -1261,7 +1262,61 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 endTime: { ...DE.currentTime },
                 untimed: true,
                 isProcessingSideEffects: true,
+                perspectiveByCharacterId: {},
+                perspectiveMessageByCharacterId: {},
             };
+
+            const emitterChar = message.characterId ? DE.characters[message.characterId] : null;
+
+            for (const participantId of conversationObject.participants) {
+                const participantChar = DE.characters[participantId];
+                if (!participantChar) {
+                    // must be a ghost participant, skip perspective generation
+                    continue;
+                }
+                const heardIdentifiers = DE.stateFor[participantId].heardIdentifiers;
+                const perspective = await getPerspective(DE, participantChar);
+                const savedPerspective = await DE.database.storePerspective(perspective);
+                newMessage.perspectiveByCharacterId[participantId] = {
+                    before: savedPerspective,
+                    after: null,
+                };
+                /**
+                 * @type {Array<DEConversationMessageDialogue | DEConversationMessageNarration>}
+                 */
+                const perspectiveMessage = [];
+
+                for (const dialogueOrNarration of message.content) {
+
+                    if (dialogueOrNarration.type === "dialogue") {
+                        /**
+                         * @type {Array<DEConversationMessageDialogueFragment>}
+                         */
+                        const fragmentsOfDialogue = dialogueOrNarration.fragments;
+                        const resultOfDialogueInPerspective = await putDialogueInPerspective(DE, fragmentsOfDialogue, emitterChar, participantChar, heardIdentifiers);
+                        for (const newIdentifier of resultOfDialogueInPerspective.heardIdentifiers) {
+                            if (!heardIdentifiers.some(id => id.type === newIdentifier.type && id.text === newIdentifier.text && id.identifier === newIdentifier.identifier)) {
+                                // this should also modify the DE.stateFor[participantId].heardIdentifiers array, since heardIdentifiers is a reference to that array
+                                heardIdentifiers.push(newIdentifier);
+                            }
+                        }
+                        perspectiveMessage.push({
+                            ...dialogueOrNarration,
+                            fragments: resultOfDialogueInPerspective.fragments,
+                        });
+                    } else if (dialogueOrNarration.type === "narration") {
+                        /**
+                         * @type {Array<DEConversationMessageNarrationFragment>}
+                         */
+                        const fragmentsOfNarration = dialogueOrNarration.fragments;
+                        perspectiveMessage.push({
+                            ...dialogueOrNarration,
+                            fragments: (await putNarrationInPerspective(DE, fragmentsOfNarration, emitterChar, participantChar, heardIdentifiers)).fragments,
+                        });
+                    }
+                }
+                newMessage.perspectiveMessageByCharacterId[participantId] = perspectiveMessage;
+            }
 
             const addedMessage = await DE.database.newConversationMessage(conversationId, newMessage);
 
@@ -1278,6 +1333,21 @@ export const deEngineUtilsFn = (DE, engine) => ({
             return {
                 message: addedMessage,
                 sideEffectsReady: async () => {
+                    for (const participantId of conversationObject.participants) {
+                        const participantChar = DE.characters[participantId];
+                        if (!participantChar) {
+                            // must be a ghost participant, skip perspective generation
+                            continue;
+                        }
+                        const perspective = await getPerspective(DE, participantChar);
+                        const savedPerspective = await DE.database.storePerspective(perspective);
+                        addedMessage.perspectiveByCharacterId[participantId].after = savedPerspective;
+                    }
+
+                    await DE.database.updateConversationMessage(addedMessage.id, {
+                        perspectiveByCharacterId: addedMessage.perspectiveByCharacterId,
+                        isProcessingSideEffects: false,
+                    });
                 }
             };
         },
@@ -1509,10 +1579,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     characterInfo: {
-        // @ts-ignore
         getPerspective(char) {
             const character = requireCharacter(DE, char);
-            // TODO
+            return getPerspective(DE, character);
         },
         getRepresentativeCarrying(char) {
             const character = requireCharacter(DE, char);
@@ -2594,12 +2663,12 @@ export const deEngineUtilsFn = (DE, engine) => ({
         putNarrationInPerspective: async (message, emitterCharacter, perspectiveCharacter, previouslyHeardIdentifiers) => {
             const resolvedEmitter = resolveCharacter(DE, emitterCharacter ?? null) || null;
             const resolvedPerspective = resolveCharacter(DE, perspectiveCharacter ?? null) || null;
-            return putNarrationInPerspective(DE, message, resolvedEmitter, resolvedPerspective, previouslyHeardIdentifiers ?? null);
+            return (await putNarrationInPerspective(DE, message, resolvedEmitter, resolvedPerspective, previouslyHeardIdentifiers ?? null)).fragments;
         },
         putDialogueInPerspective: async (message, emitterCharacter, perspectiveCharacter, previouslyHeardIdentifiers) => {
             const resolvedEmitter = resolveCharacter(DE, emitterCharacter ?? null) || null;
             const resolvedPerspective = resolveCharacter(DE, perspectiveCharacter ?? null) || null;
-            return putDialogueInPerspective(DE, message, resolvedEmitter, resolvedPerspective, previouslyHeardIdentifiers ?? null);
+            return (await putDialogueInPerspective(DE, message, resolvedEmitter, resolvedPerspective, previouslyHeardIdentifiers ?? null)).fragments;
         },
     },
 

@@ -334,7 +334,7 @@ export async function parseNarration(DE, rawMessage, resolvedEmitterAndPerspecti
  * @param {DECompleteCharacterReference|null} resolvedEmitter 
  * @param {DECompleteCharacterReference|null} resolvedPerspectiveCharacter
  * @param {Array<DEConversationMessageFragmentIdentifier>|null} previouslyHeardIdentifiers
- * @returns {Promise<Array<DEConversationMessageNarrationFragment>>}
+ * @returns {Promise<{ fragments: Array<DEConversationMessageNarrationFragment> }>}
  */
 export async function putNarrationInPerspective(DE, message, resolvedEmitter, resolvedPerspectiveCharacter, previouslyHeardIdentifiers) {
     /** @type {Array<DEConversationMessageNarrationFragment>} */
@@ -574,7 +574,9 @@ export async function putNarrationInPerspective(DE, message, resolvedEmitter, re
     // "The technological creature (the robot), is at the station..." or "The robot (the first robot), is at the station..."
     // For that we will check single sentences starting with "The" or "As the" or "as this" or "as that" or "this" or "that" or similar cases that specify a character identity
     // only the modifiedFragmentsIndexes will be checked, all the others fragments will remain original, as they are not modified, and thus not a problem
-    return findAwkardness(fragments, modifiedFragmentsIndexes);
+    return {
+        fragments,
+    };
 }
 
 /**
@@ -584,6 +586,10 @@ export async function putNarrationInPerspective(DE, message, resolvedEmitter, re
  * @param {DECompleteCharacterReference | null} resolvedEmitter 
  * @param {DECompleteCharacterReference | null} resolvedPerspectiveCharacter 
  * @param {Array<DEConversationMessageFragmentIdentifier> | null} previouslyHeardIdentifiers
+ * @returns {Promise<{
+ *    fragments: Array<DEConversationMessageDialogueFragment>,
+ *    heardIdentifiers: Array<DEConversationMessageFragmentIdentifier>
+ * }>}
  */
 export async function putDialogueInPerspective(DE, message, resolvedEmitter, resolvedPerspectiveCharacter, previouslyHeardIdentifiers) {
     /** @type {Array<DEConversationMessageDialogueFragment>} */
@@ -613,12 +619,15 @@ export async function putDialogueInPerspective(DE, message, resolvedEmitter, res
 
     for (const fragment of fragments) {
         if (fragment.type === "narration") {
-            fragment.fragments = await putNarrationInPerspective(DE, fragment.fragments, resolvedEmitter, resolvedPerspectiveCharacter, actualHeardIdentifiers);
+            fragment.fragments = (await putNarrationInPerspective(DE, fragment.fragments, resolvedEmitter, resolvedPerspectiveCharacter, actualHeardIdentifiers)).fragments;
         }
     }
 
     // done
-    return fragments;
+    return {
+        fragments,
+        heardIdentifiers: actualHeardIdentifiers,
+    };
 }
 
 /**

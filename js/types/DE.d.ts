@@ -2668,6 +2668,7 @@ declare interface DEStateForCharacter {
     conversationId: string | null;
     posture: DEPosture;
     carrying: DEItem[];
+    heardIdentifiers: DEConversationMessageFragmentIdentifier[];
     carryingCharactersDirectly: Array<{
         id: string;
         /**
@@ -3415,7 +3416,7 @@ declare interface DEConversationMessage {
     perspectiveByCharacterId: {
         [characterId: string]: {
             before: string;
-            after: string;
+            after: string | null;
         }
     };
 
@@ -4316,8 +4317,8 @@ declare interface DEUtils {
     conversations: {
         getConversation(conversationId: DEConversation | string): Promise<DEConversation | null>;
         getAllConversationsAtLocation(locationId: DELocation | string): Promise<{conversations: DEConversation[], leftoverCharacters: string[], foundCharacters: string[]}>; // leftoverCharacters are characters that are at the location but not in any conversation
-        addMessageToConversation(conversationId: DEConversation | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects">, options: { unsafeMode?: boolean } = {}): Promise<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>;
-        addMessageIntoCharactersConversation(targetCharacterId: DECompleteCharacterReference | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects">, options?: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean, messageCommunicator?: { type: "new" | "inherit" | "remove"; communicatorName?: string; communicatorItemId?: string; } }): Promise<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>;
+        addMessageToConversation(conversationId: DEConversation | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects" | "perspectiveMessageByCharacterId" | "perspectiveByCharacterId">, options: { unsafeMode?: boolean } = {}): Promise<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>;
+        addMessageIntoCharactersConversation(targetCharacterId: DECompleteCharacterReference | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects" | "perspectiveMessageByCharacterId" | "perspectiveByCharacterId">, options?: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean, messageCommunicator?: { type: "new" | "inherit" | "remove"; communicatorName?: string; communicatorItemId?: string; } }): Promise<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>;
         /**
          * Broadcast a message, all characters at a given location (and beyond) will pick it up
          * 
@@ -4332,7 +4333,7 @@ declare interface DEUtils {
         newConversation(conversation: Pick<DEConversation, "participants" | "communicators" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean } = {}): Promise<DEConversation>;
     },
     characterInfo: {
-        getPerspective(char: DECompleteCharacterReference | string): DECharacterPerspective;
+        getPerspective(char: DECompleteCharacterReference | string): Promise<DECharacterPerspective>;
         /** Group directly carried items by equality ignoring ids, returning the first item and count for each group. */
         getRepresentativeCarrying(char: DECompleteCharacterReference | string): Array<{ item: DEItem; amount: number }>;
         /** Group directly worn items by equality ignoring ids, returning the first item and count for each group. */
