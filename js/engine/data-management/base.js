@@ -160,6 +160,26 @@ export class BaseDataManager {
     }
 
     /**
+     * Serialize a character perspective snapshot and return its new storage ID.
+     * @param {DECharacterPerspective} perspective
+     * @returns {Promise<string>}
+     */
+    async storePerspective(perspective) {
+        // Placeholder: Implement logic to store a character perspective snapshot.
+        // @ts-ignore
+        return null;
+    }
+
+    /**
+     * Retrieve a stored character perspective snapshot by its ID.
+     * @param {string} perspectiveId
+     * @returns {Promise<DECharacterPerspective | null>}
+     */
+    async getPerspectiveById(perspectiveId) {
+        return null; // Placeholder: Implement logic to retrieve a character perspective snapshot.
+    }
+
+    /**
      * Stores a historic state information for a character
      * @param {string} charId
      * @param {DEStateForCharacter} state 
@@ -258,6 +278,8 @@ export class BaseDataManager {
             newConversationMessage: this.newConversationMessage.bind(this),
             updateConversation: this.updateConversation.bind(this),
             updateConversationMessage: this.updateConversationMessage.bind(this),
+            storePerspective: this.storePerspective.bind(this),
+            getPerspectiveById: this.getPerspectiveById.bind(this),
             storeHistoricState: this.storeHistoricState.bind(this),
             getHistoricStateActivationCyclesAgo: this.getHistoricStateActivationCyclesAgo.bind(this),
             getFirstHistoricStateWithCharacter: this.getFirstHistoricStateWithCharacter.bind(this),

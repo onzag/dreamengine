@@ -326,6 +326,7 @@ export class DEngine {
          */
         this.thinkingListeners = [];
         /**
+         * TODO remove these message update listeners as they are not a thing anymore
          * @type {((obj: DEObject, event: EngineConversationEvent) => void)[]}
          */
         this.messageUpdateListeners = [];
@@ -354,35 +355,6 @@ export class DEngine {
         this.disabledWorldRules = false;
 
         this.getDEObject = this.getDEObject.bind(this);
-    }
-
-    /**
-     * 
-     * @param {Omit<DEConversation, "id">} conversationToBeGenerated 
-     * @returns {Promise<Record<string, any>>}
-     */
-    async callConversationMetadataGenerator(conversationToBeGenerated) {
-        if (!this.jsEngine) {
-            throw new Error("JS engine not set");
-        }
-
-        // TODO
-        return {};
-    }
-
-    /**
-     * @param {DEConversation} conversation
-     * @param {Omit<DEConversationMessage, "id">} conversationMessageToBeGenerated 
-     * @param {"pre-side-effects" | "post-side-effects"} phase
-     * @returns {Promise<Record<string, any>>}
-     */
-    async callConversationMessageMetadataGenerator(conversation, conversationMessageToBeGenerated, phase) {
-        if (!this.jsEngine) {
-            throw new Error("JS engine not set");
-        }
-
-        // TODO
-        return {};
     }
 
     /**

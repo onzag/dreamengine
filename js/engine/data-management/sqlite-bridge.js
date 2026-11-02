@@ -33,7 +33,9 @@ const messageFields = {
     isProcessingSideEffects: "boolean",
     canOnlyBeSeenByCharacter: "text",
     singleSummary: "text",
-    perspectiveSummaryIds: "json",
+    summariesByCharacterId: "json",
+    perspectiveMessageByCharacterId: "json",
+    perspectiveByCharacterId: "json",
     emotion: "text",
     emotionalRange: "json",
     interactingCharacters: "json",
@@ -173,6 +175,10 @@ export class SQLiteBridge extends BaseDataManager {
                     )`,
                     `CREATE INDEX IF NOT EXISTS engine_history_by_character
                         ON engine_historic_states (charId, id)`,
+                    `CREATE TABLE IF NOT EXISTS engine_perspectives (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        document TEXT NOT NULL CHECK (json_valid(document))
+                    )`,
                 ];
                 for (const [table, column] of [
                     ["engine_historic_seen_characters", "character_id"],
@@ -205,11 +211,23 @@ export class SQLiteBridge extends BaseDataManager {
         await super.loadDatabase(loadName);
         try {
             await this.withTransaction(async (id) => {
+                await this.databaseController.runQuery(id, `
+                    CREATE TABLE IF NOT EXISTS engine_perspectives (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        document TEXT NOT NULL CHECK (json_valid(document))
+                    )
+                `);
                 const additions = [
                     ["engine_conversations", "nextConversationIdsPerParticipant",
                         "TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(nextConversationIdsPerParticipant))"],
                     ["engine_conversation_messages", "isProcessingSideEffects",
                         "INTEGER NOT NULL DEFAULT 0 CHECK (isProcessingSideEffects IN (0, 1))"],
+                    ["engine_conversation_messages", "summariesByCharacterId",
+                        "TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(summariesByCharacterId))"],
+                    ["engine_conversation_messages", "perspectiveMessageByCharacterId",
+                        "TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(perspectiveMessageByCharacterId))"],
+                    ["engine_conversation_messages", "perspectiveByCharacterId",
+                        "TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(perspectiveByCharacterId))"],
                 ];
                 for (const [table, name, definition] of additions) {
                     const columns = await this.databaseController.runQuery(id, `PRAGMA table_info(${table})`);
@@ -558,6 +576,33 @@ export class SQLiteBridge extends BaseDataManager {
             const rows = await this.databaseController.runQuery(id, query,
                 [...values, numericId(messageId, "M")]);
             return rows.length ? readFields(messageFields, rows[0], "M") : null;
+        });
+    }
+
+    /**
+     * Serialize a character perspective snapshot as a JSON document and return its new ID.
+     * @param {DECharacterPerspective} perspective
+     * @returns {Promise<string>}
+     */
+    async storePerspective(perspective) {
+        const document = JSON.stringify(perspective);
+        return this.withDatabase(async (id) => {
+            const rows = await this.databaseController.runQuery(id,
+                "INSERT INTO engine_perspectives (document) VALUES (?) RETURNING id", [document]);
+            return "P" + rows[0].id;
+        });
+    }
+
+    /**
+     * Retrieve a stored character perspective snapshot by its ID, deserialized from JSON.
+     * @param {string} perspectiveId
+     * @returns {Promise<DECharacterPerspective | null>}
+     */
+    async getPerspectiveById(perspectiveId) {
+        return this.withDatabase(async (id) => {
+            const rows = await this.databaseController.runQuery(id,
+                "SELECT document FROM engine_perspectives WHERE id = ?", [numericId(perspectiveId, "P")]);
+            return rows.length ? JSON.parse(rows[0].document) : null;
         });
     }
 

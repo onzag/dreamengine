@@ -273,55 +273,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 const keepgoing = yield ({
                     name: knownName,
                     // no change if the message is from the character themselves, surely they know all the information they used to create that message
-                    content: message.characterId === character.id ? message.content : message.content.map((messageNarrationOrDialogue) => {
-                        if (messageNarrationOrDialogue.type === "narration") {
-                            return {
-                                ...messageNarrationOrDialogue,
-                                fragments: messageNarrationOrDialogue.fragments.map((fragment) => {
-                                    if (typeof fragment === "string" || (fragment.type === "identifier" && fragment.foundAs !== "character")) {
-                                        return fragment;
-                                    } else {
-                                        const charKnownAs = getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine.getDEObject(), character, engine.getDEObject().characters[fragment.identifier]);
-                                        // already similar enough, don't change it
-                                        if (fragment.text.toLowerCase().includes(charKnownAs.toLowerCase())) {
-                                            return fragment;
-                                        }
-                                        return {
-                                            ...fragment,
-                                            text: charKnownAs,
-                                        };
-                                    }
-                                })
-                            };
-                        } else {
-                            return {
-                                ...messageNarrationOrDialogue,
-                                fragments: messageNarrationOrDialogue.fragments.map((fragment) => {
-                                    if (fragment.type === "narration") {
-                                        return {
-                                            ...fragment,
-                                            fragments: fragment.fragments.map((subFragment) => {
-                                                if (typeof subFragment === "string" || (subFragment.type === "identifier" && subFragment.foundAs !== "character")) {
-                                                    return subFragment;
-                                                } else {
-                                                    const charKnownAs = getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine.getDEObject(), character, engine.getDEObject().characters[subFragment.identifier]);
-                                                    if (subFragment.text.toLowerCase().includes(charKnownAs.toLowerCase())) {
-                                                        return subFragment;
-                                                    }
-                                                    return {
-                                                        ...subFragment,
-                                                        text: charKnownAs,
-                                                    };
-                                                }
-                                            })
-                                        };
-                                    } else {
-                                        return fragment;
-                                    }
-                                }),
-                            };
-                        }
-                    }),
+                    content: message.characterId === character.id ? message.content : message.perspectiveMessageByCharacterId[character.id] || message.content,
                     id: message.id,
                     characterId: message.characterId,
                     conversationId: currentConversationId,

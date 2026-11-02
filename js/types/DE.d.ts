@@ -275,6 +275,13 @@ declare interface DECharacterStateDefinition {
      */
     dominance: number;
     /**
+     * Whether this state is hidden to other characters perception, this is useful for states that are meant to be
+     * internal to the character and not meant to be perceived by others
+     * 
+     * it is recommended that all emotional states are hidden to others, while physical states that are visible are not hidden to others
+     */
+    hiddenToOthers?: boolean;
+    /**
      * Causes the character intimacy to multiply by this factor when the state is active
      * dominance irrelevant all active states affect it
      * Default is 1, meaning no change, a value of 0.5 would mean that intimacy is halved when the state is active, a value of 2 would mean that intimacy is doubled when the state is active
@@ -3386,8 +3393,30 @@ declare interface DEConversationMessage {
      * 
      * Summaries are available at "summaries" property on the DE object
      */
-    perspectiveSummaryIds: {
-        [characterName: string]: Array<string>;
+    summariesByCharacterId: {
+        [characterId: string]: Array<string>;
+    };
+
+    /**
+     * The perspective message by each character, this mirrors the content but as seen from the perspective of each character (or participant) in the conversation
+     * at the moment in time when the message was sent
+     */
+    perspectiveMessageByCharacterId: {
+        [characterId: string]: Array<DEConversationMessageNarration | DEConversationMessageDialogue>;
+    };
+
+    /**
+     * This represents something different and instead provides the id for a perspective object that represents
+     * how the character saw the world at the time the message was sent, before and after
+     * 
+     * You need to use perspective.getPerspectiveById to get the perspective object from the utility
+     * different characters might have wildly different perspectives
+     */
+    perspectiveByCharacterId: {
+        [characterId: string]: {
+            before: string;
+            after: string;
+        }
     };
 
     /**
@@ -3838,37 +3867,138 @@ declare interface DEItemPerception {
     hasHighPerception: boolean;
 }
 
-declare interface DECharacterPerspectiveItem {
-
-}
-
 declare interface DECharacterPerspectiveCharacter {
+    /**
+     * Metadata of the character that is in perspective at that moment in time, this includes all the character's attributes, states, and other properties
+     */
     characterMetadata: Record<string, any>;
+    /**
+     * Id of the character that is in perspective at that moment in time, this is used to identify the character in the world and to access its properties
+     */
     characterId: string;
+    /**
+     * Name of the character as known by the perspective character at the time
+     */
     characterName: string;
+    /**
+     * All the names of the character as known by the perspective character at the time, this includes nicknames, aliases, and other names that the character might be known by
+     */
     characterAllNames: string[];
+    /**
+     * Bond level at the time, for self it is 0
+     */
     bond: number;
+    /**
+     * Secondary bond level at the time, for self is it 0
+     */
     bond2: number;
+    /**
+     * The perceived gender of the character as known by the perspective character at the time, this includes male, female, ambiguous, and unknown.
+     * unknown is often due to bad perception
+     */
+    perceivedGender: "male" | "female" | "ambiguous" | "unknown";
+    /**
+     * stranger bond value for self it is false
+     */
     stranger: boolean;
+    /**
+     * Family relation of the character as known by the perspective character at the time, this includes parent, sibling, child, spouse, etc.
+     */
     familyRelation: DEFamilyRelation | null;
+    /**
+     * Description of the bond between the perspective character and this character at the time, this includes how they feel about each other, their history, and other relevant information
+     */
     bondDescription: string;
+    /**
+     * Whether the perspective character can tell the height of the other character at that moment in time, this is based on their perception
+     */
+    canTellHeight: boolean;
+    /**
+     * Whether the perspective character can tell the weight of the other character at that moment in time, this is based on their perception
+     */
+    canTellWeight: boolean;
+    /**
+     * Height of the other character in centimeters, as known by the perspective character at the time
+     * this will be 0 if the character cannot tell the height of the other character
+     */
     characterHeightCm: number;
+    /**
+     * Weight of the other character in kilograms, as known by the perspective character at the time
+     * this will be 0 if the character cannot tell the weight of the other character
+     */
     characterWeightKg: number;
+    /**
+     * External description of the character as known by the perspective character at the time, this includes their appearance, clothing, and other relevant information if any
+     * if their perception is not good enough, this will be a generic description of the character, such as "a person" or "a stranger"
+     */
     characterExternalDescription: string;
-    characterPerceptiveDescription: string;
+    /**
+     * Description of the character as seen or perceived by the perspective character at the time
+     */
+    characterPlaceAndPostureDescription: string;
+    /**
+     * Whether the character was percieved or right away seen as visible
+     * self is always visible
+     */
     perceptionForm: "visible" | "perceived";
-    characterCarryingItems: Array<DEItem>;
-    characterWearingItems: Array<DEItem>;
+    /**
+     * Whether the character can tell what the other character is wearing or carrying at that moment in time
+     */
+    canTellDetailsOfClothingOrCarriedItems: boolean;
+    /**
+     * Items that the character is carrying at that moment in time, this includes all the items that the character has in their inventory, pockets, bags, etc.
+     * This is a recursive structure that includes the items that are inside or on top of the items that the character is carrying, as well as the items that are being carried by other characters that are in perspective
+     */
+    characterCarryingItems: Array<DEItemInPerspective>;
+    /**
+     * Items that the character is wearing at that moment in time, this includes all the items that the character has on their body, such as clothing, armor, accessories, etc.
+     */
+    characterWearingItems: Array<DEItemInPerspective>;
+    /**
+     * Ids of other characters that the character is carrying at that moment in time, this includes all the characters that the character has in their inventory, pockets, bags, etc.
+     */
     characterCarryingOtherCharactersIds: string[];
 }
 
 declare interface DEItemInPerspective extends DEItem {
+    /**
+     * List of items on top of this item, if any, that are in perspective at that moment in time
+     */
     ontop: Array<DEItemInPerspective>;
+    /**
+     * List of items contained in this item, if any, that are in perspective at that moment in time
+     */
     containing: Array<DEItemInPerspective>;
+    /**
+     * List of characters that are in this item, if any, that are in perspective at that moment in time
+     */
     containingCharacters: Array<string>;
+    /**
+     * List of characters that are on top of this item, if any, that are in perspective at that moment in time
+     */
     ontopCharacters: Array<string>;
-    canSeeContents: "YES" | "NO" | "NO_BECAUSE_CLOSED" | "NO_BECAUSE_BAD_VISION" | "NOT_A_CONTAINER";
-    canSeeOntop: "YES" | "NO_BECAUSE_BAD_VISION";
+    /**
+     * Whether the contents of this item can be seen by the character in perspective or not
+     * this is specific canSeeContents is either true or false, if false the contentsIsUnclear will specify
+     * why, but otherwise it can be said it can see the contents but unclear if contentsIsUnclear gives a reason
+     * for example canSeeContents can be true, but contentsIsUnclear might say "they have bad vision and items might be missing"
+     */
+    canSeeContents: boolean;
+    /**
+     * Whether the contents of this item are clear of not, if not clear, a string describing why they are unclear
+     */
+    contentsIsUnclear: false | string;
+    /**
+     * Whether the items on top of this item can be seen by the character in perspective or not
+     * this is specific canSeeOntop is either true or false, if false the ontopIsUnclear will specify
+     * why, but otherwise it can be said it can see the items on top but unclear if ontopIsUnclear gives a reason
+     * for example canSeeOntop can be true, but ontopIsUnclear might say "they have bad vision and items might be missing"
+     */
+    canSeeOntop: boolean;
+    /**
+     * Whether the items on top of this item are clear of not, if not clear, a string describing why they are unclear
+     */
+    ontopIsUnclear: false | string;
 }
 
 /**
@@ -3891,8 +4021,34 @@ declare interface DECharacterPerspectiveLocationSlot {
      * The items that are in the location slot at that moment in time
      */
     items: Array<DEItemInPerspective>;
+    /**
+     * Whether the items on this slot (straight on) can be seen by the character in perspective or not
+     * this is specific canSeeItems is either true or false, if false the itemListsAreUnclear will specify
+     * why, but otherwise it can be said it can see the items on top but unclear if itemListsAreUnclear gives a reason
+     * for example canSeeItems can be true, but itemListsAreUnclear might say "they have bad vision and items might be missing"
+     */
+    canSeeItems: boolean;
+    /**
+     * Whether the items in the location slot are clear of not, if not clear, a string describing why they are unclear
+     */
     itemListsAreUnclear: false | string;
+    /**
+     * The characters that are in the location slot at that moment in time
+     * whether they are clear or not, if not clear, a string describing why they are unclear
+     * 
+     * Note that this list does not include the character in perspective, use self to access it
+     */
     characters: Array<DECharacterPerspectiveCharacter>;
+    /**
+     * Whether the characters at the location slot can be seen by the character in perspective or not, if not, a string describing why they are unclear
+     * this is specific canSeeCharacters is either true or false, if false the characterListsAreUnclear will specify
+     * why, but otherwise it can be said it can see the characters but unclear if characterListsAreUnclear gives a reason
+     * for example canSeeCharacters can be true, but characterListsAreUnclear might say "they have bad vision and characters might be missing"
+     */
+    canSeeCharacters: boolean;
+    /**
+     * Whether the characters in the location slot are clear of not, if not clear, a string describing why they are unclear
+     */
     characterListsAreUnclear: false | string;
 }
 
@@ -3929,9 +4085,10 @@ declare interface DECharacterPerspectiveLocation {
  */
 declare interface DECharacterPerspective {
     /**
-     * Metadata of the character that is in perspective at that moment in time
+     * The self character perspective, this is the perspective of the character that is in perspective at that moment in time
+     * from their own point of view, including their own state, the state of other characters, and the state of locations and items they can perceive
      */
-    ownMetadata: Record<string, any>;
+    self: DECharacterPerspectiveCharacter;
     /**
      * The character ID of the character that is in perspective at that moment in time
      */
@@ -4571,11 +4728,62 @@ declare interface DEUtils {
             inPerspectiveOf?: DECompleteCharacterReference | string | null,
             options?: { type?: "default" | "indefinite" | "definite", capitalize?: boolean, justName?: boolean }
         ): string;
+    };
+
+    narrationAndDialogue: {
         /**
-         * The story message to parse
-         * @param message The story message to parse
+         * Parses a raw narration message into structured narration fragments,
+         * resolving embedded entity identifiers (<identifier:name> markers) in the
+         * perspective of the given emitter/perspective character.
+         * @param message The raw narration message to parse.
+         * @param emitterAndPerspectiveCharacter The character (or id) that both emits and perceives this narration. Pass null for an omniscient/neutral perspective.
          */
-        parseNarration(message: string, emitterCharacter: DECompleteCharacterReference | string | null, perspectiveCharacter: DECompleteCharacterReference | string | null): Promise<Array<DEConversationMessageNarrationFragment>>;
+        parseNarration(
+            message: string,
+            emitterAndPerspectiveCharacter: DECompleteCharacterReference | string | null,
+        ): Promise<Array<DEConversationMessageNarrationFragment>>;
+        /**
+         * Parses a raw dialogue line (the character name must NOT be included) into
+         * structured dialogue fragments. Spoken words are the default; asterisks toggle
+         * into embedded narration beats and [..] delimit voice/sound tags. Embedded
+         * entity identifiers are resolved in the perspective of the given character.
+         * @param message The raw dialogue line to parse.
+         * @param emitterAndPerspectiveCharacter The character (or id) that both emits and perceives this dialogue. Pass null for an omniscient/neutral perspective.
+         */
+        parseDialogue(
+            message: string,
+            emitterAndPerspectiveCharacter: DECompleteCharacterReference | string | null,
+        ): Promise<Array<DEConversationMessageDialogueFragment>>;
+        /**
+         * Reprocesses already-parsed narration fragments so that character names are
+         * expressed in the perspective of the perspective character, replacing names the
+         * perspective character would not know with generic descriptors.
+         * @param message The previously parsed narration fragments to reprocess.
+         * @param emitterCharacter The character (or id) that emitted the narration, or null.
+         * @param perspectiveCharacter The character (or id) whose perspective to render, or null.
+         * @param previouslyHeardIdentifiers Identifiers the perspective character has already heard, so their names are preserved, or null.
+         */
+        putNarrationInPerspective(
+            message: Array<DEConversationMessageNarrationFragment>,
+            emitterCharacter: DECompleteCharacterReference | string | null,
+            perspectiveCharacter: DECompleteCharacterReference | string | null,
+            previouslyHeardIdentifiers?: Array<DEConversationMessageFragmentIdentifier> | null,
+        ): Promise<Array<DEConversationMessageNarrationFragment>>;
+        /**
+         * Reprocesses already-parsed dialogue fragments so that character names are
+         * expressed in the perspective of the perspective character. Embedded narration
+         * beats are reprocessed as narration; spoken identifiers are treated as heard.
+         * @param message The previously parsed dialogue fragments to reprocess.
+         * @param emitterCharacter The character (or id) that emitted the dialogue, or null.
+         * @param perspectiveCharacter The character (or id) whose perspective to render, or null.
+         * @param previouslyHeardIdentifiers Identifiers the perspective character has already heard, so their names are preserved, or null.
+         */
+        putDialogueInPerspective(
+            message: Array<DEConversationMessageDialogueFragment>,
+            emitterCharacter: DECompleteCharacterReference | string | null,
+            perspectiveCharacter: DECompleteCharacterReference | string | null,
+            previouslyHeardIdentifiers?: Array<DEConversationMessageFragmentIdentifier> | null,
+        ): Promise<Array<DEConversationMessageDialogueFragment>>;
     };
 
     ramdom: {
@@ -4745,7 +4953,14 @@ declare interface DEDatabaseHistoricStateFns {
     getFirstNHistoricStatesWithItemName(charId: string, matches: number, itemName: string): Promise<DEStateForCharacter[]>;
 }
 
-declare interface DEDatabase extends DEDatabaseConversationFns, DEDatabaseHistoricStateFns {
+declare interface DEDatabasePerspectiveFns {
+    /** Serialize a character perspective snapshot as a JSON document and return its new storage id. */
+    storePerspective(perspective: DECharacterPerspective): Promise<string>;
+    /** Retrieve a stored character perspective snapshot by its id, or null if absent. */
+    getPerspectiveById(perspectiveId: string): Promise<DECharacterPerspective | null>;
+}
+
+declare interface DEDatabase extends DEDatabaseConversationFns, DEDatabaseHistoricStateFns, DEDatabasePerspectiveFns {
 }
 
 declare type DE = DEObject;

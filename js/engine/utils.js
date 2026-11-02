@@ -7,6 +7,7 @@ import { getNameIdentificationForOneCharacterTowardsAnother, getNameIdentificati
 import { itemsEqualIgnoringId, utilItemCount } from "./util/items.js";
 import { getSizeVisibility, getPerceivedItemLabel } from "./util/visibility.js";
 import { findBestIdentifier } from "./util/identifiers.js";
+import { parseNarration, parseDialogue, putNarrationInPerspective, putDialogueInPerspective } from "./util/narration-and-dialogue.js";
 
 // NOTE: DE.characters, DE.bonds, DE.stateFor are all keyed by character id (character.id), not character name.
 // DESingleBondDescription.towards is a character id.
@@ -1108,8 +1109,6 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 nextConversationIdsPerParticipant: {},
             };
 
-            newConversation.metadata = await engine.callConversationMetadataGenerator(newConversation);
-
             /**
              * @type {Array<(id: string) => void>}
              */
@@ -1173,8 +1172,6 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         metadata: {},
                         nextConversationIdsPerParticipant: {},
                     };
-
-                    newConversationForRemainingParticipants.metadata = await engine.callConversationMetadataGenerator(newConversationForRemainingParticipants);
 
                     const actualNewConversationForRemainingParticipants = await DE.database.newConversation(newConversationForRemainingParticipants);
 
@@ -1266,11 +1263,6 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 isProcessingSideEffects: true,
             };
 
-            const preResults = await engine.callConversationMessageMetadataGenerator(conversationObject, newMessage, "pre-side-effects");
-            if (preResults) {
-                newMessage.metadata = preResults;
-            }
-
             const addedMessage = await DE.database.newConversationMessage(conversationId, newMessage);
 
             if (!addedMessage) {
@@ -1286,13 +1278,6 @@ export const deEngineUtilsFn = (DE, engine) => ({
             return {
                 message: addedMessage,
                 sideEffectsReady: async () => {
-                    const postResult = await engine.callConversationMessageMetadataGenerator(conversationObject, addedMessage, "post-side-effects");
-                    if (postResult) {
-                        addedMessage.metadata = postResult;
-                        await DE.database.updateConversationMessage(addedMessage.id, {
-                            metadata: addedMessage.metadata,
-                        });
-                    }
                 }
             };
         },
@@ -1524,6 +1509,11 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     characterInfo: {
+        // @ts-ignore
+        getPerspective(char) {
+            const character = requireCharacter(DE, char);
+            // TODO
+        },
         getRepresentativeCarrying(char) {
             const character = requireCharacter(DE, char);
             return getRepresentativeItems(DE.stateFor[character.id].carrying);
@@ -2592,13 +2582,28 @@ export const deEngineUtilsFn = (DE, engine) => ({
         },
     },
 
-    templates: {
-        parseNarration: async (message, emitterCharacter, perspectiveCharacter) => {
-            const resolvedEmitter = resolveCharacter(DE, emitterCharacter);
-            const resolvedPerspective = resolveCharacter(DE, perspectiveCharacter);
-
-            
+    narrationAndDialogue: {
+        parseNarration: async (message, emitterAndPerspectiveCharacter) => {
+            const resolved = resolveCharacter(DE, emitterAndPerspectiveCharacter ?? null) || null;
+            return parseNarration(DE, message, resolved);
         },
+        parseDialogue: async (message, emitterAndPerspectiveCharacter) => {
+            const resolved = resolveCharacter(DE, emitterAndPerspectiveCharacter ?? null) || null;
+            return parseDialogue(DE, message, resolved);
+        },
+        putNarrationInPerspective: async (message, emitterCharacter, perspectiveCharacter, previouslyHeardIdentifiers) => {
+            const resolvedEmitter = resolveCharacter(DE, emitterCharacter ?? null) || null;
+            const resolvedPerspective = resolveCharacter(DE, perspectiveCharacter ?? null) || null;
+            return putNarrationInPerspective(DE, message, resolvedEmitter, resolvedPerspective, previouslyHeardIdentifiers ?? null);
+        },
+        putDialogueInPerspective: async (message, emitterCharacter, perspectiveCharacter, previouslyHeardIdentifiers) => {
+            const resolvedEmitter = resolveCharacter(DE, emitterCharacter ?? null) || null;
+            const resolvedPerspective = resolveCharacter(DE, perspectiveCharacter ?? null) || null;
+            return putDialogueInPerspective(DE, message, resolvedEmitter, resolvedPerspective, previouslyHeardIdentifiers ?? null);
+        },
+    },
+
+    templates: {
         breakDownCharactersAndCausesTemplate(info) {
             return async (info2) => {
                 let base = typeof info.base === "string" ? info.base : info.base({
