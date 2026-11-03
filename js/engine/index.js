@@ -325,11 +325,6 @@ export class DEngine {
          * @type {((thinking: boolean, characterId: string | null, noMoreCharactersToTalk: boolean) => void)[]}
          */
         this.thinkingListeners = [];
-        /**
-         * TODO remove these message update listeners as they are not a thing anymore
-         * @type {((obj: DEObject, event: EngineConversationEvent) => void)[]}
-         */
-        this.messageUpdateListeners = [];
 
         /**
          * @type {BaseInferenceAdapter | null}
@@ -777,6 +772,7 @@ export class DEngine {
                         states: [],
                         time: this.deObject.initialTime,
                         wearing: [],
+                        heardIdentifiers: [],
                     }
                 }
 
@@ -970,6 +966,8 @@ export class DEngine {
             conversationId: null,
             posture: "standing",
 
+            heardIdentifiers: [],
+
             // chars start out empty handed
             carrying: [],
             carryingCharactersDirectly: [],
@@ -996,9 +994,6 @@ export class DEngine {
 
         try {
             this.informThinking(true, null, false);
-            this.triggerConversationMessageUpdate(this.deObject, {
-                event: "start-inference",
-            });
 
             try {
                 await this.inferenceAdapter.initialize();
@@ -1079,6 +1074,7 @@ export class DEngine {
                 if (!this.deObject.characters[participantId]) {
                     throw new Error(`Participant character ${participantId} not found in DEObject characters.`);
                 }
+
                 this.deObject.stateFor[participantId].location = sceneObject.location;
                 this.deObject.stateFor[participantId].locationSlot = sceneObject.locationSlot;
             }
@@ -1119,7 +1115,7 @@ export class DEngine {
                 char: this.deObject.characters[this.deObject.user],
             });
 
-            const narrationParsed = await this.deObject.utils.templates.parseNarration(narration);
+            const narrationParsed = await this.deObject.utils.narrationAndDialogue.parseNarration(narration, null);
 
             const conversation = await this.deObject.utils.conversations.newConversation({
                 participants: expectedParticipants,
@@ -1144,13 +1140,13 @@ export class DEngine {
                 isRejectedMessage: false,
                 isHiddenMessage: false,
                 isStoryMasterMessage: true,
-                perspectiveSummaryIds: {},
                 singleSummary: null,
                 emotion: null,
                 emotionalRange: null,
                 interactingCharacters: [],
                 rumors: [],
                 metadata: {},
+                summariesByCharacterId: {},
             });
 
             await this.informDEObjectUpdated();
@@ -1172,14 +1168,14 @@ export class DEngine {
                 // some normalization
                 const actualMessages = messages.map((text) => text.trim()).filter((text) => text.length > 0).join("\n\n").split("\n\n");
 
-                await this.deObject.utils.conversations.addMessageToConversation(conversation.id, {
+                const messageObj = await this.deObject.utils.conversations.addMessageToConversation(conversation.id, {
                     canOnlyBeSeenByCharacter: userOnly ? this.deObject.user : null,
                     content: actualMessages.map((text) => ({ type: "narration", fragments: [text] })),
                     characterId: null,
                     isCharacter: false,
                     isDebugMessage: false,
                     isStoryMasterMessage: true,
-                    perspectiveSummaryIds: {},
+                    summariesByCharacterId: {},
                     singleSummary: null,
                     isRejectedMessage: false,
                     isHiddenMessage: userOnly ? true : false,
@@ -1189,6 +1185,7 @@ export class DEngine {
                     rumors: [],
                     metadata: {},
                 });
+                await messageObj.sideEffectsReady();
 
                 await this.informDEObjectUpdated();
             }
@@ -1315,6 +1312,9 @@ export class DEngine {
             this.informCycleState("info", "Pre-calculating initial bonds for your character...");
             await calculateBondsChangesDueToMessages(this, this.deObject.characters[this.deObject.user], lastItemChangesInfo.interactedCharacters);
 
+            await messageObj.sideEffectsReady();
+            await this.informDEObjectUpdated();
+
             /**
              * @type {string[]}
              */
@@ -1343,9 +1343,6 @@ export class DEngine {
             console.error("Error during scene initialization:", error);
             throw error;
         } finally {
-            this.triggerConversationMessageUpdate(this.deObject, {
-                event: "end-inference",
-            });
             this.informThinking(false, null, true);
         }
     }
@@ -1502,9 +1499,6 @@ export class DEngine {
         const deObjectBackup = deepCopy(this.deObject);
 
         try {
-            this.triggerConversationMessageUpdate(this.deObject, {
-                event: "start-inference",
-            });
             this.informCycleState("info", `Starting new message cycle`);
 
             const user = this.user;
@@ -1576,27 +1570,10 @@ export class DEngine {
                         bondsAtEnd: null,
                         endTime: null,
                     };
-                    this.triggerConversationMessageUpdate(currentDEObject, {
-                        conversationId: expectedFutureConversationIdIfNotFound,
-                        event: "new-conversation",
-                        obj: currentDEObject.conversations[expectedFutureConversationIdIfNotFound],
-                    });
-                    this.triggerConversationMessageUpdate(currentDEObject, {
-                        conversationId: expectedFutureConversationIdIfNotFound,
-                        messageId: messageToAdd.id,
-                        event: "new-message",
-                        obj: messageToAdd,
-                    });
                     return expectedFutureConversationIdIfNotFound;
                 } else {
                     // @ts-expect-error typescript issue as usual
                     this.deObject.conversations[userCharacterState.conversationId].messages.push(messageToAdd);
-                    this.triggerConversationMessageUpdate(currentDEObject, {
-                        conversationId: userCharacterState.conversationId,
-                        messageId: messageToAdd.id,
-                        event: "new-message",
-                        obj: messageToAdd,
-                    });
                     // if (!makeRejected) {
                     //     userCharacterState.messageId = messageToAdd.id;
                     // }
@@ -1634,12 +1611,6 @@ export class DEngine {
                     throw new Error("DEngine not initialized");
                 }
                 currentDEObject.conversations[conversationIdUsed].messages.push(rejectionMessage);
-                this.triggerConversationMessageUpdate(currentDEObject, {
-                    conversationId: conversationIdUsed,
-                    messageId: rejectionMessage.id,
-                    event: "new-message",
-                    obj: rejectionMessage,
-                });
 
                 await this.informDEObjectUpdated();
             }
@@ -1704,9 +1675,6 @@ export class DEngine {
             await this.informDEObjectUpdated();
         } finally {
             this.executingCycle = false;
-            this.triggerConversationMessageUpdate(this.deObject || deObjectBackup, {
-                event: "end-inference",
-            });
         }
     }
 
@@ -1750,34 +1718,6 @@ export class DEngine {
      */
     removeThinkingListener(listener) {
         this.thinkingListeners = this.thinkingListeners.filter(l => l !== listener);
-    }
-
-    /**
-     * @param {(obj: DEObject, event: EngineConversationEvent) => void} listener 
-     */
-    addMessageUpdateListener(listener) {
-        this.messageUpdateListeners.push(listener);
-    }
-
-    /**
-     * @param {(obj: DEObject, event: EngineConversationEvent) => void} listener 
-     */
-    removeMessageUpdateListener(listener) {
-        this.messageUpdateListeners = this.messageUpdateListeners.filter(l => l !== listener);
-    }
-
-    /**
-     * @param {DEObject} deObject 
-     * @param {EngineConversationEvent} event
-     */
-    triggerConversationMessageUpdate(deObject, event) {
-        for (const listener of this.messageUpdateListeners) {
-            try {
-                listener(deObject, event);
-            } catch (e) {
-                console.error("Error in inferring over conversation message listener:", e);
-            }
-        }
     }
 
     /**
@@ -1862,19 +1802,8 @@ export class DEngine {
                 bondsAtEnd: null,
                 endTime: null,
             };
-            this.triggerConversationMessageUpdate(this.deObject, {
-                conversationId: userConversationId,
-                event: "new-conversation",
-                obj: this.deObject.conversations[userConversationId],
-            });
         } else {
             this.deObject.conversations[userConversationId].messages.push(messageToAdd);
-            this.triggerConversationMessageUpdate(this.deObject, {
-                conversationId: userConversationId,
-                messageId: messageToAdd.id,
-                event: "new-message",
-                obj: messageToAdd,
-            });
         }
 
         await this.informDEObjectUpdated();

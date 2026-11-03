@@ -1,17 +1,27 @@
 /** Restore the saved engine state, including its script order and player settings.
  * @param {HTMLElement} game
+ * @returns {Promise<{userId: string, lastConversationAndMessageInfo: { conversation: DEConversation | null, message: DEConversationMessage | null }}>}
  */
 export async function initializeSavedGame(game) {
     await window.ENGINE_WORKER_CLIENT.jsEngineClearExecutionOrder();
     await window.ENGINE_WORKER_CLIENT.initializeFromStoredState({
         loadId: [game.getAttribute('world-namespace'), game.getAttribute('world-id'), game.getAttribute('save-id')].join('/'),
     });
+
+    const userId = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ["user"]});
+    const lastConversationAndMessageInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ["utils", "conversations", "getLastConversationAndMessageForCharacter"], call: [userId]});
+
+    return {
+        userId,
+        lastConversationAndMessageInfo,
+    };
 }
 
 /**
  * Initialize a new world using setup attributes supplied by app-play.
  * Kept apart from the game controller and scene-selection presentation.
  * @param {HTMLElement} game
+ * @returns {Promise<{userId: string, lastConversationAndMessageInfo: { conversation: DEConversation | null, message: DEConversationMessage | null }}>}
  */
 export async function initializeNewGame(game) {
     /** @type {string[]} */
@@ -158,4 +168,12 @@ export async function initializeNewGame(game) {
     if (!isSelfInsert) {
         await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentityByScriptGivenId({ charScriptGivenId: scriptGivenId });
     }
+
+    const userId = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ["user"]});
+    const lastConversationAndMessageInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ["utils", "conversations", "getLastConversationAndMessageForCharacter"], call: [userId]});
+
+    return {
+        userId,
+        lastConversationAndMessageInfo,
+    };
 }

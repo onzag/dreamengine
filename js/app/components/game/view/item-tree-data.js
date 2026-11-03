@@ -94,7 +94,7 @@ export async function loadItemNode(id, context, amount = 1, perception) {
     if (!perception) throw new Error('Item perception unavailable');
     const [item, label] = await Promise.all([
         client.queryDEObject({ path: ['utils', 'items', 'getItemById'], call: [id], pick: ['metadata', 'weightKg', 'volumeLiters', 'communicator', 'consumableProperties', 'containerProperties', 'wearableProperties', 'state', 'relativePosition'] }),
-        client.queryDEObject({ path: ['utils', 'templates', 'formatItemLabel'], call: [id, context.userId,
+        client.queryDEObject({ path: ['utils', 'templates', 'formatItemName'], call: [id, context.userId,
             { __type: 'object', value: { justName: true, capitalize: true, type: 'plain' } }] }),
     ]);
     if (!item) throw new Error(`Item ${id} no longer exists`);
@@ -230,7 +230,7 @@ async function loadLocationSlotCharacters(slotId, context) {
             client.queryDEObject({ path: ['utils', 'characterInfo', 'getExternalDescriptionOfCharacterLocationSpecifics'], call: [id, context.userId, false, true] }),
         ]);
         const descriptionFragments = description ? await client.queryDEObject({
-            path: ['utils', 'templates', 'parseNarration'], call: [description],
+            path: ['utils', 'narrationAndDialogue', 'parseNarration'], call: [description],
         }) : [];
         return /** @type {CharacterNodeData} */ ({ kind: 'character', id, label, descriptionFragments,
             amount: 1, asset: metadata?.assets?.neutral || '', tags: [] });

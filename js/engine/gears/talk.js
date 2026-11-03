@@ -615,14 +615,6 @@ export async function talk(engine, character, options) {
 
         await engine.dataManager.newConversationMessage(charState.conversationId, nextMessage);
 
-        engine.triggerConversationMessageUpdate(engine.deObject, {
-            conversationId: charState.conversationId,
-            messageId: nextMessage.id,
-            event: "new-message",
-            obj: nextMessage,
-        });
-
-        
         await engine.informDEObjectUpdated();
     }
 
@@ -666,14 +658,6 @@ export async function talk(engine, character, options) {
             __debug_id: nextMessage.id + "__" + fragmentCount,
         };
         nextMessage.content.push(currentBlock);
-
-        engine.triggerConversationMessageUpdate(engine.deObject, {
-            conversationId: charState.conversationId,
-            messageId: nextMessage.id,
-            event: nextIsNarration ? "add-narration-block" : "add-dialogue-block",
-            contentIndex: nextMessage.content.length - 1,
-            __debug_id: nextMessage.id + "__" + fragmentCount,
-        });
 
         const grammar = generateGrammarForVoice(engine, baseVoice, ourCharacterName, forcedVoiceEffects.forcedMode);
 
@@ -745,14 +729,6 @@ export async function talk(engine, character, options) {
             if (fragment.type === "sound" && soundInfo) {
                 fragment.soundInfo = soundInfo;
             }
-            engine.triggerConversationMessageUpdate(engine.getDEObject(), {
-                conversationId: conversationId,
-                messageId: nextMessage.id,
-                text: fragment.text,
-                event: fragment.type === "narration" ? "end-add-narration" : (fragment.type === "sound" ? "end-add-sound" : "end-add-dialogue"),
-                contentIndex: nextMessage.content.length - 1,
-                soundInfo: soundInfo,
-            });
         };
 
         /**
@@ -792,13 +768,6 @@ export async function talk(engine, character, options) {
             }
             const fragment = ensureOpenDialogueFragment(type);
             fragment.text += text;
-            engine.triggerConversationMessageUpdate(engine.getDEObject(), {
-                conversationId: conversationId,
-                messageId: nextMessage.id,
-                text: text,
-                event: type === "narration" ? "add-narration" : (type === "sound" ? "add-sound" : "add-dialogue"),
-                contentIndex: nextMessage.content.length - 1,
-            });
         };
 
         let next = await generator.next(true);

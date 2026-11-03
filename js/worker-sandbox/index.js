@@ -158,11 +158,6 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
         self.postMessage({ type: "event", event: "thinkingInform", data: { thinking, characterName, noMoreCharactersToTalk } });
     });
 
-    // @ts-ignore
-    engine.addMessageUpdateListener((deObject, data) => {
-        self.postMessage({ type: "event", event: "messageUpdate", data });
-    });
-
     /**
      * @type {import('../script-generation/base.js').ScriptTypeGenerator | null}
      */

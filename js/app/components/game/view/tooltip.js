@@ -93,7 +93,7 @@ export class GameTooltip extends HTMLElement {
         if (!client) return;
         try {
             /** @type {DEConversationMessageNarrationFragment[]} */
-            const fragments = await client.queryDEObject({ path: ['utils', 'templates', 'parseNarration'], call: [text] });
+            const fragments = await client.queryDEObject({ path: ['utils', 'narrationAndDialogue', 'parseNarration'], call: [text] });
             if (!this.isConnected || version !== this.textVersion) return;
             this.tip.replaceChildren(...createNarrationNodes(fragments, (id, foundAs) => this.openIdentifier(id, foundAs)));
             // Interactive descriptions are non-modal popovers rather than text-only tooltips.

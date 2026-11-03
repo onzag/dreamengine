@@ -7,6 +7,7 @@ import {
     getRelationship,
     getExternalDescriptionOfCharacterPostureOnly,
 } from './character-info.js';
+import { utilItemCount } from './items.js';
 import {
     getNameIdentificationForOneCharacterTowardsAnother,
     getNameIdentificationForOneCharacterTowardsAnotherOnlyName,
@@ -44,6 +45,71 @@ export async function getPerspective(DE, character) {
     const self = await buildPerspectiveCharacter(DE, ownId, ownId, 'visible');
     const ownLocation = await buildPerspectiveLocation(DE, locationId, ownId);
 
+    const allConversationsAtLocation = await DE.utils.conversations.getAllConversationsAtLocation(locationId);
+
+    const locationPerception = DE.utils.world.whatCanTheyMakeOfALocation(locationId, ownId);
+
+    const canSeeCharacters = !locationPerception.cantSee;
+    const observerName = DE.utils.templates.formatCharacterName(ownChar, ownChar, { capitalize: true, justName: true });
+
+    /**
+     * @type {DESocialGroupInPerspective}
+     */
+    const result = {
+        soloCharacters: [],
+        canSeeCharacters,
+        characterListsAreUnclear: unclearReason(locationPerception, observerName, 'characters'),
+        otherGroups: [],
+        ownGroup: [],
+    };
+
+    // now we need to check with each character to see if we can actually see them
+    for (const soloCharId of allConversationsAtLocation.leftoverCharacters) {
+        if (soloCharId === ownId) continue;
+        const canSeeThem = DE.utils.characterInfo.canSeeCharacter(soloCharId, ownId);
+        if (canSeeThem !== "invisible") {
+            result.soloCharacters.push(await buildPerspectiveCharacter(DE, soloCharId, ownId, canSeeThem));
+        }
+    }
+    for (const conversation of allConversationsAtLocation.conversations) {
+        /**
+         * @type {Array<{
+         *    id: string;
+         *    visibility: "visible" | "perceived";
+         * }>}
+         */
+        const actualIdsOfVisibleParticipants = [];
+        let isOwnGroup = conversation.participants.includes(ownId);
+        for (const participantId of conversation.participants) {
+            if (participantId === ownId) {
+                continue;
+            }
+            const canSeeThem = isOwnGroup ? "visible" : DE.utils.characterInfo.canSeeCharacter(participantId, ownId);
+            if (canSeeThem !== "invisible") {
+                actualIdsOfVisibleParticipants.push({
+                    id: participantId,
+                    visibility: canSeeThem,
+                });
+            }
+        }
+
+        if (actualIdsOfVisibleParticipants.length > 0) {
+            if (isOwnGroup) {
+                for (const {id: participantId, visibility} of actualIdsOfVisibleParticipants) {
+                    result.ownGroup.push(await buildPerspectiveCharacter(DE, participantId, ownId, visibility));
+                }
+            } else if (actualIdsOfVisibleParticipants.length === 1) {
+                result.soloCharacters.push(await buildPerspectiveCharacter(DE, actualIdsOfVisibleParticipants[0].id, ownId, actualIdsOfVisibleParticipants[0].visibility));
+            } else {
+                const otherGroup = [];
+                for (const {id: participantId, visibility} of actualIdsOfVisibleParticipants) {
+                    otherGroup.push(await buildPerspectiveCharacter(DE, participantId, ownId, visibility));
+                }
+                result.otherGroups.push(otherGroup);
+            }
+        }
+    }
+
     return {
         self,
         ownId,
@@ -54,6 +120,7 @@ export async function getPerspective(DE, character) {
         ownLocationSlotName: slot ? slot.name : '',
         ownLocation,
         ownCharacterBlindness: ownChar.blindness || 'no',
+        socialGroups: result,
     };
 }
 
@@ -104,7 +171,7 @@ async function buildPerspectiveLocationSlot(DE, locationId, slotId, observerId) 
     });
     const locationPerception = DE.utils.world.whatCanTheyMakeOfALocation(slotId, observerId);
 
-    const items = await buildItemsInPerspective(DE, slot.items || [], observerId);
+    const items = await buildItemsInPerspective(DE, null, slot.items || [], observerId, locationId);
 
     // Characters at this slot, excluding the observer, that the observer can at least perceive.
     /** @type {DECharacterPerspectiveCharacter[]} */
@@ -117,8 +184,8 @@ async function buildPerspectiveLocationSlot(DE, locationId, slotId, observerId) 
         characters.push(await buildPerspectiveCharacter(DE, charId, observerId, visibility));
     }
 
-    const canSeeItems = !locationPerception.isUnclear;
-    const canSeeCharacters = !locationPerception.isUnclear;
+    const canSeeItems = !locationPerception.cantSee;
+    const canSeeCharacters = !locationPerception.cantSee;
 
     return {
         slotMetadata: slot.metadata || {},
@@ -135,13 +202,13 @@ async function buildPerspectiveLocationSlot(DE, locationId, slotId, observerId) 
 
 /**
  * Describes whether a list obtained from a place is reliable, matching the vagueness the UI shows.
- * @param {{ isUnclear: boolean, hasHighPerception: boolean }} perception
+ * @param {{ cantSee: boolean, hasHighPerception: boolean }} perception
  * @param {string} observerName
  * @param {'items' | 'characters'} kind
  * @returns {false | string}
  */
 function unclearReason(perception, observerName, kind) {
-    if (perception.isUnclear) {
+    if (perception.cantSee) {
         return `${observerName} cannot clearly perceive the ${kind} here.`;
     }
     if (!perception.hasHighPerception) {
@@ -195,16 +262,254 @@ async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionFor
     const bondDescription = isSelf ? '' : await buildBondDescription(DE, observer, target);
 
     const characterExternalDescription = await getExternalDescriptionOfCharacter(DE, targetId, observerId, false, false);
-    const characterPlaceAndPostureDescription = isSelf
-        ? getExternalDescriptionOfCharacterPostureOnly(DE, targetId, observerId)
-        : bondDescription;
+    const characterPlaceAndPostureDescription = getExternalDescriptionOfCharacterPostureOnly(DE, targetId, observerId);
 
-    const characterCarryingItems = perception.canTellDetailsOfClothingOrCarriedItems ? await buildItemsInPerspective(DE, targetState.carrying || [], observerId) : [];
-    const characterWearingItems = perception.canTellDetailsOfClothingOrCarriedItems ? await buildItemsInPerspective(DE, targetState.wearing || [], observerId) : [];
+    const characterCarryingItems = perception.canTellDetailsOfClothingOrCarriedItems ? await buildItemsInPerspective(DE, null, targetState.carrying || [], observerId, targetState.location) : [];
+    const characterWearingItems = perception.canTellDetailsOfClothingOrCarriedItems ? await buildItemsInPerspective(DE, null, targetState.wearing || [], observerId, targetState.location) : [];
 
     const carriedCharacters = getListOfCarriedCharactersByCharacter(DE, targetId)
         .map(c => c.carriedId)
         .filter(carriedId => isSelf || DE.utils.characterInfo.canSeeCharacter(carriedId, observerId) !== 'invisible');
+
+    /** @type {DECharacterStateInPerspective[]} */
+    const states = [];
+
+    if (perception.canTellStates) {
+        // they can tell internal states too
+        if (perception.hasHighPerception || perception.hasPerfectPerception) {
+            if (target.blindness === "partial-bad" || target.blindness === "partial-good") {
+                states.push({
+                    type: "INTERNAL",
+                    stateName: "Partially Blind",
+                    dominant: true,
+                });
+            } else if (target.blindness === "full") {
+                states.push({
+                    type: "INTERNAL",
+                    stateName: "Blind",
+                    dominant: true,
+                });
+            }
+
+            if (target.autism >= 0.75) {
+                states.push({
+                    type: "INTERNAL",
+                    stateName: "Severely Autistic",
+                    dominant: true,
+                });
+            } else if (target.autism >= 0.5) {
+                states.push({
+                    type: "INTERNAL",
+                    stateName: "Moderately Autistic",
+                    dominant: true,
+                });
+            } else if (target.autism >= 0.25) {
+                states.push({
+                    type: "INTERNAL",
+                    stateName: "Mildly Autistic",
+                    dominant: true,
+                });
+            }
+
+            // an observer cannot tell their own schizophrenia level
+            if (target.id !== observerId) {
+                if (target.schizophrenia >= 0.75) {
+                    states.push({
+                        type: "INTERNAL",
+                        stateName: "Severely Schizophrenic",
+                        dominant: true,
+                    });
+                } else if (target.schizophrenia >= 0.5) {
+                    states.push({
+                        type: "INTERNAL",
+                        stateName: "Moderately Schizophrenic",
+                        dominant: true,
+                    });
+                } else if (target.schizophrenia >= 0.25) {
+                    states.push({
+                        type: "INTERNAL",
+                        stateName: "Mildly Schizophrenic",
+                        dominant: true,
+                    });
+                }
+            }
+
+            if (target.violence >= 0.75) {
+                states.push({
+                    type: "INTERNAL",
+                    stateName: "Extremely Violent",
+                    dominant: true,
+                });
+            } else if (target.violence >= 0.5) {
+                states.push({
+                    type: "INTERNAL",
+                    stateName: "Moderately Violent",
+                    dominant: true,
+                });
+            } else if (target.violence >= 0.25) {
+                states.push({
+                    type: "INTERNAL",
+                    stateName: "Mildly Violent",
+                    dominant: true,
+                });
+            }
+
+            if (target.sex !== "none" && target.sex !== "intersex" && target.sex !== target.gender) {
+                states.push({
+                    type: "INTERNAL",
+                    stateName: "Transgender",
+                    dominant: true,
+                });
+            }
+
+            if (target.perception >= 0.75) {
+                states.push({
+                    type: "INTERNAL",
+                    stateName: "Extremely Perceptive",
+                    dominant: true,
+                });
+            } else if (target.perception >= 0.1) {
+                // nothing
+            } else if (target.perception > 0) {
+                states.push({
+                    type: "INTERNAL",
+                    stateName: "Unusually Unperceptive",
+                    dominant: true,
+                });
+            }
+        }
+
+        /**
+         * @type {DEApplyingState[]}
+         */
+        const actualApplyingStatesToConsider = [];
+        /**
+         * @type {number[]}
+         */
+        const dominances = [];
+        let maxDominance = 0;
+        for (const applyingState of targetState.states) {
+            const stateDeclaration = target.stateDefinitions[applyingState.state];
+            if (!stateDeclaration) {
+                console.warn(`State ${applyingState.state} not found for character ${targetId}.`);
+                continue;
+            }
+
+            if (stateDeclaration.behaviourType === "HIDDEN") {
+                continue;
+            }
+
+            if (stateDeclaration.hiddenToOthers) {
+                const isSelf = targetId === observerId;
+                const shouldBeHidden = !isSelf && (
+                    stateDeclaration.hiddenToOthers === "FULLY_HIDDEN" ? true :
+                        (
+                            stateDeclaration.hiddenToOthers === "HIDDEN_TO_LOW_PERCEPTION" ? !perception.hasMediumPerception && !perception.hasPerfectPerception && !perception.hasHighPerception :
+                                (
+                                    stateDeclaration.hiddenToOthers === "HIDDEN_TO_MEDIUM_PERCEPTION_AND_UNDER" ? !perception.hasHighPerception && !perception.hasPerfectPerception :
+                                        stateDeclaration.hiddenToOthers === "HIDDEN_TO_HIGH_PERCEPTION_AND_UNDER" ? !perception.hasPerfectPerception :
+                                            false
+                                )
+                        )
+                );
+                if (shouldBeHidden) {
+                    continue;
+                }
+            }
+
+            actualApplyingStatesToConsider.push(applyingState);
+
+            const actualDominance = applyingState.relieving ? (typeof stateDeclaration.dominanceAfterRelief !== 'undefined' ? stateDeclaration.dominanceAfterRelief : stateDeclaration.dominance) : stateDeclaration.dominance;
+            dominances.push(actualDominance);
+
+            if (actualDominance > maxDominance) {
+                maxDominance = actualDominance;
+            }
+        }
+
+        for (let i = 0; i < actualApplyingStatesToConsider.length; i++) {
+            const applyingState = actualApplyingStatesToConsider[i];
+            const stateDeclaration = target.stateDefinitions[applyingState.state];
+            const dominance = dominances[i];
+
+            if (stateDeclaration.behaviourType === "HIDDEN") {
+                continue;
+            }
+
+            /**
+             * @type {*}
+             */
+            let roundedLevel = Math.round(applyingState.intensity);
+            if (roundedLevel < 0) roundedLevel = 0;
+            if (roundedLevel > 4) roundedLevel = 4;
+
+            let actualStateName = applyingState.state;
+            if (stateDeclaration.behaviourType === "INTENSITY_EXPRESSIVE") {
+                if (roundedLevel === 0) {
+                    actualStateName = `Mildly ${applyingState.state}`;
+                } else if (roundedLevel === 2) {
+                    actualStateName = `Very ${applyingState.state}`;
+                } else if (roundedLevel === 3) {
+                    actualStateName = `Extremely ${applyingState.state}`;
+                } else if (roundedLevel === 4) {
+                    actualStateName = `Overwhelmingly ${applyingState.state}`;
+                }
+            }
+
+            /**
+             * @type {DECharacterStateInPerspective}
+             */
+            const stateThusFar = {
+                type: stateDeclaration.behaviourType,
+                stateName: actualStateName,
+                level: stateDeclaration.behaviourType === "INTENSITY_EXPRESSIVE" ? roundedLevel : undefined,
+                dominant: dominance === maxDominance,
+                relieving: applyingState.relieving,
+            };
+
+            // self can know their own causes
+            if ((isSelf || perception.hasPerfectPerception) && applyingState.causes && applyingState.causes.length > 0) {
+                const nameInPerspective = getNameIdentificationForOneCharacterTowardsAnother(DE, observer, target);
+                stateThusFar.causes = applyingState.causes.map(cause => {
+                    const causeCausant = cause.causant;
+                    /**
+                     * @type {string}
+                     */
+                    let result;
+                    if (!causeCausant) {
+                        result = `${nameInPerspective} ${cause.description}`;
+                    } else if (causeCausant.type === "character") {
+                        const otherCharacter = DE.characters[causeCausant.id];
+                        if (!otherCharacter) {
+                            console.warn(`Cause causant character ${causeCausant.id} not found for character ${targetId}.`);
+                            result = `${nameInPerspective} ${cause.description}`;
+                        } else {
+                            const causantNameInPerspective = getNameIdentificationForOneCharacterTowardsAnother(DE, observer, otherCharacter);
+                            result = `${nameInPerspective} ${cause.description}, done by ${causantNameInPerspective}`;
+                        }
+                    } else if (causeCausant.type === "object") {
+                        let nameToUse = causeCausant.name;
+                        if (!nameToUse.startsWith('the ')) {
+                            nameToUse = `the ${nameToUse}`;
+                        }
+                        result = `${nameInPerspective} ${cause.description}, done by ${nameToUse}`;
+                    } else {
+                        // @ts-ignore
+                        console.warn(`Cause causant type ${causeCausant.type} not recognized for character ${targetId}.`);
+                        result = `${nameInPerspective} ${cause.description}`;
+                    }
+
+                    if (!result.endsWith('.')) {
+                        result += '.';
+                    }
+
+                    return result;
+                });
+            }
+
+            states.push(stateThusFar);
+        }
+    }
 
     return {
         characterMetadata: target.metadata || {},
@@ -228,6 +533,7 @@ async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionFor
         characterCarryingItems,
         characterWearingItems,
         characterCarryingOtherCharactersIds: carriedCharacters,
+        states: states,
     };
 }
 
@@ -313,15 +619,140 @@ async function buildBondDescription(DE, observer, target) {
 }
 
 /**
+ * Deep structural equality for arbitrary values (primitives, arrays and plain objects), used to
+ * compare the non-recursive properties of two items in perspective.
+ * @param {*} a
+ * @param {*} b
+ * @returns {boolean}
+ */
+function deepEqualInPerspective(a, b) {
+    if (a === b) return true;
+    if (typeof a !== typeof b) return false;
+    if (a === null || b === null) return a === b;
+
+    if (Array.isArray(a) || Array.isArray(b)) {
+        if (!Array.isArray(a) || !Array.isArray(b)) return false;
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) {
+            if (!deepEqualInPerspective(a[i], b[i])) return false;
+        }
+        return true;
+    }
+
+    if (typeof a === 'object') {
+        const keysA = Object.keys(a);
+        const keysB = Object.keys(b);
+        if (keysA.length !== keysB.length) return false;
+        for (const key of keysA) {
+            if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+            if (!deepEqualInPerspective(a[key], b[key])) return false;
+        }
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Compares two lists of nested items (contents or items on top) in an order-independent way. Each
+ * item in one list must have a unique identical counterpart in the other, where "identical" always
+ * takes the amount into account because these are already-merged representatives at a deeper level.
+ * @param {DEItemInPerspective[]} listA
+ * @param {DEItemInPerspective[]} listB
+ * @returns {boolean}
+ */
+function checkNestedItemListsAreIdenticalInPerspective(listA, listB) {
+    if (listA.length !== listB.length) return false;
+    const usedB = new Array(listB.length).fill(false);
+    for (const a of listA) {
+        let matched = false;
+        for (let i = 0; i < listB.length; i++) {
+            if (usedB[i]) continue;
+            if (checkItemsAreIdenticalInPerspective(a, listB[i], false)) {
+                usedB[i] = true;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) return false;
+    }
+    return true;
+}
+
+/**
+ * Recursively checks whether two items are indistinguishable from the observer's point of view,
+ * comparing every property except the ones that merely identify the concrete instances (`ids`) and
+ * the derived display string (`nameInAmount`). At the top level the amount may be ignored (two
+ * singletons can merge into a stack), but once we descend into contents/items on top the amount is
+ * always compared, so a container with three apples is not identical to one with two.
+ * @param {DEItemInPerspective} itemA 
+ * @param {DEItemInPerspective} itemB
+ * @param {boolean} ignoreAmount
+ * @returns {boolean}
+ */
+function checkItemsAreIdenticalInPerspective(itemA, itemB, ignoreAmount = true) {
+    const propertiesToIgnore = ["ids", "nameInAmount"];
+    const nestedItemKeys = ["ontop", "containing"];
+
+    const a = /** @type {Record<string, any>} */ (itemA);
+    const b = /** @type {Record<string, any>} */ (itemB);
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+
+    for (const key of keys) {
+        if (propertiesToIgnore.includes(key)) continue;
+        if (ignoreAmount && key === 'amount') continue;
+
+        if (nestedItemKeys.includes(key)) {
+            if (!checkNestedItemListsAreIdenticalInPerspective(a[key] || [], b[key] || [])) {
+                return false;
+            }
+            continue;
+        }
+
+        if (!deepEqualInPerspective(a[key], b[key])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Groups items that are indistinguishable from the observer's perspective into single
+ * representatives, collecting every underlying id and tallying how many there are, so the UI can
+ * render a single stack with a count. Nested contents and items on top must match exactly
+ * (including their own amounts) for two items to be considered identical.
+ * @param {DEItemInPerspective[]} items
+ * @returns {DEItemInPerspective[]}
+ */
+function mergeIdenticalItemsInPerspective(items) {
+    /** @type {DEItemInPerspective[]} */
+    const merged = [];
+    for (const item of items) {
+        const representative = merged.find(existing => checkItemsAreIdenticalInPerspective(existing, item, true));
+        if (representative) {
+            representative.ids.push(...item.ids);
+            representative.amount = representative.ids.length;
+        } else {
+            merged.push(item);
+        }
+    }
+    return merged;
+}
+
+/**
  * Recursively builds the items an observer can make out from a raw item list, dropping anything
  * invisible to them and honouring whether they can peer inside or on top of each container.
  * @param {DEObject} DE
+ * @param {string | null} parentItemId
  * @param {DEItem[]} items
  * @param {string} observerId
+ * @param {string} locationId
  * @returns {Promise<DEItemInPerspective[]>}
  */
-async function buildItemsInPerspective(DE, items, observerId) {
+async function buildItemsInPerspective(DE, parentItemId, items, observerId, locationId) {
     const observer = DE.characters[observerId];
+    
     /** @type {DEItemInPerspective[]} */
     const result = [];
 
@@ -336,7 +767,32 @@ async function buildItemsInPerspective(DE, items, observerId) {
 
         /** @type {DEItemInPerspective} */
         const node = {
-            ...item,
+            description: item.description,
+            maxVolumeOnTopLiters: item.maxVolumeOnTopLiters,
+            volumeLiters: item.volumeLiters,
+            weightKg: item.weightKg,
+            owner: item.owner,
+            maxWeightOnTopKg: item.maxWeightOnTopKg,
+            oneOfAKind: item.oneOfAKind,
+            metadata: item.metadata || {},
+            name: item.name,
+            state: item.state,
+            carriableProperties: item.carriableProperties || {},
+            classes: item.classes || [],
+            communicator: item.communicator || null,
+            consumableProperties: item.consumableProperties || null,
+            containerProperties: item.containerProperties || null,
+            relativePosition: item.relativePosition || null,
+            wearableProperties: item.wearableProperties || null,
+            ids: [
+                {
+                    id: item.id,
+                    parent: parentItemId,
+                },
+            ],
+            amount: 1,
+            // will make these at the very end
+            nameInAmount: "",
             ontop: [],
             containing: [],
             containingCharacters: [],
@@ -358,18 +814,25 @@ async function buildItemsInPerspective(DE, items, observerId) {
         if (!perception.canTellTheirWeight) node.weightKg = 0;
 
         if (canSeeContents) {
-            node.containing = await buildItemsInPerspective(DE, item.containing || [], observerId);
+            node.containing = await buildItemsInPerspective(DE, item.id, item.containing || [], observerId, locationId);
             node.containingCharacters = visibleCharacterIds(DE, item.containingCharacters, observerId);
         }
         if (canSeeOntop) {
-            node.ontop = await buildItemsInPerspective(DE, item.ontop || [], observerId);
+            node.ontop = await buildItemsInPerspective(DE, item.id, item.ontop || [], observerId, locationId);
             node.ontopCharacters = visibleCharacterIds(DE, item.ontopCharacters, observerId);
         }
 
         result.push(node);
     }
 
-    return result;
+    const mergedResult = mergeIdenticalItemsInPerspective(result);
+
+    for (const node of mergedResult) {
+        // Build the nameInAmount for each item after all children have been built, so that the nameInAmount of children is available to the parent.
+        node.nameInAmount = utilItemCount(DE, locationId, !!node.oneOfAKind && node.ids.length === 1, node.owner, node.ids.length, node.name, node.ids[0].id, true, false, true);
+    }
+
+    return mergedResult;
 }
 
 /**

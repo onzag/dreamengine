@@ -179,7 +179,7 @@ function isItemCarriedOrWorn(DE, item, observer) {
 async function describePlace(DE, place, inPerspectiveOf) {
     const observer = requireCharacter(DE, inPerspectiveOf);
     const visibility = whatCanTheyMakeOfALocation(place, observer);
-    if (observer.blindness === "full" || visibility.isUnclear) {
+    if (observer.blindness === "full" || visibility.cantSee) {
         const observerName = DE.utils.templates.formatCharacterName(observer, observer, { capitalize: true });
         const placeName = "slots" in place
             ? DE.utils.templates.formatLocationName(place, observer)
@@ -984,6 +984,161 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     conversations: {
+        getFirstConversationAndMessageForCharacter: async (character) => {
+            const resolvedCharacter = resolveCharacter(DE, character);
+            if (!resolvedCharacter) {
+                throw new Error(`Character ${character} not found`);
+            }
+
+            const charState = DE.stateFor[resolvedCharacter.id];
+            if (!charState) {
+                throw new Error(`Character ${resolvedCharacter.id} does not have a state in DE.stateFor`);
+            }
+
+            if (!charState.conversationId) {
+                return {
+                    conversation: null,
+                    message: null,
+                };
+            }
+
+            let currentlyConsideredConversation = await DE.database.getConversation(charState.conversationId);
+            if (!currentlyConsideredConversation) {
+                throw new Error(`Conversation ${charState.conversationId} not found`);
+            }
+            while (true) {
+                const previousConversationId = currentlyConsideredConversation.previousConversationIdsPerParticipant[resolvedCharacter.id];
+                if (!previousConversationId) {
+                    break;
+                }
+                const previousConversation = await DE.database.getConversation(previousConversationId);
+                if (!previousConversation) {
+                    throw new Error(`Previous conversation ${previousConversationId} not found`);
+                }
+                currentlyConsideredConversation = previousConversation;
+            }
+            return {
+                conversation: currentlyConsideredConversation,
+                message: currentlyConsideredConversation.messages.length > 0 ? currentlyConsideredConversation.messages[0] : null,
+            };
+        },
+        getLastConversationAndMessageForCharacter: async (character) => {
+            const resolvedCharacter = resolveCharacter(DE, character);
+            if (!resolvedCharacter) {
+                throw new Error(`Character ${character} not found`);
+            }
+
+            const charState = DE.stateFor[resolvedCharacter.id];
+            if (!charState) {
+                throw new Error(`Character ${resolvedCharacter.id} does not have a state in DE.stateFor`);
+            }
+
+            if (!charState.conversationId) {
+                return {
+                    conversation: null,
+                    message: null,
+                };
+            }
+
+            const conversation = await DE.database.getConversation(charState.conversationId);
+            if (!conversation) {
+                throw new Error(`Conversation ${charState.conversationId} not found`);
+            }
+
+            const lastMessage = conversation.messages.length > 0 ? conversation.messages[conversation.messages.length - 1] : null;
+
+            return {
+                conversation,
+                message: lastMessage,
+            };
+        },
+        getPreviousConversationAndMessageForCharacter: async (character, conversation, message) => {
+            const resolvedCharacter = resolveCharacter(DE, character);
+            if (!resolvedCharacter) {
+                throw new Error(`Character ${character} not found`);
+            }
+            const resolvedConversation = await DE.utils.conversations.getConversation(conversation);
+            if (!resolvedConversation) {
+                throw new Error(`Conversation ${conversation} not found`);
+            }
+            const resolvedMessage = typeof message === "string" ? resolvedConversation.messages.find(m => m.id === message) : message;
+            if (!resolvedMessage) {
+                throw new Error(`Message ${message} not found in conversation ${resolvedConversation.id}`);
+            }
+            const currentIndexInConversation = resolvedConversation.messages.findIndex(m => m.id === resolvedMessage.id);
+            if (currentIndexInConversation === -1) {
+                throw new Error(`Message ${resolvedMessage.id} not found in conversation ${resolvedConversation.id}`);
+            }
+            if (currentIndexInConversation === 0) {
+                const prev = resolvedConversation.previousConversationIdsPerParticipant[resolvedCharacter.id];
+                if (!prev) {
+                    return {
+                        conversation: null,
+                        message: null,
+                    };
+                } else {
+                    const previousConversation = await DE.utils.conversations.getConversation(prev);
+                    if (!previousConversation) {
+                        throw new Error(`Previous conversation ${prev} not found`);
+                    }
+
+                    const lastMessageInPreviousConversation = previousConversation.messages.length > 0 ? previousConversation.messages[previousConversation.messages.length - 1] : null;
+                    return {
+                        conversation: previousConversation,
+                        message: lastMessageInPreviousConversation,
+                    };
+                }
+            } else {
+                const previousMessage = resolvedConversation.messages[currentIndexInConversation - 1];
+                return {
+                    conversation: resolvedConversation,
+                    message: previousMessage,
+                };
+            }
+        },
+        getNextConversationAndMessageForCharacter: async (character, conversation, message) => {
+            const resolvedCharacter = resolveCharacter(DE, character);
+            if (!resolvedCharacter) {
+                throw new Error(`Character ${character} not found`);
+            }
+            const resolvedConversation = await DE.utils.conversations.getConversation(conversation);
+            if (!resolvedConversation) {
+                throw new Error(`Conversation ${conversation} not found`);
+            }
+            const resolvedMessage = typeof message === "string" ? resolvedConversation.messages.find(m => m.id === message) : message;
+            if (!resolvedMessage) {
+                throw new Error(`Message ${message} not found in conversation ${resolvedConversation.id}`);
+            }
+            const currentIndexInConversation = resolvedConversation.messages.findIndex(m => m.id === resolvedMessage.id);
+            if (currentIndexInConversation === -1) {
+                throw new Error(`Message ${resolvedMessage.id} not found in conversation ${resolvedConversation.id}`);
+            }
+
+            if (currentIndexInConversation === resolvedConversation.messages.length - 1) {
+                const next = resolvedConversation.nextConversationIdsPerParticipant[resolvedCharacter.id];
+                if (!next) {
+                    return {
+                        conversation: null,
+                        message: null,
+                    };
+                }
+                const nextConversation = await DE.utils.conversations.getConversation(next);
+                if (!nextConversation) {
+                    throw new Error(`Next conversation ${next} not found`);
+                }
+                const firstMessageInNextConversation = nextConversation.messages.length > 0 ? nextConversation.messages[0] : null;
+                return {
+                    conversation: nextConversation,
+                    message: firstMessageInNextConversation,
+                };
+            } else {
+                const nextMessage = resolvedConversation.messages[currentIndexInConversation + 1];
+                return {
+                    conversation: resolvedConversation,
+                    message: nextMessage,
+                };
+            }
+        },
         getConversation: async function (conversationId) {
             return typeof conversationId === "string" ? DE.database.getConversation(conversationId) : conversationId;
         },
@@ -1044,6 +1199,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     if (charState) {
                         let expectedLocationId = charState.location;
                         let expectedLocationSlotId = charState.locationSlot;
+                        let expectedLocationSlotIdIsRandomlyChosen = false;
                         if (options.teleportParticipantsTo) {
                             if (typeof options.teleportParticipantsTo === "string") {
                                 expectedLocationId = options.teleportParticipantsTo;
@@ -1053,6 +1209,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                                     throw new Error(`Location ${expectedLocationId} does not exist in DE.world.locations`);
                                 }
                                 expectedLocationSlotId = Object.keys(location.slots)[Math.floor(Math.random() * Object.keys(location.slots).length)];
+                                expectedLocationSlotIdIsRandomlyChosen = true;
                             } else if (Array.isArray(options.teleportParticipantsTo)) {
                                 expectedLocationId = options.teleportParticipantsTo[0];
                                 expectedLocationSlotId = options.teleportParticipantsTo[1];
@@ -1065,6 +1222,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                                         throw new Error(`Location ${expectedLocationId} does not exist in DE.world.locations`);
                                     }
                                     expectedLocationSlotId = Object.keys(location.slots)[Math.floor(Math.random() * Object.keys(location.slots).length)];
+                                    expectedLocationSlotIdIsRandomlyChosen = true;
                                 } else if (Array.isArray(value)) {
                                     expectedLocationId = value[0];
                                     expectedLocationSlotId = value[1];
@@ -1077,7 +1235,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                                 throw new Error(`Invalid teleportParticipantsTo value`);
                             }
 
-                            if (charState.location !== expectedLocationId || charState.locationSlot !== expectedLocationSlotId) {
+                            if (expectedLocationSlotIdIsRandomlyChosen ? (charState.location !== expectedLocationId) : (charState.location !== expectedLocationId || charState.locationSlot !== expectedLocationSlotId)) {
                                 // teleport them
                                 charState.location = expectedLocationId;
                                 charState.locationSlot = expectedLocationSlotId;
@@ -1190,12 +1348,6 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         newConversationForRemainingParticipants.previousConversationIdsPerParticipant[allParticipantId] = endedConversation.id;
                         endedConversation.nextConversationIdsPerParticipant[allParticipantId] = actualNewConversationForRemainingParticipants.id;
                     }
-
-                    engine.triggerConversationMessageUpdate(DE, {
-                        event: "new-conversation",
-                        conversationId: actualNewConversationForRemainingParticipants.id,
-                        obj: actualNewConversationForRemainingParticipants,
-                    });
                 }
                 
                 if (endedConversation && !endedConversation.endTime) {
@@ -1222,11 +1374,6 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 fn(addedConversation.id);
             }
 
-            engine.triggerConversationMessageUpdate(DE, {
-                event: "new-conversation",
-                conversationId: addedConversation.id,
-                obj: addedConversation,
-            });
             return addedConversation;
         },
         async addMessageToConversation(conversationId, message, options = {}) {
@@ -1324,12 +1471,6 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 throw new Error(`Failed to add message to conversation ${conversationId}`);
             }
 
-            engine.triggerConversationMessageUpdate(DE, {
-                event: "new-message",
-                conversationId: conversationId,
-                messageId: addedMessage.id,
-                obj: addedMessage,
-            });
             return {
                 message: addedMessage,
                 sideEffectsReady: async () => {
@@ -1450,6 +1591,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
 
                 let expectedLocationId = participantChar.location;
                 let expectedLocationSlotId = participantChar.locationSlot;
+                let expectedLocationSlotIdIsRandomlyChosen = false;
 
                 if (options.teleportParticipantsTo) {
                     if (typeof options.teleportParticipantsTo === "string") {
@@ -1460,6 +1602,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                             throw new Error(`Location ${expectedLocationId} does not exist in DE.world.locations`);
                         }
                         expectedLocationSlotId = Object.keys(location.slots)[Math.floor(Math.random() * Object.keys(location.slots).length)];
+                        expectedLocationSlotIdIsRandomlyChosen = true;
                     } else if (Array.isArray(options.teleportParticipantsTo)) {
                         expectedLocationId = options.teleportParticipantsTo[0];
                         expectedLocationSlotId = options.teleportParticipantsTo[1];
@@ -1472,6 +1615,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                                 throw new Error(`Location ${expectedLocationId} does not exist in DE.world.locations`);
                             }
                             expectedLocationSlotId = Object.keys(location.slots)[Math.floor(Math.random() * Object.keys(location.slots).length)];
+                            expectedLocationSlotIdIsRandomlyChosen = true;
                         } else if (Array.isArray(value)) {
                             expectedLocationId = value[0];
                             expectedLocationSlotId = value[1];
@@ -1485,7 +1629,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     }
                 }
 
-                if (participantChar.location !== expectedLocationId || participantChar.locationSlot !== expectedLocationSlotId) {
+                if (expectedLocationSlotIdIsRandomlyChosen ? (participantChar.location !== expectedLocationId) : (participantChar.location !== expectedLocationId || participantChar.locationSlot !== expectedLocationSlotId)) {
                     // teleport them
                     participantChar.location = expectedLocationId;
                     participantChar.locationSlot = expectedLocationSlotId;
@@ -1582,6 +1726,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
         getPerspective(char) {
             const character = requireCharacter(DE, char);
             return getPerspective(DE, character);
+        },
+        getStoredPerspective(perspectiveId) {
+            return DE.database.getPerspectiveById(perspectiveId);
         },
         getRepresentativeCarrying(char) {
             const character = requireCharacter(DE, char);
@@ -2673,95 +2820,6 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     templates: {
-        breakDownCharactersAndCausesTemplate(info) {
-            return async (info2) => {
-                let base = typeof info.base === "string" ? info.base : info.base({
-                    char: info2.char,
-                });
-
-                if (info2.causes) {
-                    /** @type {string[]} */
-                    const causants = [];
-                    /** @type {Record<string, string[]>} */
-                    const causesPerCausant = {};
-                    info2.causes.forEach(cause => {
-                        if (cause.causant) {
-                            // cause.causant.name stores the causant identifier (character id in the new system)
-                            if (!causesPerCausant[cause.causant.id]) {
-                                causesPerCausant[cause.causant.id] = [];
-                            }
-                            causesPerCausant[cause.causant.id].push(cause.description);
-                            if (!causants.includes(cause.causant.id)) {
-                                causants.push(cause.causant.id);
-                            }
-                        }
-                    });
-
-                    for (let i = 0; i < causants.length; i++) {
-                        const causantId = causants[i];
-                        // DE.characters keyed by character id
-                        const other = DE.characters[causantId];
-                        if (!other) continue;
-                        const otherFamilyRelationship = info2.char.familyTies[causantId];
-                        const otherRelationship = await getRelationship(DE, info2.char, other);
-                        const descriptionForThatCausant = typeof info.perOther === "string" ? info.perOther : await info.perOther({
-                            char: info2.char,
-                            other: other,
-                            otherFamilyRelation: otherFamilyRelationship?.relation,
-                            otherRelationship: otherRelationship,
-                        });
-                        if (base) {
-                            base += "\n\n";
-                        }
-                        base += descriptionForThatCausant;
-
-                        if (causesPerCausant[causantId].length > 1) {
-                            base += `. Reasons: ${info2.char.name} `;
-                            base += formatAndHelper(causesPerCausant[causantId]);
-                            base += `, by ${other.name}`;
-                        }
-                    }
-                }
-
-                if (info2.causes) {
-                    /** @type {string[]} */
-                    const causants = [];
-                    /** @type {Record<string, string[]>} */
-                    const causesPerCausant = {};
-                    info2.causes.forEach(cause => {
-                        if (cause.causant && cause.causant.type === "object") {
-                            if (!causesPerCausant[cause.causant.name]) {
-                                causesPerCausant[cause.causant.name] = [];
-                            }
-                            causesPerCausant[cause.causant.name].push(cause.description);
-                            if (!causants.includes(cause.causant.name)) {
-                                causants.push(cause.causant.name);
-                            }
-                        }
-                    });
-
-                    for (let i = 0; i < causants.length; i++) {
-                        const causant = causants[i];
-                        const descriptionForThatCausant = typeof info.perObject === "string" ? info.perObject : await info.perObject({
-                            char: info2.char,
-                            item: causant,
-                        });
-                        if (base) {
-                            base += "\n\n";
-                        }
-                        base += descriptionForThatCausant;
-
-                        if (causesPerCausant[causant].length > 1) {
-                            base += `. Reasons: ${info2.char.name} `;
-                            base += formatAndHelper(causesPerCausant[causant]);
-                            base += `, by/with the object: ${causant}`;
-                        }
-                    }
-                }
-
-                return base;
-            };
-        },
         formatAnd(list) {
             return formatAndHelper(list);
         },
@@ -2821,12 +2879,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
             }
             return "<" + ourChar.id + ":" + nameGiven + ">";
         },
-        formatItemLabel(item, inPerspectiveOf, options) {
-            return DE.utils.templates.formatItemName(item, inPerspectiveOf, options);
-        },
         formatItemName(item, inPerspectiveOf, options) {
             item = requireItem(DE, item);
-            const visibility = DE.utils.items.canSeeItem(item, inPerspectiveOf);
+            const visibility = options?.alwaysVisible ? "visible" : DE.utils.items.canSeeItem(item, inPerspectiveOf);
             const observer = resolveCharacter(DE, inPerspectiveOf ?? null);
             if (visibility !== "visible" && !isItemCarriedOrWorn(DE, item, observer)) {
                 const label = visibility === "invisible" || !observer ? "invisible item" : getPerceivedItemLabel(item, observer);

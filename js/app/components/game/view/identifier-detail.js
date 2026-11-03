@@ -69,7 +69,7 @@ export class IdentifierDetail extends HTMLElement {
             if (data.description) {
                 // Keep the description readable if narration parsing is temporarily unavailable.
                 try {
-                    const fragments = await client.queryDEObject({ path: ['utils', 'templates', 'parseNarration'], call: [data.description] });
+                    const fragments = await client.queryDEObject({ path: ['utils', 'narrationAndDialogue', 'parseNarration'], call: [data.description] });
                     if (!this.isConnected || version !== this.loadVersion) return;
                     description.replaceChildren(...createNarrationNodes(fragments, (identifier, foundAs) => {
                         this.dispatchEvent(new CustomEvent('identifier-navigate', {

@@ -616,12 +616,13 @@ export function whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharac
     let canTellHeight = true;
     let canTellWeight = true;
 
-    const hasHighPerception = inPerspectiveCharacterPerception >= 0.75 ||
+    const hasPerfectPerception = inPerspectiveCharacterPerception >= 1 ||
         character.id === inPerspectiveCharacter.id ||
         inPerspectiveCharacterBlindness === "partial-good" ||
         inPerspectiveCharacterBlindness === "no"; // a character can always tell their own details, even if they are blind or have low perception
-    const hasLowPerception = inPerspectiveCharacterPerception < 0.5 && !hasHighPerception;
-    const hasMediumPerception = inPerspectiveCharacterPerception >= 0.5 && inPerspectiveCharacterPerception < 0.75 && !hasHighPerception;
+    const hasHighPerception = (inPerspectiveCharacterPerception >= 0.75 || inPerspectiveCharacterBlindness === "partial-good" || inPerspectiveCharacterBlindness === "no") && !hasPerfectPerception;
+    const hasLowPerception = inPerspectiveCharacterPerception < 0.5 && !hasPerfectPerception;
+    const hasMediumPerception = inPerspectiveCharacterPerception >= 0.5 && inPerspectiveCharacterPerception < 0.75 && !hasPerfectPerception;
     if (inPerspectiveCharacterBlindness === "full") {
         canTellStates = false;
         canTellNakedness = false;
@@ -661,6 +662,7 @@ export function whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharac
         hasLowPerception,
         hasMediumPerception,
         hasHighPerception,
+        hasPerfectPerception,
     };
 }
 
@@ -675,21 +677,21 @@ export function whatCanTheyMakeOfALocation(location, inPerspectiveCharacter) {
     const hasLowPerception = inPerspectiveCharacterPerception < 0.5 && !hasHighPerception;
     const hasMediumPerception = inPerspectiveCharacterPerception >= 0.5 && inPerspectiveCharacterPerception < 0.75 && !hasHighPerception;
 
-    let isUnclear = false;
+    let cantSee = false;
     if (inPerspectiveCharacter.blindness === "full") {
-        isUnclear = true;
+        cantSee = true;
     } else if (inPerspectiveCharacter.blindness === "partial-bad") {
         if (hasLowPerception) {
-            isUnclear = true;
+            cantSee = true;
         } else if (hasMediumPerception) {
-            isUnclear = false;
+            cantSee = false;
         } else {
             // their perception is high enough that they can make out the standard short description of the location in all details, even if they are partially blind.
-            isUnclear = false;
+            cantSee = false;
         }
     }
     return {
-        isUnclear,
+        cantSee,
         hasLowPerception,
         hasMediumPerception,
         hasHighPerception,

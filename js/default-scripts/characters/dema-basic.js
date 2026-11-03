@@ -125,16 +125,7 @@ engine.exports = {
             shortDescriptionBottomNakedAdd: "revealing its articulated legs.",
             skepticism: 0.4,
             antagonism: 0.1,
-            correctiveness: {
-                likelihood: 1,
-                generalFacts: [
-                    "The world is driven by science",
-                    "Robots are a common part of society",
-                    "Robots are a good source of companionship and assistance",
-                    "Robots are not capable of romantic or sexual attraction",
-                ],
-                questions: [],
-            },
+            correctiveness: 0.7,
             adventurousness: 0.1,
             combat: [
                 (info) => `${info.char.name} will use his robotic strength and a series of sharp blades that come off its arm to defend itself from ${info.other.name}`,

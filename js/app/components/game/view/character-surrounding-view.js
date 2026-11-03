@@ -128,7 +128,7 @@ export class CharacterSurroundingView extends HTMLElement {
             let positionFragments = position ? [position] : [];
             if (position) {
                 try {
-                    positionFragments = await client.queryDEObject({ path: ['utils', 'templates', 'parseNarration'], call: [position] });
+                    positionFragments = await client.queryDEObject({ path: ['utils', 'narrationAndDialogue', 'parseNarration'], call: [position] });
                 } catch (error) {
                     console.warn('Unable to parse character location description', error);
                 }

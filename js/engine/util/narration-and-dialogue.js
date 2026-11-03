@@ -1,4 +1,4 @@
-import { findBestIdentifier } from "./identifiers";
+import { findBestIdentifier } from "./identifiers.js";
 
 /**
  * Phrases that, when appearing immediately before a name marker, indicate that
@@ -353,6 +353,7 @@ export async function putNarrationInPerspective(DE, message, resolvedEmitter, re
     for (let i = 0; i < message.length; i++) {
         const originalFragment = message[i];
         if (typeof originalFragment === "string") {
+            fragments.push(originalFragment);
             continue;
         }
 

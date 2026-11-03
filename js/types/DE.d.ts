@@ -280,7 +280,7 @@ declare interface DECharacterStateDefinition {
      * 
      * it is recommended that all emotional states are hidden to others, while physical states that are visible are not hidden to others
      */
-    hiddenToOthers?: boolean;
+    hiddenToOthers?: "FULLY_HIDDEN" | "HIDDEN_TO_LOW_PERCEPTION" | "HIDDEN_TO_MEDIUM_PERCEPTION_AND_UNDER" | "HIDDEN_TO_HIGH_PERCEPTION_AND_UNDER";
     /**
      * Causes the character intimacy to multiply by this factor when the state is active
      * dominance irrelevant all active states affect it
@@ -1633,24 +1633,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * 
      * TODO implement this in talk.js
      */
-    correctiveness: {
-        /**
-         * General likelihood
-         * 
-         * A number from 0 to 1 that represents how likely is the character to correct the other character when they are wrong, higher means more likely to correct the other character when they are wrong
-         */
-        likelihood: number;
-        /**
-         * General facts that the character knows about the world, these are used to correct the other character when they are wrong about things that the character knows about
-         */
-        generalFacts: string[];
-        /**
-         * A list of questions that provided the answer is Yes, for the given character, the character will attempt to correct the other character in a very specific manner
-         * 
-         * Use this as sort of a world knowledge for the character, with more specific actions, so that they can correct the other character when they are wrong about things that the character knows about
-         */
-        questions: DECharacterQuestionWithAskPerForCharactersWithLikelyhoodAndCorrection[];
-    };
+    correctiveness: number;
 
     /**
      * Determines how a character fights and their fighting style
@@ -2224,7 +2207,6 @@ declare interface DEStateCauseCausantCharacter {
 }
 
 declare interface DEStateCauseCausantObject {
-    id: string;
     name: string;
     type: "object";
 }
@@ -2611,14 +2593,6 @@ declare interface DEItem {
      * otherwise null or not specified
      */
     communicator?: DEItemCommunicationDeviceProperties | null;
-
-    /**
-     * Interactions that can happen with this item that
-     * have a narrative effect or action
-     * 
-     * TODO implement
-     */
-    interactions?: Record<string, DEItemInteraction> | null;
 }
 
 declare interface DESeenItem {
@@ -3959,9 +3933,55 @@ declare interface DECharacterPerspectiveCharacter {
      * Ids of other characters that the character is carrying at that moment in time, this includes all the characters that the character has in their inventory, pockets, bags, etc.
      */
     characterCarryingOtherCharactersIds: string[];
+    /**
+     * States that the character has at that moment in time, this includes all the states that the character has, such as health, mood, status effects, etc.
+     */
+    states: Array<DECharacterStateInPerspective>;
 }
 
-declare interface DEItemInPerspective extends DEItem {
+declare interface DECharacterStateInPerspective {
+    /**
+     * The state name of the state that is in perspective at that moment in time
+     */
+    stateName: string;
+    /**
+     * type of the state
+     */
+    type: "INTERNAL" | "INTENSITY_EXPRESSIVE" | "BINARY";
+    /**
+     * Whether this state is dominant and affecting the character behaviour at this moment in time
+     */
+    dominant: boolean;
+    /**
+     * The causes, in perspective, using narrative form
+     */
+    causes?: Array<string>;
+    /**
+     * For stateful states, the level of the state
+     */
+    level?: 0 | 1 | 2 | 3 | 4;
+    /**
+     * For stateful states, whether the state is relieving or not (going down in intensity)
+     */
+    relieving?: boolean;
+}
+
+declare interface DEItemInPerspective extends Omit<DEItem, "id"> {
+    /**
+     * The ids of all the items with the same specs
+     */
+    ids: Array<{
+        id: string;
+        parent: string | null;
+    }>;
+    /**
+     * The amount of items with the same specs within a singular representative item
+     */
+    amount: number;
+    /**
+     * The name of the item in its plural form, considering their amount
+     */
+    nameInAmount: string;
     /**
      * List of items on top of this item, if any, that are in perspective at that moment in time
      */
@@ -4122,6 +4142,35 @@ declare interface DECharacterPerspective {
      * Whether the character is perceiving the world blind or not
      */
     ownCharacterBlindness: "no" | "partial-good" | "partial-bad" | "full";
+    /**
+     * Social groups
+     */
+    socialGroups: DESocialGroupInPerspective;
+}
+
+declare interface DESocialGroupInPerspective {
+    /**
+     * Whether the characters at the group slot can be seen by the character in perspective or not
+     */
+    canSeeCharacters: boolean;
+    /**
+     * Whether the characters in the groups slot are clear of not, if not clear, a string describing why they are unclear
+     */
+    characterListsAreUnclear: false | string;
+
+    /**
+     * The characters that are in the same social group as the character in perspective, this includes all the characters that are in the same social group as the character in perspective, including the character in perspective themselves
+     */
+    soloCharacters: Array<DECharacterPerspectiveCharacter>;
+    /**
+     * The characters that are in the same social group as the character in perspective, this includes all the characters that are in the same social group as the character in perspective, excluding the character in perspective themselves
+     * this list is guaranteed to be accurate and complete, as it is derived from the character's own perspective and knowledge of their social group
+     */
+    ownGroup: Array<DECharacterPerspectiveCharacter>;
+    /**
+     * Character in another social group that is not the same
+     */
+    otherGroups: Array<Array<DECharacterPerspectiveCharacter>>;
 }
 
 declare interface DEUtils {
@@ -4183,7 +4232,7 @@ declare interface DEUtils {
     world: {
         /** Evaluate perception of a location or slot, including confidence in its item list. */
         whatCanTheyMakeOfALocation(locationOrSlot: DELocation | DELocationSlot | string, inPerspectiveOf: DECompleteCharacterReference | string): {
-            isUnclear: boolean;
+            cantSee: boolean;
             hasLowPerception: boolean;
             hasMediumPerception: boolean;
             hasHighPerception: boolean;
@@ -4315,6 +4364,10 @@ declare interface DEUtils {
         createVoice(voiceDescription: DEVoiceDescription): DEVoiceDescription;
     },
     conversations: {
+        getLastConversationAndMessageForCharacter(character: DECompleteCharacterReference | string): Promise<{ conversation: DEConversation | null, message: DEConversationMessage | null }>;
+        getFirstConversationAndMessageForCharacter(character: DECompleteCharacterReference | string): Promise<{ conversation: DEConversation | null, message: DEConversationMessage | null }>;
+        getPreviousConversationAndMessageForCharacter(character: DECompleteCharacterReference | string, conversation: DEConversation | string, message: string | DEConversationMessage): Promise<{ conversation: DEConversation | null, message: DEConversationMessage | null }>;
+        getNextConversationAndMessageForCharacter(character: DECompleteCharacterReference | string, conversation: DEConversation | string, message: string | DEConversationMessage): Promise<{ conversation: DEConversation | null, message: DEConversationMessage | null }>;
         getConversation(conversationId: DEConversation | string): Promise<DEConversation | null>;
         getAllConversationsAtLocation(locationId: DELocation | string): Promise<{conversations: DEConversation[], leftoverCharacters: string[], foundCharacters: string[]}>; // leftoverCharacters are characters that are at the location but not in any conversation
         addMessageToConversation(conversationId: DEConversation | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects" | "perspectiveMessageByCharacterId" | "perspectiveByCharacterId">, options: { unsafeMode?: boolean } = {}): Promise<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>;
@@ -4334,6 +4387,7 @@ declare interface DEUtils {
     },
     characterInfo: {
         getPerspective(char: DECompleteCharacterReference | string): Promise<DECharacterPerspective>;
+        getStoredPerspective(perspectiveId: string): Promise<DECharacterPerspective | null>;
         /** Group directly carried items by equality ignoring ids, returning the first item and count for each group. */
         getRepresentativeCarrying(char: DECompleteCharacterReference | string): Array<{ item: DEItem; amount: number }>;
         /** Group directly worn items by equality ignoring ids, returning the first item and count for each group. */
@@ -4349,6 +4403,7 @@ declare interface DEUtils {
             hasLowPerception: boolean;
             hasMediumPerception: boolean;
             hasHighPerception: boolean;
+            hasPerfectPerception: boolean;
         };
         /** Resolve character visibility using location, sensory resolution and awareness of conversation partners or carriers. */
         canSeeCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf?: DECompleteCharacterReference | string | null): DEVisibility;
@@ -4594,48 +4649,6 @@ declare interface DEUtils {
     };
     templates: {
         /**
-         * Returns a DEStringTemplateCharAndCauses that is broken down into causants and causes
-         * 
-         * For example, say the state is "Angry"
-         * 
-         * By default the LLM will inject the following phrase into the template:
-         * 
-         * `{{char}} is very Angry` (or whatever the intensity is)
-         * 
-         * Then it will inject the template, this will simply do the following:
-         * 
-         * {{base}}
-         * 
-         * causes:
-         * [perOther]
-         * perOther cause: {{cause}}
-         * [/perOther]
-         * 
-         * [perItem]
-         * perItem cause: {{cause}}
-         * [/perItem]
-         * 
-         * @param DE 
-         * @param param1 
-         */
-        breakDownCharactersAndCausesTemplate(info: {
-            /**
-             * A template on how the character acts in general
-             */
-            base: DEStringTemplateCharOnly,
-            /**
-             * A template on how the character will act towards a specific character
-             * that caused that given state, the reason why that charater will be added at the end of the sentence
-             */
-            perOther: DEStringTemplateCharAndOther,
-            /**
-             * A template on how the character will act towards an object that caused that
-             * given state
-             */
-            perObject: DEStringTemplateCharAndItem,
-        }): DEStringTemplateCharAndCauses;
-
-        /**
          * Formats a list with commas and 'and', do not use this for formatting causants use formatCommaList
          * @returns eg. Arya, Thalon, and Mira
          */
@@ -4708,9 +4721,7 @@ declare interface DEUtils {
          * @param options Article type (default, definite), capitalization, and justName to return plain text instead of an identifier marker. The default article depends on item uniqueness.
          * @returns the formatted name of the item
          */
-        formatItemName(item: DEItem | string, inPerspectiveOf?: DECompleteCharacterReference | string | null, options?: { type?: "default" | "definite" | "plain", capitalize?: boolean, justName?: boolean, amount?: number }): string;
-        /** Observer-aware item label; accepts the same options as formatItemName, including justName. */
-        formatItemLabel: DEUtils['templates']['formatItemName'];
+        formatItemName(item: DEItem | string, inPerspectiveOf?: DECompleteCharacterReference | string | null, options?: { type?: "default" | "definite" | "plain", capitalize?: boolean, justName?: boolean, amount?: number, alwaysVisible?: boolean }): string;
         /**
          * Formats a location reference or ID as an identifier marker, or plain text with justName.
          * @param inPerspectiveOf Reserved for future perspective-dependent naming; currently ignored.

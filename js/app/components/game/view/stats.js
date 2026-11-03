@@ -129,7 +129,6 @@ export class Stats extends HTMLElement {
             }) : '',
         ]);
         const dateTime = Number.isFinite(currentTime) ? new Date(currentTime).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
-        console.log(profileImage, location, characterState?.locationSlot, dateTime, weather, states);
         return {
             userId,
             userName: character?.name || String(userId || ''),

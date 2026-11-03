@@ -10,7 +10,7 @@ export class GameOverlay extends HTMLElement {
         super();
         this.root = this.attachShadow({ mode: 'open' });
         this.initialized = false;
-        /** @type {Promise<void> | null} */
+        /** @type {Promise<{userId: string, lastConversationAndMessageInfo: { conversation: DEConversation | null, message: DEConversationMessage | null }}> | null} */
         this.setupPromise = null;
         /** @type {HTMLElement | null} */
         this.exitDialog = null;
@@ -117,7 +117,7 @@ export class GameOverlay extends HTMLElement {
         }
     }
 
-    /** @param {Promise<void>} ready @param {Promise<unknown>} revealStarted */
+    /** @param {Promise<{userId: string, lastConversationAndMessageInfo: { conversation: DEConversation | null, message: DEConversationMessage | null }}>} ready @param {Promise<unknown>} revealStarted */
     async startInitialThemeSong(ready, revealStarted) {
         try {
             await ready;
@@ -167,7 +167,19 @@ export class GameOverlay extends HTMLElement {
             await window.ENGINE_WORKER_CLIENT.startScene({ sceneName: result.sceneName });
         }
         if (!this.isConnected) return;
+
+        const readyInfo = await this.setupPromise;
+
+        if (!readyInfo) {
+            throw new Error('Game setup promise was not set');
+        }
+
         const view = document.createElement('app-game-view');
+        view.setAttribute('initial-user-id', readyInfo.userId);
+        view.setAttribute('initial-conversation-id', readyInfo.lastConversationAndMessageInfo.conversation?.id || '');
+        view.setAttribute('initial-message-id', readyInfo.lastConversationAndMessageInfo.message?.id || '');
+        const potentialPerspectiveInfo = readyInfo.lastConversationAndMessageInfo.message?.perspectiveByCharacterId[readyInfo.userId];
+        view.setAttribute('initial-perspective-id', potentialPerspectiveInfo?.after || potentialPerspectiveInfo?.before || '');
         view.addEventListener('wake-up', () => this.onExitClick());
         view.addEventListener('ready', async event => {
             
