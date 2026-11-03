@@ -228,7 +228,9 @@ export class GameView extends HTMLElement {
             console.log(this.currentPerspectiveId);
             if (perspectiveId !== this.currentPerspectiveId) {
                 this.currentPerspective = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'characterInfo', 'getStoredPerspective'], call: [this.currentPerspectiveId] });
-                console.log(this.currentPerspective);
+                document.querySelector("app-game-background").updatePerspective(this.currentPerspective);
+                document.querySelector("app-game-character-surrounding-view").updatePerspective(this.currentPerspective);
+                document.querySelector("app-game-stats").updatePerspective(this.currentPerspective);
             }
             console.log(this.currentConversation);
         } catch (error) {
@@ -240,7 +242,6 @@ export class GameView extends HTMLElement {
     disconnectedCallback() {
         this.controller?.abort();
         this.controller = null;
-        console.log("CALLING UNSUBSCRIBE");
         this.unsubscribe?.();
         this.unsubscribe = null;
     }
