@@ -3853,8 +3853,24 @@ declare interface DECharacterPerspectiveCharacter {
     characterId: string;
     /**
      * Name of the character as known by the perspective character at the time
+     * complex form with nicknames and aliases, this is the most complete form of the character's name
      */
-    characterName: string;
+    characterNameComplex: string;
+    /**
+     * Name of the character as known by the perspective character at the time
+     * simple form as how the character would usually refer to them
+     */
+    characterNameSimple: string;
+    /**
+     * Name of the character in the definite form
+     * will be the same as characterName if the character is known by the perspective character at the time, otherwise it will be a generic name such as "the person" or "the stranger"
+     */
+    characterNameDefinite: string;
+    /**
+     * Name of the character in the indefinite form
+     * will be the same as characterName if the character is known by the perspective character at the time, otherwise it will be a generic name such as "a person" or "a stranger"
+     */
+    characterNameIndefinite: string;
     /**
      * All the names of the character as known by the perspective character at the time, this includes nicknames, aliases, and other names that the character might be known by
      */
@@ -4146,6 +4162,10 @@ declare interface DECharacterPerspective {
      * Social groups
      */
     socialGroups: DESocialGroupInPerspective;
+    /**
+     * The time when the perspective was taken
+     */
+    timeOfPerspective: DETimeDescription;
 }
 
 declare interface DESocialGroupInPerspective {

@@ -1,8 +1,9 @@
 import '../../world-image.js';
-import { createStatTags } from './item-tags.js';
+import { createCharacterTags } from './character-tags.js';
 import { createNarrationNodes } from './narration.js';
+import { parsePerspectiveNarration } from './perspective-data.js';
 
-/** @typedef {{name: string, description: string, portrait?: string, banner?: string, content?: HTMLElement, stats?: Array<{label: string, value: string, icon: string}>}} IdentifierDetailData */
+/** @typedef {{name: string, description: string, portrait?: string, banner?: string, content?: HTMLElement, states?: DECharacterStateInPerspective[]}} IdentifierDetailData */
 
 /** Shared loading, vision treatment and narration for the four detail views. */
 export class IdentifierDetail extends HTMLElement {
@@ -10,6 +11,8 @@ export class IdentifierDetail extends HTMLElement {
         super();
         this.root = this.attachShadow({ mode: 'open' });
         this.loadVersion = 0;
+        /** @type {DECharacterPerspective | null} */
+        this.currentPerspective = null;
         this.kind = 'Details';
         this.layout = 'location';
     }
@@ -26,23 +29,19 @@ export class IdentifierDetail extends HTMLElement {
 
     disconnectedCallback() { this.loadVersion++; }
 
-    /** @param {string} userId @returns {Promise<IdentifierDetailData>} */
-    async getDisplayData(userId) { throw new Error('A detail view must provide its display data.'); }
+    /** @param {DECharacterPerspective} perspective @returns {IdentifierDetailData} */
+    getDisplayData(perspective) { throw new Error('A detail view must provide its display data.'); }
 
     async load() {
         const version = ++this.loadVersion;
         const article = /** @type {HTMLElement} */ (this.root.querySelector('.detail'));
         const description = /** @type {HTMLElement} */ (this.root.querySelector('.description'));
         try {
-            const client = window.ENGINE_WORKER_CLIENT;
-            const userId = await client.queryDEObject({ path: ['user'] });
-            const [blindness, data] = await Promise.all([
-                client.queryDEObject({ path: ['characters', userId, 'blindness'] }),
-                this.getDisplayData(userId),
-            ]);
-            if (!this.isConnected || version !== this.loadVersion) return;
-            const isSelf = this.layout === 'character' && this.getAttribute('identifier-id') === userId;
-            article.dataset.blindness = isSelf ? 'no' : blindness || 'no';
+            const perspective = this.currentPerspective;
+            if (!perspective) throw new Error('No perspective available.');
+            const data = this.getDisplayData(perspective);
+            const isSelf = this.layout === 'character' && this.getAttribute('identifier-id') === perspective.ownId;
+            article.dataset.blindness = isSelf ? 'no' : perspective.ownCharacterBlindness;
             this.dispatchEvent(new CustomEvent('identifier-title-change', {
                 bubbles: true, composed: true, detail: data.name,
             }));
@@ -54,13 +53,16 @@ export class IdentifierDetail extends HTMLElement {
             hero.classList.toggle('with-banner', Boolean(data.banner));
             hero.replaceChildren(...images);
             hero.hidden = !images.length;
-            this.root.querySelector('.character-stats')?.remove();
-            if (data.stats?.length) {
-                const stats = createStatTags(data.stats);
-                description.before(stats);
+            this.root.querySelector('.character-tags')?.remove();
+            if (data.states?.length) {
+                const tags = document.createElement('div');
+                tags.className = 'character-tags';
+                tags.append(...createCharacterTags(data.states));
+                description.before(tags);
             }
             description.removeAttribute('role');
-            description.textContent = data.description || 'No description available.';
+            description.hidden = !data.description;
+            description.textContent = data.description;
             this.root.querySelector('.detail-extra')?.remove();
             if (data.content) {
                 data.content.classList.add('detail-extra');
@@ -69,7 +71,7 @@ export class IdentifierDetail extends HTMLElement {
             if (data.description) {
                 // Keep the description readable if narration parsing is temporarily unavailable.
                 try {
-                    const fragments = await client.queryDEObject({ path: ['utils', 'narrationAndDialogue', 'parseNarration'], call: [data.description] });
+                    const fragments = await parsePerspectiveNarration(data.description);
                     if (!this.isConnected || version !== this.loadVersion) return;
                     description.replaceChildren(...createNarrationNodes(fragments, (identifier, foundAs) => {
                         this.dispatchEvent(new CustomEvent('identifier-navigate', {
@@ -85,7 +87,7 @@ export class IdentifierDetail extends HTMLElement {
             this.dispatchEvent(new CustomEvent('identifier-title-change', {
                 bubbles: true, composed: true, detail: `${this.kind} unavailable`,
             }));
-            description.textContent = 'These details are no longer available.';
+            description.textContent = 'These details are not available in this perspective.';
             console.warn('Unable to load identifier details', error);
         } finally {
             if (this.isConnected && version === this.loadVersion) article.setAttribute('aria-busy', 'false');

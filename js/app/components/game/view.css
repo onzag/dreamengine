@@ -1,5 +1,7 @@
 ﻿@import './view/shared.css';
 :host {
+    position: relative;
+    background: #000;
     display: block;
     height: 100%;
     font-family: inherit;
@@ -33,3 +35,5 @@ app-game-character-surrounding-view { grid-area: surroundings; min-width: 0; min
 kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid var(--border); border-radius: .4vh; padding: .1vh .5vh; }
 .items-toggle:hover { background-color: rgba(80, 130, 180, .35); }
 .items-toggle { min-width: 0; flex-wrap: wrap; overflow-wrap: anywhere; }
+
+.black-overlay { position: absolute; inset: 0; z-index: 1000; background: #000; }

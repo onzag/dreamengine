@@ -121,6 +121,7 @@ export async function getPerspective(DE, character) {
         ownLocation,
         ownCharacterBlindness: ownChar.blindness || 'no',
         socialGroups: result,
+        timeOfPerspective: {...DE.currentTime},
     };
 }
 
@@ -246,7 +247,10 @@ async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionFor
 
     const perception = DE.utils.characterInfo.whatCanTheyMakeOfAnotherCharacter(targetId, observerId);
 
-    const characterName = getNameIdentificationForOneCharacterTowardsAnotherOnlyName(DE, observer, target);
+    const characterNameComplex = getNameIdentificationForOneCharacterTowardsAnotherOnlyName(DE, observer, target);
+    const characterNameSimple = DE.utils.templates.formatCharacterName(target, observer, { justName: true, capitalize: true });
+    const characterNameDefinite = DE.utils.templates.formatCharacterName(target, observer, { type: 'definite', capitalize: true, justName: true });
+    const characterNameIndefinite = DE.utils.templates.formatCharacterName(target, observer, { type: 'indefinite', capitalize: true, justName: true });
 
     /** @type {string[]} */
     let characterAllNames;
@@ -514,7 +518,10 @@ async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionFor
     return {
         characterMetadata: target.metadata || {},
         characterId: targetId,
-        characterName,
+        characterNameComplex,
+        characterNameSimple,
+        characterNameDefinite,
+        characterNameIndefinite,
         characterAllNames,
         bond: isSelf ? 0 : (bond ? bond.bond : 0),
         bond2: isSelf ? 0 : (bond ? bond.bond2 : 0),
@@ -861,7 +868,7 @@ function containerUnclearReason(perception, kind) {
             ? false
             : `Perception is not sharp enough; some ${kind === 'contents' ? 'contents' : 'items on top'} might be missing.`;
     }
-    if (permission === 'NO_BECAUSE_CLOSED') return `It is closed, so ${where} cannot be seen.`;
+    if (permission === 'NO_BECAUSE_CLOSED') return `It is closed, so ${where === "inside" ? "the inside" : where} cannot be seen.`;
     if (permission === 'NO_BECAUSE_BAD_VISION') return `Vision is not clear enough to see ${where}.`;
     if (permission === 'NO') return `Cannot see ${where}.`;
     // NOT_A_CONTAINER

@@ -1,4 +1,5 @@
 import '../../dialog.js';
+import { getPerspectiveFor } from './perspective-data.js';
 import './character-dialog.js';
 import './location-dialog.js';
 import './location-slot-dialog.js';
@@ -20,6 +21,8 @@ function getFocusedElement() {
 export class IdentifierDialog extends HTMLElement {
     constructor() {
         super();
+        /** @type {DECharacterPerspective | null} */
+        this.currentPerspective = null;
         /** @type {HTMLElement|null} */
         this.previousFocus = null;
         /** @type {HTMLElement|null} */
@@ -42,14 +45,15 @@ export class IdentifierDialog extends HTMLElement {
         dialog.setAttribute('pre-expand', 'true');
         dialog.setAttribute('large', 'true');
         dialog.addEventListener('cancel', () => this.remove());
-        const view = document.createElement(tag);
+        const view = /** @type {import('./identifier-detail.js').IdentifierDetail} */ (document.createElement(tag));
+        view.currentPerspective = this.currentPerspective;
         view.setAttribute('identifier-id', this.getAttribute('identifier-id') || '');
         view.addEventListener('identifier-title-change', event => {
             dialog.setAttribute('dialog-title', /** @type {CustomEvent<string>} */ (event).detail);
         });
         view.addEventListener('identifier-navigate', event => {
             const { identifier, foundAs } = /** @type {CustomEvent<DEConversationMessageFragmentIdentifier>} */ (event).detail;
-            openIdentifierDialog(identifier, foundAs, getFocusedElement() || this);
+            openIdentifierDialog(identifier, foundAs, getFocusedElement() || this, this.currentPerspective);
         });
         dialog.append(view);
         // Keep the shared dialog in the light DOM so existing modal guards can find it.
@@ -96,12 +100,14 @@ customElements.define('app-game-identifier-dialog', IdentifierDialog);
  * @param {string} identifier
  * @param {DEConversationMessageFragmentIdentifier['foundAs']} foundAs
  * @param {HTMLElement} trigger
+ * @param {DECharacterPerspective | null} [perspective]
  */
-export function openIdentifierDialog(identifier, foundAs, trigger) {
+export function openIdentifierDialog(identifier, foundAs, trigger, perspective = getPerspectiveFor(trigger)) {
     const dialog = /** @type {IdentifierDialog} */ (document.createElement('app-game-identifier-dialog'));
     dialog.setAttribute('identifier-id', identifier);
     dialog.setAttribute('found-as', foundAs);
     dialog.previousFocus = trigger;
+    dialog.currentPerspective = perspective;
     document.body.append(dialog);
     return dialog;
 }

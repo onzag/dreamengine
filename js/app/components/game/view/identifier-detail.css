@@ -1,6 +1,7 @@
 @import './shared.css';
 @import './identifier-links.css';
 @import './item-tags.css';
+@import './character-tags.css';
 :host { display: block; --ink: #edf6ff; --muted: #b3c7da; --accent: #a7d9ff; color: var(--ink); }
 .detail { --image-blur: 0vh; min-width: 0; padding: 0 1vh 2vh; }
 .detail[data-blindness="partial-good"] { --image-blur: .45vh; }
@@ -21,3 +22,6 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
 .item { display: grid; grid-template-columns: 24vh minmax(0, 1fr); gap: 0 3vh; }
 .detail-extra { grid-column: 1 / -1; min-width: 0; margin-top: 2vh; }
 @media (max-width: 700px) { .item { grid-template-columns: minmax(0, 1fr); } .banner { height: 20vh; } .portrait { width: 18vh; height: 18vh; } }
+
+.character-tags { margin: 0 0 2vh; }
+.description[hidden] { display: none; }

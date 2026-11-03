@@ -1,48 +1,34 @@
-import { formatCharacterPosition } from './character-position.js';
+import { getPerspectiveIndex } from './perspective-data.js';
 
 /**
- * @typedef {{userId: string, userName: string, blindness: DECompleteCharacterReference['blindness'], memoryScope: string}} ItemTreeContext
+ * @typedef {{perspective: DECharacterPerspective, userId: string, userName: string, blindness: DECharacterPerspective['ownCharacterBlindness'], memoryScope: string}} ItemTreeContext
  * @typedef {'communicator' | 'consumable' | 'container' | 'open' | 'closed' | 'locked' | 'eye' | 'eye-off' | 'rigid' | 'flexible' | 'tag'} ItemTagIcon
  * @typedef {{label: string, source: 'item' | 'state', type: 'communicator' | 'consumable' | 'container' | 'open' | 'closed' | 'locked' | 'capacity-weight' | 'capacity-volume' | 'weight' | 'volume' | 'relative-position' | 'posture' | 'tag', icons?: ItemTagIcon[], description?: string}} ItemTagData
- * @typedef {{kind?: 'item', id: string, label: string, amount: number, asset: string, tags: ItemTagData[], perception: DEItemPerception}} ItemNodeData
- * @typedef {{kind: 'character', id: string, label: string, descriptionFragments?: DEConversationMessageNarrationFragment[], amount: number, asset: string, tags: ItemTagData[]}} CharacterNodeData
+ * @typedef {{kind: 'item', id: string, label: string, amount: number, asset: string, tags: ItemTagData[], item: DEItemInPerspective}} ItemNodeData
+ * @typedef {{kind: 'character', id: string, label: string, description: string, amount: number, asset: string, tags: ItemTagData[]}} CharacterNodeData
  * @typedef {{label: string, message: string, items: (ItemNodeData | CharacterNodeData)[]}} ItemGroupData
  */
 
-/** @param {string} userId @returns {Promise<ItemTreeContext>} */
-export async function getItemTreeContext(userId) {
-    const client = window.ENGINE_WORKER_CLIENT;
-    const [blindness, worldName, userName] = await Promise.all([
-        client.queryDEObject({ path: ['characters', userId, 'blindness'] }),
-        client.queryDEObject({ path: ['world', 'name'] }),
-        client.queryDEObject({ path: ['utils', 'templates', 'formatCharacterName'], call: [userId, userId,
-            { __type: 'object', value: { justName: true, type: 'definite', capitalize: true } }] }),
-    ]);
-    return { userId, userName, blindness: blindness || 'no', memoryScope: JSON.stringify([worldName, userId]) };
+/** @param {DECharacterPerspective} perspective @returns {ItemTreeContext} */
+export function getItemTreeContext(perspective) {
+    return { perspective, userId: perspective.ownId, userName: perspective.ownName,
+        blindness: perspective.ownCharacterBlindness, memoryScope: perspective.ownId };
 }
 
-/** @param {(ItemNodeData | CharacterNodeData)[]} items @param {string} emptyMessage @param {ItemTreeContext} context @param {boolean} hasHighPerception */
-function itemListMessage(items, emptyMessage, context, hasHighPerception) {
-    if (items.length) return hasHighPerception ? '' : `${context.userName} might be missing some items.`;
-    return hasHighPerception ? emptyMessage : `${context.userName} cannot see any items.`;
-}
-
-/** @param {number} value @param {'weight' | 'volume'} kind @param {boolean} exact */
-export function formatItemMeasurement(value, kind, exact) {
+/** @param {number} value @param {'weight' | 'volume'} kind */
+export function formatItemMeasurement(value, kind) {
     const small = value > 0 && value < 1;
     const converted = small ? value * 1000 : value;
     const unit = kind === 'weight' ? (small ? 'g' : 'kg') : (small ? 'mL' : 'L');
-    return `${exact ? '' : '≈ '}${exact ? converted : Number(converted.toPrecision(2))} ${unit}`;
+    return `${converted} ${unit}`;
 }
 
 /**
  * Derived item properties and explicit state tags keep their own provenance.
  * @param {Pick<DEItem, 'communicator' | 'consumableProperties' | 'containerProperties' | 'wearableProperties' | 'state'>} item
- * @param {DEItemPerception} perception
  * @returns {ItemTagData[]}
  */
-function getItemTags(item, perception) {
-    if (!perception.canTellTheirExactDescription) return [];
+function getItemTags(item) {
     /** @type {ItemTagData[]} */
     const tags = [];
     if (item.communicator) tags.push({ label: 'Communicator', source: 'item', type: 'communicator' });
@@ -60,12 +46,12 @@ function getItemTags(item, perception) {
             tags.push({ label: state.charAt(0).toUpperCase() + state.slice(1), source: 'item', type: state,
                 icons: [state, visibilityIcon], description: visibilityDescription });
         }
-        if (perception.canTellTheirWeight && Number.isFinite(container.capacityKg) && container.capacityKg >= 0) {
-            tags.push({ label: formatItemMeasurement(container.capacityKg, 'weight', perception.hasHighPerception),
+        if (Number.isFinite(container.capacityKg) && container.capacityKg >= 0) {
+            tags.push({ label: formatItemMeasurement(container.capacityKg, 'weight'),
                 source: 'item', type: 'capacity-weight', icons: ['container'] });
         }
-        if (perception.canTellTheirVolume && Number.isFinite(container.capacityLiters) && container.capacityLiters >= 0) {
-            tags.push({ label: formatItemMeasurement(container.capacityLiters, 'volume', perception.hasHighPerception),
+        if (Number.isFinite(container.capacityLiters) && container.capacityLiters >= 0) {
+            tags.push({ label: formatItemMeasurement(container.capacityLiters, 'volume'),
                 source: 'item', type: 'capacity-volume', icons: ['container'] });
         }
     }
@@ -81,159 +67,97 @@ function getItemTags(item, perception) {
     return tags;
 }
 
-/**
- * The root of an explicit item dialog may be known without being detectable.
- * Lists always filter representatives before requesting their names or images.
- * @param {string} id @param {ItemTreeContext} context @param {number} [amount]
- * @param {DEItemPerception} [perception]
- * @returns {Promise<ItemNodeData>}
- */
-export async function loadItemNode(id, context, amount = 1, perception) {
-    const client = window.ENGINE_WORKER_CLIENT;
-    perception ||= await client.queryDEObject({ path: ['utils', 'items', 'whatCanTheyMakeOfAnItem'], call: [id, context.userId] });
-    if (!perception) throw new Error('Item perception unavailable');
-    const [item, label] = await Promise.all([
-        client.queryDEObject({ path: ['utils', 'items', 'getItemById'], call: [id], pick: ['metadata', 'weightKg', 'volumeLiters', 'communicator', 'consumableProperties', 'containerProperties', 'wearableProperties', 'state', 'relativePosition'] }),
-        client.queryDEObject({ path: ['utils', 'templates', 'formatItemName'], call: [id, context.userId,
-            { __type: 'object', value: { justName: true, capitalize: true, type: 'plain' } }] }),
-    ]);
-    if (!item) throw new Error(`Item ${id} no longer exists`);
+
+/** @param {DEItemInPerspective} item @param {string} [id] @returns {ItemNodeData} */
+function itemNode(item, id = item.ids[0].id, useSimpleName = false) {
     /** @type {ItemTagData[]} */
     const tags = [];
-    if (perception.canTellTheirWeight && Number.isFinite(item.weightKg) && item.weightKg >= 0) {
-        tags.push({ label: formatItemMeasurement(item.weightKg, 'weight', perception.hasHighPerception), source: 'item', type: 'weight' });
+    // Zero is also the snapshot's sentinel for an unknown measurement.
+    if (Number.isFinite(item.weightKg) && item.weightKg > 0) {
+        tags.push({ label: formatItemMeasurement(item.weightKg, 'weight'), source: 'item', type: 'weight' });
     }
-    if (perception.canTellTheirVolume && Number.isFinite(item.volumeLiters) && item.volumeLiters >= 0) {
-        tags.push({ label: formatItemMeasurement(item.volumeLiters, 'volume', perception.hasHighPerception), source: 'item', type: 'volume' });
+    if (Number.isFinite(item.volumeLiters) && item.volumeLiters > 0) {
+        tags.push({ label: formatItemMeasurement(item.volumeLiters, 'volume'), source: 'item', type: 'volume' });
     }
-    tags.push(...getItemTags(item, perception), ...getRelativePositionTags(item.relativePosition));
-    return { id, label, amount, asset: item.metadata?.asset || '', tags, perception };
+    tags.push(...getItemTags(item));
+    if (item.relativePosition) tags.push({ label: item.relativePosition, source: 'item', type: 'relative-position' });
+    return { kind: 'item', id, label: useSimpleName ? item.name : item.nameInAmount || item.name, amount: item.amount,
+        asset: item.metadata?.asset || '', tags, item };
 }
 
-/**
- * @param {'items' | 'characterInfo' | 'world'} category
- * @param {string} method @param {string} id @param {ItemTreeContext} context
- * @returns {Promise<ItemNodeData[]>}
+/** All underlying IDs in a merged stack resolve to the same snapshot item.
+ * @param {string} id @param {ItemTreeContext} context @returns {ItemNodeData}
  */
-export async function loadRepresentativeNodes(category, method, id, context) {
-    const client = window.ENGINE_WORKER_CLIENT;
-    // Only IDs and counts are needed here; do not transfer entire nested inventories.
-    /** @type {Array<{item: {id: string}, amount: number}>} */
-    const representatives = await client.queryDEObject({ path: ['utils', category, method], call: [id], depth: 1 });
-    const nodes = await Promise.all(representatives.map(async ({ item, amount }) => {
-        const visibility = await client.queryDEObject({ path: ['utils', 'items', 'canSeeItem'], call: [item.id, context.userId] });
-        if (visibility === 'invisible') return null;
-        return loadItemNode(item.id, context, amount);
-    }));
-    return nodes.filter(node => node !== null);
+export function loadItemNode(id, context, useSimpleName = false) {
+    const item = getPerspectiveIndex(context.perspective).items.get(id);
+    if (!item) throw new Error('Item is not available in this perspective.');
+    return itemNode(item, id, useSimpleName);
 }
 
-/** @param {string | null | undefined} position @returns {ItemTagData[]} */
-function getRelativePositionTags(position) {
-    return position?.trim() ? [{ label: position.trim(), source: 'item', type: 'relative-position' }] : [];
+/** @param {DECharacterPerspectiveCharacter} character @returns {CharacterNodeData} */
+function characterNode(character) {
+    return { kind: 'character', id: character.characterId, label: character.characterNameComplex, amount: 1,
+        asset: character.characterMetadata.assets?.neutral || '', tags: [],
+        description: character.characterPlaceAndPostureDescription };
 }
 
-/** @param {string} itemId @param {'containingCharacters' | 'ontopCharacters'} relation
- * @param {ItemTreeContext} context @returns {Promise<CharacterNodeData[]>} */
-async function loadCharacterNodes(itemId, relation, context) {
-    const client = window.ENGINE_WORKER_CLIENT;
-    const item = await client.queryDEObject({ path: ['utils', 'items', 'getItemById'], call: [itemId], pick: [relation] });
-    /** @type {Array<{id: string, relativePosition?: string | null}>} */
-    const characters = item?.[relation] || [];
-    const nodes = await Promise.all(characters.map(async ({ id, relativePosition }) => {
-        const visibility = await client.queryDEObject({ path: ['utils', 'characterInfo', 'canSeeCharacter'], call: [id, context.userId] });
-        if (visibility === 'invisible') return null;
-        const [label, metadata, state] = await Promise.all([
-            client.queryDEObject({ path: ['utils', 'templates', 'formatCharacterName'], call: [id, context.userId,
-                { __type: 'object', value: { justName: true, type: 'indefinite', capitalize: true } }] }),
-            client.queryDEObject({ path: ['characters', id, 'metadata'], pick: ['assets'] }),
-            client.queryDEObject({ path: ['stateFor', id], pick: ['posture'] }),
-        ]);
-        return /** @type {CharacterNodeData} */ ({ kind: 'character', id, label, amount: 1,
-            asset: metadata?.assets?.neutral || '', tags: [{ label: formatCharacterPosition(state.posture, relativePosition), source: 'item', type: 'posture' }] });
-    }));
-    return nodes.filter(node => node !== null);
+/** @param {string[]} ids @param {ItemTreeContext} context */
+function characterNodes(ids, context) {
+    const { characters } = getPerspectiveIndex(context.perspective);
+    return ids.flatMap(id => {
+        const character = characters.get(id);
+        return character ? [characterNode(character)] : [];
+    });
 }
 
-/** @param {ItemNodeData} item @param {ItemTreeContext} context @returns {Promise<ItemGroupData[]>} */
-export async function loadItemGroups(item, context) {
-    const { canSeeContents, canSeeOntop } = item.perception;
-    /** @type {Array<{label: string, method: string, characters: 'containingCharacters' | 'ontopCharacters', permission: DEItemPerception['canSeeContents'], location: string}>} */
-    const relations = [
-        { label: 'Inside', method: 'getRepresentativeContents', characters: 'containingCharacters', permission: canSeeContents, location: 'items inside' },
-        { label: 'On top', method: 'getRepresentativeOntop', characters: 'ontopCharacters', permission: canSeeOntop, location: 'items on top' },
-    ];
-    return Promise.all(relations.filter(relation => relation.permission !== 'NOT_A_CONTAINER').map(async relation => {
-        if (relation.permission !== 'YES') {
-            const message = relation.permission === "NO" ? `${context.userName} cannot see inside.` : (relation.permission === 'NO_BECAUSE_CLOSED'
-                ? `${context.userName} cannot see inside because it is closed.`
-                : relation.label === 'Inside' ? `${context.userName}'s vision is not clear enough to see inside.` : `${context.userName}'s vision is not clear enough to see what is on top.`);
-            return { label: relation.label, message, items: [] };
-        }
-        const [itemNodes, characterNodes] = await Promise.all([
-            loadRepresentativeNodes('items', relation.method, item.id, context),
-            loadCharacterNodes(item.id, relation.characters, context),
-        ]);
-        const items = [...itemNodes, ...characterNodes];
-        return { label: relation.label, message: itemListMessage(items, `There are no ${relation.location.replace("items", "items or characters")}.`, context,
-            item.perception.hasHighPerception), items };
-    }));
-}
-
-/** @param {string} characterId @param {ItemTreeContext} context @returns {Promise<ItemGroupData[]>} */
-export async function loadCharacterItemGroups(characterId, context) {
-    const client = window.ENGINE_WORKER_CLIENT;
-    const [name, perception] = await Promise.all([
-        client.queryDEObject({ path: ['utils', 'templates', 'formatCharacterName'], call: [characterId, context.userId,
-            { __type: 'object', value: { justName: true, type: 'definite', capitalize: true } }] }),
-        client.queryDEObject({ path: ['utils', 'characterInfo', 'whatCanTheyMakeOfAnotherCharacter'], call: [characterId, context.userId], pick: ['hasHighPerception'] }),
-    ]);
-    return Promise.all(['Carrying', 'Wearing'].map(async label => {
-        const items = await loadRepresentativeNodes('characterInfo', `getRepresentative${label}`, characterId, context);
-        const message = itemListMessage(items, `${name} is not ${label.toLowerCase()} any items.`, context, perception.hasHighPerception);
-        return { label, message, items };
-    }));
-}
-
-/** @param {string} slotId @param {ItemTreeContext} context @param {string} [slotName] @returns {Promise<ItemGroupData[]>} */
-export async function loadLocationSlotItemGroups(slotId, context, slotName) {
-    const [items, perception, characters] = await Promise.all([
-        loadRepresentativeNodes('world', 'getRepresentativeItemsAtLocationSlot', slotId, context),
-        window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'world', 'whatCanTheyMakeOfALocation'], call: [slotId, context.userId], pick: ['hasHighPerception'] }),
-        loadLocationSlotCharacters(slotId, context),
-    ]);
-    if (!items.length && perception.hasHighPerception && !slotName) {
-        slotName = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'templates', 'formatLocationSlotName'],
-            call: [slotId, context.userId, { __type: 'object', value: { justName: true } }] });
+/** @param {ItemNodeData} node @param {ItemTreeContext} context @returns {ItemGroupData[]} */
+export function loadItemGroups(node, context) {
+    const item = node.item;
+    /** @type {ItemGroupData[]} */
+    const groups = [];
+    if (item.containerProperties || item.containing.length || item.containingCharacters.length || item.contentsIsUnclear) {
+        const items = item.canSeeContents
+            ? [...item.containing.map(item => itemNode(item)), ...characterNodes(item.containingCharacters, context)] : [];
+        groups.push({ label: 'Inside', items, message: item.contentsIsUnclear ||
+            (!item.canSeeContents ? 'Cannot see inside.' : items.length ? '' : 'There are no items or characters inside.') });
     }
-    return [
-        { label: 'Characters', message: perception.hasHighPerception
-            ? (characters.length ? '' : 'There are no characters here.')
-            : `${context.userName} ${characters.length ? 'might be missing some characters' : 'cannot see any characters'}.`, items: characters },
-        { label: 'Items', message: itemListMessage(items, `There are no items at ${slotName}.`, context, perception.hasHighPerception), items },
-    ];
+    const items = item.canSeeOntop
+        ? [...item.ontop.map(item => itemNode(item)), ...characterNodes(item.ontopCharacters, context)] : [];
+    if (items.length || item.ontopIsUnclear || item.maxVolumeOnTopLiters || item.maxWeightOnTopKg) {
+        groups.push({ label: 'On top', items, message: item.ontopIsUnclear ||
+            (!item.canSeeOntop ? 'Cannot see what is on top.' : items.length ? '' : 'There are no items or characters on top.') });
+    }
+    return groups;
 }
 
-/** Flat slot overview intentionally also includes characters shown within item branches.
- * @param {string} slotId @param {ItemTreeContext} context @returns {Promise<CharacterNodeData[]>} */
-async function loadLocationSlotCharacters(slotId, context) {
-    const client = window.ENGINE_WORKER_CLIENT;
-    /** @type {string[]} */
-    const ids = await client.queryDEObject({ path: ['utils', 'world', 'getCharacterIdsAtLocationSlot'], call: [slotId] });
-    const nodes = await Promise.all(ids.map(async id => {
-        const visibility = await client.queryDEObject({ path: ['utils', 'characterInfo', 'canSeeCharacter'], call: [id, context.userId] });
-        if (visibility === 'invisible') return null;
-        const [label, metadata, description] = await Promise.all([
-            client.queryDEObject({ path: ['utils', 'templates', 'formatCharacterName'], call: [id, context.userId,
-                { __type: 'object', value: { justName: true, type: 'indefinite', capitalize: true } }] }),
-            client.queryDEObject({ path: ['characters', id, 'metadata'], pick: ['assets'] }),
-            client.queryDEObject({ path: ['utils', 'characterInfo', 'getExternalDescriptionOfCharacterLocationSpecifics'], call: [id, context.userId, false, true] }),
-        ]);
-        const descriptionFragments = description ? await client.queryDEObject({
-            path: ['utils', 'narrationAndDialogue', 'parseNarration'], call: [description],
-        }) : [];
-        return /** @type {CharacterNodeData} */ ({ kind: 'character', id, label, descriptionFragments,
-            amount: 1, asset: metadata?.assets?.neutral || '', tags: [] });
-    }));
-    return nodes.filter(node => node !== null);
+/** @param {string} characterId @param {ItemTreeContext} context @returns {ItemGroupData[]} */
+export function loadCharacterItemGroups(characterId, context) {
+    const character = getPerspectiveIndex(context.perspective).characters.get(characterId);
+    if (!character) throw new Error('Character is not available in this perspective.');
+    const visible = character.canTellDetailsOfClothingOrCarriedItems;
+    return ['Carrying', 'Wearing'].map(label => {
+        const items = visible ? (label === 'Carrying' ? character.characterCarryingItems : character.characterWearingItems)
+            .map(item => itemNode(item)) : [];
+        /** @type {(ItemNodeData | CharacterNodeData)[]} */
+        const nodes = [...items];
+        if (label === 'Carrying') nodes.push(...characterNodes(character.characterCarryingOtherCharactersIds, context));
+        return { label, items: nodes, message: !visible ? 'Details of clothing and carried items cannot be made out.'
+            : nodes.length ? '' : character.characterNameDefinite + ' is not ' + label.toLowerCase() + ' any items.' };
+    });
+}
+
+/** @param {string} slotId @param {ItemTreeContext} context @returns {ItemGroupData[]} */
+export function loadLocationSlotItemGroups(slotId, context) {
+    const { perspective } = context;
+    const slot = getPerspectiveIndex(perspective).slots.get(slotId);
+    if (!slot) throw new Error('Location slot is not available in this perspective.');
+    const characters = slot.canSeeCharacters ? slot.characters.map(character => characterNode(character)) : [];
+    if (slotId === perspective.ownLocationSlotId) characters.unshift(characterNode(perspective.self));
+    const items = slot.canSeeItems ? slot.items.map(item => itemNode(item)) : [];
+    return [
+        { label: 'Characters', items: characters, message: slot.characterListsAreUnclear ||
+            (!slot.canSeeCharacters ? 'Cannot see the characters here.' : characters.length ? '' : 'There are no characters here.') },
+        { label: 'Items', items, message: slot.itemListsAreUnclear ||
+            (!slot.canSeeItems ? 'Cannot see the items here.' : items.length ? '' : 'There are no items at ' + slot.slotName + '.') },
+    ];
 }

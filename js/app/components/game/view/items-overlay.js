@@ -15,7 +15,8 @@ export class ItemsOverlay extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
-        this.version = 0;
+        /** @type {DECharacterPerspective | null} */
+        this.currentPerspective = null;
         this.locationId = '';
         this.userId = '';
         /** @type {HTMLElement | null} */
@@ -53,7 +54,7 @@ export class ItemsOverlay extends HTMLElement {
         this.root.addEventListener('identifier-navigate', event => {
             const { identifier, foundAs } = /** @type {CustomEvent<DEConversationMessageFragmentIdentifier>} */ (event).detail;
             event.stopPropagation();
-            openIdentifierDialog(identifier, foundAs, getFocusedElement() || this.root.querySelector('.close') || this);
+            openIdentifierDialog(identifier, foundAs, getFocusedElement() || this.root.querySelector('.close') || this, this.currentPerspective);
         }, { signal });
         const locationButton = /** @type {HTMLButtonElement} */ (this.root.querySelector('.location-banner'));
         locationButton.addEventListener('click', () => { if (this.locationId) openIdentifierDialog(this.locationId, 'location', locationButton); });
@@ -70,14 +71,13 @@ export class ItemsOverlay extends HTMLElement {
     get open() { return this.hasAttribute('open'); }
 
     disconnectedCallback() {
-        this.version++;
         this.controller?.abort();
         unregisterDialog(this);
         this.removeAttribute('open');
     }
 
     show() {
-        if (this.open || !this.isConnected) return;
+        if (this.open || !this.isConnected || !this.currentPerspective) return;
         this.previousFocus = getFocusedElement();
         registerDialog(this);
         this.setAttribute('open', '');
@@ -85,12 +85,11 @@ export class ItemsOverlay extends HTMLElement {
         this.root.querySelector('.panel')?.setAttribute('data-de-aria-group-active', '');
         queueMicrotask(() => { if (this.open && isTopDialog(this)) this.root.getElementById('items-title')?.focus(); });
         this.notify();
-        void this.refresh();
+        this.refresh();
     }
 
     close() {
         if (!this.open) return;
-        this.version++;
         this.removeAttribute('open');
         this.hidden = true;
         this.root.querySelector('.panel')?.removeAttribute('data-de-aria-group-active');
@@ -105,71 +104,49 @@ export class ItemsOverlay extends HTMLElement {
         this.dispatchEvent(new Event('toggle'));
     }
 
-    async refresh() {
-        const version = ++this.version;
-        const slots = /** @type {HTMLElement} */ (this.root.querySelector('.slots'));
-        const locationButton = /** @type {HTMLButtonElement} */ (this.root.querySelector('.location-banner'));
+    /** @param {DECharacterPerspective | null} perspective */
+    updatePerspective(perspective) {
+        this.currentPerspective = perspective;
+        if (!perspective) {
+            this.close();
+            this.root.querySelector('.slots')?.replaceChildren();
+            this.root.querySelector('.inventory')?.replaceChildren();
+            this.locationId = '';
+            this.userId = '';
+        } else if (this.open) this.refresh();
+    }
+
+    refresh() {
+        const perspective = this.currentPerspective;
+        if (!perspective || !this.isConnected) return;
+        const context = getItemTreeContext(perspective);
+        this.userId = perspective.ownId;
+        this.locationId = perspective.ownLocation.locationId;
+        this.dataset.blindness = perspective.ownCharacterBlindness;
         const characterButton = /** @type {HTMLButtonElement} */ (this.root.querySelector('.character-name'));
-        const locationName = /** @type {HTMLElement} */ (this.root.querySelector('.banner-name'));
-        this.locationId = '';
-        this.userId = '';
-        locationButton.disabled = true;
-        characterButton.disabled = true;
-        slots.setAttribute('aria-busy', 'true');
-        slots.textContent = 'Loading surroundings…';
-        locationName.textContent = 'Loading location…';
-        characterButton.textContent = 'Loading character…';
-        this.root.querySelector('.inventory')?.replaceChildren();
-        this.root.querySelector('app-asset-image')?.setAttribute('image-url', '');
-        try {
-            const client = window.ENGINE_WORKER_CLIENT;
-            const userId = await client.queryDEObject({ path: ['user'] });
-            const [state, context, userName] = await Promise.all([
-                client.queryDEObject({ path: ['stateFor', userId], pick: ['location'] }),
-                getItemTreeContext(userId),
-                client.queryDEObject({ path: ['utils', 'templates', 'formatCharacterName'], call: [userId, userId,
-                    { __type: 'object', value: { justName: true, type: 'definite', capitalize: true } }] }),
-            ]);
-            if (!this.isConnected || !this.open || version !== this.version) return;
-            this.userId = userId;
-            characterButton.textContent = userName;
-            characterButton.disabled = false;
-            this.dataset.blindness = context.blindness;
-            const inventory = document.createElement('app-character-items-view');
-            inventory.setAttribute('character-id', userId);
-            this.root.querySelector('.inventory')?.replaceChildren(inventory);
-            if (!state?.location) throw new Error('Current location unavailable');
-            const locationId = state.location;
-            const [location, name, locationSlots] = await Promise.all([
-                client.queryDEObject({ path: ['world', 'locations', locationId], pick: ['metadata'] }),
-                client.queryDEObject({ path: ['utils', 'templates', 'formatLocationName'], call: [locationId, userId,
-                    { __type: 'object', value: { justName: true } }] }),
-                client.queryDEObject({ path: ['world', 'locations', locationId, 'slots'], depth: 0 }),
-            ]);
-            if (!this.isConnected || !this.open || version !== this.version) return;
-            if (!location) throw new Error('Current location no longer exists');
-            this.locationId = locationId;
-            locationName.textContent = name;
-            locationButton.disabled = false;
-            locationButton.setAttribute('aria-label', `View ${name}`);
-            const image = /** @type {HTMLElement} */ (this.root.querySelector('app-asset-image'));
-            image.setAttribute('default-image', new URL('../../../images/default-world.png', import.meta.url).href);
-            image.setAttribute('image-url', location.metadata?.asset || '');
-            slots.replaceChildren(...Object.keys(locationSlots || {}).map(slotId => {
-                const slot = /** @type {import('./location-items-slot-view.js').LocationItemsSlotView} */ (document.createElement('app-location-items-slot-view'));
-                slot.configure(slotId, context);
-                return slot;
-            }));
-            slots.removeAttribute('role');
-            if (!slots.childElementCount) slots.textContent = 'This location has no slots.';
-        } catch (error) {
-            if (!this.isConnected || !this.open || version !== this.version) return;
-            locationName.textContent = 'Location unavailable';
-            slots.textContent = 'The surroundings could not be loaded.';
-            console.warn('Unable to load surroundings', error);
-        } finally {
-            if (version === this.version) slots.removeAttribute('aria-busy');
-        }
+        characterButton.textContent = perspective.ownName;
+        characterButton.disabled = false;
+        const inventory = /** @type {import('./character-items-view.js').CharacterItemsView} */ (document.createElement('app-character-items-view'));
+        inventory.setAttribute('character-id', perspective.ownId);
+        inventory.updatePerspective(perspective);
+        this.root.querySelector('.inventory')?.replaceChildren(inventory);
+
+        const locationButton = /** @type {HTMLButtonElement} */ (this.root.querySelector('.location-banner'));
+        locationButton.disabled = false;
+        locationButton.setAttribute('aria-label', 'View ' + perspective.ownLocation.locationName);
+        const locationName = this.root.querySelector('.banner-name');
+        if (locationName) locationName.textContent = perspective.ownLocation.locationName;
+        const image = /** @type {HTMLElement} */ (this.root.querySelector('app-asset-image'));
+        image.setAttribute('default-image', new URL('../../../images/default-world.png', import.meta.url).href);
+        image.setAttribute('image-url', perspective.ownLocation.locationMetadata.asset || '');
+        const slots = /** @type {HTMLElement} */ (this.root.querySelector('.slots'));
+        slots.replaceChildren(...perspective.ownLocation.slots.map(data => {
+            const slot = /** @type {import('./location-items-slot-view.js').LocationItemsSlotView} */ (document.createElement('app-location-items-slot-view'));
+            slot.configure(data.slotId, context);
+            return slot;
+        }));
+        slots.removeAttribute('role');
+        if (!slots.childElementCount) slots.textContent = 'This location has no slots.';
     }
 }
 customElements.define('app-game-items-overlay', ItemsOverlay);

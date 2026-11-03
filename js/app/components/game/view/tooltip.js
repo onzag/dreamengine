@@ -1,5 +1,6 @@
 import { openIdentifierDialog } from './identifier-dialog.js';
 import { createNarrationNodes } from './narration.js';
+import { getPerspectiveFor, parsePerspectiveNarration } from './perspective-data.js';
 import { DIALOG_OPENED_EVENT, hasOpenDialogs } from '../../dialog-state.js';
 
 /** A top-layer tooltip: scroll containers never clip its content. */
@@ -89,11 +90,9 @@ export class GameTooltip extends HTMLElement {
         this.tip.setAttribute('role', 'tooltip');
         this.geometry = '';
         if (!text.trim()) { this.hide(); return; }
-        const client = window.ENGINE_WORKER_CLIENT;
-        if (!client) return;
         try {
             /** @type {DEConversationMessageNarrationFragment[]} */
-            const fragments = await client.queryDEObject({ path: ['utils', 'narrationAndDialogue', 'parseNarration'], call: [text] });
+            const fragments = await parsePerspectiveNarration(text);
             if (!this.isConnected || version !== this.textVersion) return;
             this.tip.replaceChildren(...createNarrationNodes(fragments, (id, foundAs) => this.openIdentifier(id, foundAs)));
             // Interactive descriptions are non-modal popovers rather than text-only tooltips.
@@ -120,7 +119,7 @@ export class GameTooltip extends HTMLElement {
     openIdentifier(identifier, foundAs) {
         this.dismissForDialog();
         const trigger = this.querySelector('[tabindex], button, a');
-        openIdentifierDialog(identifier, foundAs, trigger instanceof HTMLElement ? trigger : this);
+        openIdentifierDialog(identifier, foundAs, trigger instanceof HTMLElement ? trigger : this, getPerspectiveFor(this));
     }
 
     /** @param {'pointer' | 'focus'} [source] */

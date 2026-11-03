@@ -2,71 +2,39 @@ export class Background extends HTMLElement {
     constructor() {
         super();
         this.defaultBackground = new URL('../../../images/default-world.png', import.meta.url).href;
-        this.updateVersion = 0;
-        /** @type {(() => void) | null} */
-        this.unsubscribe = null;
-
         this.root = this.attachShadow({ mode: 'open' });
+        /** @type {DECharacterPerspective | null} */
+        this.currentPerspective = null;
     }
 
     connectedCallback() {
         this.root.innerHTML = `
             <link rel="stylesheet" href="${new URL('./background.css', import.meta.url).href}">
-            <img src="${this.defaultBackground}" alt="" aria-hidden="true">`;
+            <img alt="" aria-hidden="true" hidden>`;
         const image = /** @type {HTMLImageElement} */ (this.root.querySelector('img'));
         image.addEventListener('error', () => {
-            if (image.src === this.defaultBackground) return;
-            console.warn('No background found', image.src);
-            image.src = this.defaultBackground;
+            if (image.src !== this.defaultBackground) image.src = this.defaultBackground;
         });
-        this.unsubscribe = window.ENGINE_WORKER_CLIENT.addDEObjectUpdatedListener(() => { void this.updateBackground(); });
-        void this.updateBackground();
+        this.updatePerspective(this.currentPerspective);
     }
 
-    async updateBackground() {
-        const version = ++this.updateVersion;
-        try {
-            const client = window.ENGINE_WORKER_CLIENT;
-            const [location, locationSlot, userId] = await Promise.all([
-                client.queryDEObject({ path: ['world', 'currentLocation'] }),
-                client.queryDEObject({ path: ['world', 'currentLocationSlot'] }),
-                client.queryDEObject({ path: ['user'] }),
-            ]);
-            const blindness = await client.queryDEObject({ path: ['characters', userId, 'blindness'] });
-            if (!this.isConnected || version !== this.updateVersion) return;
-            // Apply even when the asset is unchanged or the fallback image is used.
-            this.root.querySelector('img')?.toggleAttribute('data-totally-blind', blindness === 'full');
-            const assetLocationSlot = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ['world', 'locations', location, "slots", locationSlot, 'metadata', 'asset'],
-            });
-            const assetToUse = assetLocationSlot ? assetLocationSlot : await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ['world', 'locations', location, 'metadata', 'asset'],
-            });
-            if (!this.isConnected || version !== this.updateVersion) return;
-
-            let src = this.defaultBackground;
-            if (typeof assetToUse === 'string' && assetToUse) {
-                const isSystemAsset = assetToUse.startsWith('@');
-                const base = isSystemAsset ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
-                src = `${base}/${isSystemAsset ? assetToUse.slice(1) : assetToUse}`;
-            } else {
-                console.warn('No background found', location);
-            }
-            const image = /** @type {HTMLImageElement} */ (this.root.querySelector('img'));
-            if (image.getAttribute('src') !== src) image.src = src;
-        } catch (error) {
-            if (!this.isConnected || version !== this.updateVersion) return;
-            console.warn('No background found', error);
-            const image = /** @type {HTMLImageElement} */ (this.root.querySelector('img'));
-            image.src = this.defaultBackground;
+    /** @param {DECharacterPerspective | null} perspective */
+    updatePerspective(perspective) {
+        this.currentPerspective = perspective;
+        const image = this.root.querySelector('img');
+        if (!image) return;
+        image.hidden = !perspective;
+        if (!perspective) { image.removeAttribute('src'); return; }
+        image.toggleAttribute('data-totally-blind', perspective.ownCharacterBlindness === 'full');
+        const slot = perspective.ownLocation.slots.find(slot => slot.slotId === perspective.ownLocationSlotId);
+        const asset = slot?.slotMetadata.asset || perspective.ownLocation.locationMetadata.asset;
+        let src = this.defaultBackground;
+        if (typeof asset === 'string' && asset) {
+            const system = asset.startsWith('@');
+            const base = system ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
+            src = `${base}/${system ? asset.slice(1) : asset}`;
         }
-    }
-
-    disconnectedCallback() {
-        this.unsubscribe?.();
-        this.unsubscribe = null;
-        // Ignore queries that finish after disconnecting or reconnecting.
-        this.updateVersion++;
+        if (image.getAttribute('src') !== src) image.src = src;
     }
 }
 customElements.define('app-game-background', Background);

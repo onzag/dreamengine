@@ -1,21 +1,21 @@
 import '../../world-image.js';
 import { getItemTreeContext, loadLocationSlotItemGroups } from './item-tree-data.js';
+import { getPerspectiveFor, getPerspectiveIndex } from './perspective-data.js';
 import { createItemTree } from './item-node.js';
 
-/** A live location slot with the same item tree as its detail dialog. */
+/** A location slot and its item tree from one perspective. */
 export class LocationItemsSlotView extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
-        this.version = 0;
-        /** @type {import('./item-tree-data.js').ItemTreeContext | null} */
-        this.context = null;
+        /** @type {DECharacterPerspective | null} */
+        this.currentPerspective = null;
     }
 
     /** @param {string} slotId @param {import('./item-tree-data.js').ItemTreeContext} context */
     configure(slotId, context) {
         this.setAttribute('slot-id', slotId);
-        this.context = context;
+        this.updatePerspective(context.perspective);
     }
 
     connectedCallback() {
@@ -24,57 +24,39 @@ export class LocationItemsSlotView extends HTMLElement {
             <article>
                 <h3><button class="slot-link" type="button" disabled aria-haspopup="dialog">
                     <app-asset-image no-transition="true" aria-hidden="true"></app-asset-image>
-                    <span class="slot-name">Loading slot…</span>
-                    <span class="open-icon" aria-hidden="true">↗</span>
+                    <span class="slot-name"></span><span class="open-icon" aria-hidden="true">&#8599;</span>
                 </button></h3>
-                <div class="items" role="status">Loading items…</div>
+                <div class="items"></div>
             </article>`;
         this.root.querySelector('.slot-link')?.addEventListener('click', () => {
             this.dispatchEvent(new CustomEvent('identifier-navigate', {
                 bubbles: true, composed: true, detail: { identifier: this.getAttribute('slot-id'), foundAs: 'location-slot' },
             }));
         });
-        void this.refresh();
+        this.updatePerspective(this.currentPerspective || getPerspectiveFor(this.parentNode));
     }
 
-    disconnectedCallback() { this.version++; }
-
-    async refresh() {
-        const version = ++this.version;
-        const items = /** @type {HTMLElement} */ (this.root.querySelector('.items'));
-        const name = /** @type {HTMLElement} */ (this.root.querySelector('.slot-name'));
+    /** @param {DECharacterPerspective | null} perspective */
+    updatePerspective(perspective) {
+        this.currentPerspective = perspective;
+        const article = this.root.querySelector('article');
+        if (!article) return;
+        article.hidden = !perspective;
+        if (!perspective) return;
+        const id = this.getAttribute('slot-id') || '';
+        const slot = getPerspectiveIndex(perspective).slots.get(id);
+        if (!slot) { article.hidden = true; return; }
+        const context = getItemTreeContext(perspective);
+        this.dataset.blindness = perspective.ownCharacterBlindness;
+        const name = this.root.querySelector('.slot-name');
+        if (name) name.textContent = slot.slotName;
         const button = /** @type {HTMLButtonElement} */ (this.root.querySelector('.slot-link'));
-        items.setAttribute('aria-busy', 'true');
-        try {
-            const client = window.ENGINE_WORKER_CLIENT;
-            const context = this.context || await getItemTreeContext(await client.queryDEObject({ path: ['user'] }));
-            const id = this.getAttribute('slot-id') || '';
-            const [slot, label, groups] = await Promise.all([
-                client.queryDEObject({ path: ['utils', 'world', 'getLocationSlotById'], call: [id], pick: ['metadata'] }),
-                client.queryDEObject({ path: ['utils', 'templates', 'formatLocationSlotName'], call: [id, context.userId,
-                    { __type: 'object', value: { justName: true } }] }),
-                loadLocationSlotItemGroups(id, context),
-            ]);
-            if (!this.isConnected || version !== this.version) return;
-            if (!slot) throw new Error(`Location slot ${id} no longer exists`);
-            this.dataset.blindness = context.blindness;
-            name.textContent = label;
-            button.disabled = false;
-            button.setAttribute('aria-label', `View ${label}`);
-            const image = /** @type {HTMLElement} */ (this.root.querySelector('app-asset-image'));
-            image.setAttribute('default-image', new URL('../../../images/default-world.png', import.meta.url).href);
-            image.setAttribute('image-url', slot.metadata?.asset || '');
-            items.replaceChildren(createItemTree(groups, context));
-            items.removeAttribute('role');
-        } catch (error) {
-            if (!this.isConnected || version !== this.version) return;
-            name.textContent = 'Slot unavailable';
-            button.disabled = true;
-            items.textContent = 'Items in this slot could not be loaded.';
-            console.warn('Unable to load location slot items', error);
-        } finally {
-            if (version === this.version) items.removeAttribute('aria-busy');
-        }
+        button.disabled = false;
+        button.setAttribute('aria-label', `View ${slot.slotName}`);
+        const image = /** @type {HTMLElement} */ (this.root.querySelector('app-asset-image'));
+        image.setAttribute('default-image', new URL('../../../images/default-world.png', import.meta.url).href);
+        image.setAttribute('image-url', slot.slotMetadata.asset || '');
+        this.root.querySelector('.items')?.replaceChildren(createItemTree(loadLocationSlotItemGroups(id, context), context));
     }
 }
 customElements.define('app-location-items-slot-view', LocationItemsSlotView);

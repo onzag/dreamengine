@@ -1,6 +1,7 @@
 import '../../world-image.js';
 import { createItemTags } from './item-tags.js';
 import { loadItemGroups } from './item-tree-data.js';
+import { parsePerspectiveNarration } from './perspective-data.js';
 
 /** @typedef {import('./item-tree-data.js').ItemNodeData | import('./item-tree-data.js').CharacterNodeData} ItemNodeData */
 /** @typedef {import('./item-tree-data.js').ItemTreeContext} ItemTreeContext */
@@ -87,7 +88,7 @@ export function createItemTree(groups, context, ancestors = []) {
     return tree;
 }
 
-/** A single grouped item. Children are fetched only when its branch is opened. */
+/** A single grouped item. Snapshot children are rendered when its branch is opened. */
 export class ItemNode extends HTMLElement {
     constructor() {
         super();
@@ -132,21 +133,18 @@ export class ItemNode extends HTMLElement {
         image.setAttribute('image-url', this.data.asset);
         const label = /** @type {HTMLElement} */ (this.root.querySelector('.item-node-label'));
         label.textContent = this.data.label;
-        if (this.data.kind === 'character' && this.data.descriptionFragments?.length) {
+        if (this.data.kind === 'character' && this.data.description) {
             const description = document.createElement('span');
             description.className = 'item-node-description';
-            // Resolve rich identifiers to their visible text; the row itself
-            // opens the character, so it must not contain nested controls.
-            const text = this.data.descriptionFragments.map(fragment =>
-                typeof fragment === 'string' ? fragment : fragment.text).join('');
-            description.textContent = ` - ${text}`;
+            description.textContent = this.data.description;
             this.root.querySelector('.item-node-title')?.append(description);
+            void this.renderDescription(description, this.data.description);
         }
         this.root.querySelector('.item-node-text')?.append(createItemTags(this.data.tags));
         const count = /** @type {HTMLElement} */ (this.root.querySelector('.item-node-count'));
         count.textContent = this.data.amount > 1 ? `(x${this.data.amount})` : '';
         count.setAttribute('aria-label', `${this.data.amount} items`);
-        count.hidden = this.data.amount <= 1;
+        count.hidden = this.data.amount <= 1 || (this.data.kind === 'item' && !!this.data.item.nameInAmount);
         const open = /** @type {HTMLButtonElement} */ (this.root.querySelector('.item-open'));
         open.title = `View ${this.data.label}`;
         open.addEventListener('click', () => this.dispatchEvent(new CustomEvent('identifier-navigate', {
@@ -166,6 +164,20 @@ export class ItemNode extends HTMLElement {
     }
 
     disconnectedCallback() { this.version++; }
+
+    /** @param {HTMLElement} element @param {string} text */
+    async renderDescription(element, text) {
+        const version = this.version;
+        try {
+            const fragments = await parsePerspectiveNarration(text);
+            if (!this.isConnected || version !== this.version) return;
+            // The row is already a button, so render parsed identifiers as text here.
+            element.textContent = ' - ' + fragments.map(fragment =>
+                typeof fragment === 'string' ? fragment : fragment.text).join('');
+        } catch (error) {
+            if (this.isConnected && version === this.version) console.warn('Unable to parse character position', error);
+        }
+    }
 
     /** @param {boolean} expanded */
     setExpanded(expanded) {
@@ -187,12 +199,8 @@ export class ItemNode extends HTMLElement {
         children.replaceChildren(message('Loading items…'));
         children.setAttribute('aria-busy', 'true');
         try {
-            let groups = await loadItemGroups(this.data, this.context);
+            const groups = loadItemGroups(this.data, this.context);
             if (!this.isConnected || version !== this.version) return;
-            // Ordinary leaves need no empty "On top" section or disclosure button.
-            if (this.data.perception.canSeeContents === 'NOT_A_CONTAINER' && this.data.perception.canSeeOntop === 'YES') {
-                groups = groups.filter(group => group.items.length);
-            }
             children.replaceChildren(createGroups(groups, this.context, this.depth + 1, this.ancestors));
             this.loaded = true;
             if (!groups.length) {
