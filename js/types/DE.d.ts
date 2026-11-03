@@ -4087,6 +4087,11 @@ declare interface DECharacterPerspectiveLocationSlot {
      * Whether the characters in the location slot are clear of not, if not clear, a string describing why they are unclear
      */
     characterListsAreUnclear: false | string;
+    /**
+     * The description of the location slot in the rich format
+     * that needs to use parseNarration
+     */
+    description: string;
 }
 
 /**
@@ -4113,6 +4118,11 @@ declare interface DECharacterPerspectiveLocation {
      * The available slots in the location
      */
     slots: Array<DECharacterPerspectiveLocationSlot>;
+    /**
+     * The description of the location in the rich format
+     * that needs to use parseNarration
+     */
+    description: string;
 }
 
 /**

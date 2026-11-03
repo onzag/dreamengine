@@ -1,7 +1,43 @@
+import { sharedStyles, itemTagStyles } from './shared-styles.js';
 import '../../world-image.js';
 import { createItemTags } from './item-tags.js';
 import { loadItemGroups } from './item-tree-data.js';
 import { parsePerspectiveNarration } from './perspective-data.js';
+
+const itemNodeStyles = `
+${sharedStyles}
+${itemTagStyles}
+:host { display: block; min-width: 0; font-size: 2vh; --item-image-blur: 0vh; }
+:host([data-blindness="partial-good"]) { --item-image-blur: .45vh; }
+:host([data-blindness="partial-bad"]) { --item-image-blur: 1.2vh; }
+:host([data-blindness="full"]) { --item-image-blur: 3vh; }
+.item-tree { min-width: 0; font-size: 2vh; }
+.item-tree-group { margin-top: 1.4vh; min-width: 0; }
+.item-tree-group > h3 { margin: 0 0 .7vh; color: var(--accent, #a7d9ff); font-size: 2vh; font-weight: 600; }
+.item-tree-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .7vh; }
+.item-tree-list > li { min-width: 0; }
+.item-node-row { display: grid; grid-template-columns: 2.8vh minmax(0, 1fr); align-items: center; gap: .5vh; }
+.item-toggle, .item-open { border: 0; background: transparent; padding: .5vh; border-radius: .5vh; }
+.item-toggle { grid-column: 1; min-height: 3.5vh; font-size: 2.3vh; color: var(--accent, #a7d9ff); }
+.item-open { grid-column: 2; display: flex; align-items: flex-start; gap: 1vh; text-align: left; min-width: 0; width: 100%; }
+.item-open:hover, .item-toggle:hover { background: rgba(167, 217, 255, .1); }
+.item-node-text { display: flex; flex-wrap: wrap; align-items: center; gap: 1vh; min-width: 0; overflow-wrap: anywhere; padding-top: 0.5vh; }
+.item-node-title { max-width: 100%; font-size: 2.5vh; line-height: 1.35; }
+.item-node-label { font-size: 2.5vh; }
+.item-node-text > .item-tags:not([hidden]) { display: contents; }
+.item-node-count { color: var(--muted, #b3c7da); white-space: nowrap; font-size: 2.5vh; }
+.item-node-children { margin: .5vh 0 1vh 3.3vh; padding-left: 1.2vh; border-left: .15vh solid var(--border, #a7d9ff40); }
+.item-node-children[hidden], .item-toggle[hidden], .item-node-count[hidden] { display: none; }
+.item-tree-message { margin: .5vh 0; color: var(--muted, #b3c7da); font-size: 2vh; line-height: 1.5; }
+.item-tree-retry { background: transparent; border: .1vh solid var(--border, #a7d9ff40); border-radius: .4vh; padding: .5vh 1vh; font-size: 2vh; }
+.item-open app-asset-image { display: block; flex: 0 0 6vh; width: 6vh; height: 6vh; --asset-image-border-width: .1vh; }
+.item-open app-asset-image::part(asset-image) { filter: blur(var(--item-image-blur)); border-radius: .5vh; }
+.item-open app-asset-image::part(asset-image-container) { border-radius: .5vh; }
+@media (max-width: 700px) { .item-node-children { margin-left: 1.2vh; padding-left: .7vh; } }
+
+.item-node-description { color: var(--muted, #b3c7da); font-size: 2vh; }
+`;
+
 
 /** @typedef {import('./item-tree-data.js').ItemNodeData | import('./item-tree-data.js').CharacterNodeData} ItemNodeData */
 /** @typedef {import('./item-tree-data.js').ItemTreeContext} ItemTreeContext */
@@ -81,9 +117,8 @@ function createGroups(groups, context, depth, ancestors) {
 export function createItemTree(groups, context, ancestors = []) {
     const tree = document.createElement('div');
     tree.className = 'item-tree';
-    const style = document.createElement('link');
-    style.rel = 'stylesheet';
-    style.href = new URL('./item-node.css', import.meta.url).href;
+    const style = document.createElement('style');
+    style.textContent = itemNodeStyles;
     tree.append(style, createGroups(groups, context, 0, ancestors));
     return tree;
 }
@@ -119,7 +154,7 @@ export class ItemNode extends HTMLElement {
         this.loaded = false;
         this.loading = false;
         this.version++;
-        this.root.innerHTML = `<link rel="stylesheet" href="${new URL('./item-node.css', import.meta.url).href}">
+        this.root.innerHTML = `<style>${itemNodeStyles}</style>
             <div class="item-node-row">
                 <button type="button" class="item-toggle" aria-controls="children"></button>
                 <button type="button" class="item-open"><app-asset-image no-transition="true" aria-hidden="true"></app-asset-image>
@@ -127,7 +162,8 @@ export class ItemNode extends HTMLElement {
                 </button>
             </div>
             <div id="children" class="item-node-children" hidden></div>`;
-        this.dataset.blindness = this.context.blindness;
+        // The player always sees their own character clearly, regardless of their blindness.
+        this.dataset.blindness = this.data.kind === 'character' && this.data.id === this.context.userId ? 'no' : this.context.blindness;
         const image = /** @type {HTMLElement} */ (this.root.querySelector('app-asset-image'));
         image.setAttribute('default-image', new URL(this.data.kind === 'character' ? '../../../images/default-profile.png' : '../../../images/default-item.png', import.meta.url).href);
         image.setAttribute('image-url', this.data.asset);

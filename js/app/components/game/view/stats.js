@@ -1,3 +1,4 @@
+import { sharedStyles, characterTagStyles } from './shared-styles.js';
 import '../../world-image.js';
 import './tooltip.js';
 import { createCharacterTags } from './character-tags.js';
@@ -15,7 +16,25 @@ export class Stats extends HTMLElement {
     }
 
     connectedCallback() {
-        this.root.innerHTML = `<link rel="stylesheet" href="${new URL('./stats.css', import.meta.url).href}">
+        this.root.innerHTML = `<style>
+${sharedStyles}
+${characterTagStyles}
+:host { display: block; }
+section.glass { display: flex; flex-direction: column; align-items: stretch; padding: 2vh; }
+header { display: flex; flex-direction: column; align-items: flex-start; gap: .55vh; width: 100%; margin-bottom: 1.3vh; }
+.portrait { --asset-image-border-width: .2vh; width: 15vh; height: 15vh; flex: 0 0 auto; }
+.portrait-tooltip { width: 15vh; height: 15vh; }
+h1 { width: 100%; margin: 0; color: var(--ink); font-size: 3vh; line-height: 1.1; text-align: left; padding-bottom: 1vh; font-weight: 400; }
+.world-details { display: grid; grid-template-columns: minmax(0, 1fr); gap: .8vh; width: 100%; margin: 0; padding-top: 1vh; }
+.weather-row { grid-column: auto; }
+dt { color: var(--muted); font-size: 2vh; margin-bottom: .28vh; }
+dd { margin: 0; color: var(--accent); font-size: 2vh; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.states { width: 100%; border-top: 1px solid var(--border); margin-top: 1vh; padding-top: .9vh; }
+.state-list { display: flex; flex-wrap: wrap; gap: .6vh; width: 100%; }
+
+
+section[hidden] { display: none; }
+            </style>
             <section class="glass" aria-label="Character status"><header><h1 class="user-name"></h1><app-game-tooltip class="portrait-tooltip" align-with="bottom" tabindex="0" role="button" aria-haspopup="dialog"><app-world-image class="portrait" image-url="" default-image="./images/default-profile.png" aria-hidden="true"></app-world-image></app-game-tooltip></header>
             <dl class="world-details"><div><dd class="location"></dd></div><div><dd class="date-time"></dd></div><div class="weather-row"><dd class="weather"></dd></div></dl>
             <section class="states" aria-label="Character information and current states"><div class="state-list"></div></section></section>`;

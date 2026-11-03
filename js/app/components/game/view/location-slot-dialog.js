@@ -13,7 +13,7 @@ export class LocationSlotDialog extends IdentifierDetail {
         if (!slot) throw new Error('Location slot is not available in this perspective.');
         const context = getItemTreeContext(perspective);
         const content = createItemTree(loadLocationSlotItemGroups(id, context), context);
-        return { name: slot.slotName, description: '', banner: slot.slotMetadata.asset || '', content };
+        return { name: slot.slotName, description: slot.description, banner: slot.slotMetadata.asset || '', content };
     }
 }
 customElements.define('app-game-location-slot-dialog', LocationSlotDialog);

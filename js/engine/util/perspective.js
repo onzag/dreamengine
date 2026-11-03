@@ -142,12 +142,28 @@ async function buildPerspectiveLocation(DE, locationId, observerId) {
         slots.push(await buildPerspectiveLocationSlot(DE, locationId, slotId, observerId));
     }
 
+    const whatCanTheyMakeOfLocation = DE.utils.world.whatCanTheyMakeOfALocation(locationId, observerId);
+
+    let description = '';
+    if (whatCanTheyMakeOfLocation.cantSee) {
+        description = `${DE.utils.templates.formatCharacterName(observerId, observerId, {
+            justName: true,
+            type: 'definite',
+            capitalize: true,
+        })} cannot see the ${location.name} clearly.`;
+    } else {
+        description = typeof location.description === 'string' ? location.description : await location.description({
+            char: DE.characters[observerId],
+        });
+    }
+
     return {
         locationMetadata: location.metadata || {},
         locationId,
         locationName: location.name,
         weatherName: location.internalState?.currentWeather || '',
         slots,
+        description: description,
     };
 }
 
@@ -188,6 +204,15 @@ async function buildPerspectiveLocationSlot(DE, locationId, slotId, observerId) 
     const canSeeItems = !locationPerception.cantSee;
     const canSeeCharacters = !locationPerception.cantSee;
 
+    let description = '';
+    if (locationPerception.cantSee) {
+        description = `${observerName} cannot see the ${slot.name} clearly.`;
+    } else {
+        description = typeof slot.description === 'string' ? slot.description : await slot.description({
+            char: DE.characters[observerId],
+        });
+    }
+
     return {
         slotMetadata: slot.metadata || {},
         slotId,
@@ -198,6 +223,7 @@ async function buildPerspectiveLocationSlot(DE, locationId, slotId, observerId) 
         characters,
         canSeeCharacters,
         characterListsAreUnclear: unclearReason(locationPerception, observerName, 'characters'),
+        description,
     };
 }
 
@@ -210,7 +236,7 @@ async function buildPerspectiveLocationSlot(DE, locationId, slotId, observerId) 
  */
 function unclearReason(perception, observerName, kind) {
     if (perception.cantSee) {
-        return `${observerName} cannot clearly perceive the ${kind} here.`;
+        return `${observerName} cannot clearly perceive the ${kind} in here.`;
     }
     if (!perception.hasHighPerception) {
         return `${observerName}'s perception is not sharp enough, some ${kind} might be missing.`;
@@ -805,9 +831,9 @@ async function buildItemsInPerspective(DE, parentItemId, items, observerId, loca
             containingCharacters: [],
             ontopCharacters: [],
             canSeeContents,
-            contentsIsUnclear: containerUnclearReason(perception, 'contents'),
+            contentsIsUnclear: containerUnclearReason(item.containerProperties, item.state, perception, 'contents'),
             canSeeOntop,
-            ontopIsUnclear: containerUnclearReason(perception, 'ontop'),
+            ontopIsUnclear: containerUnclearReason(item.containerProperties, item.state, perception, 'ontop'),
         };
 
         // When the observer cannot discern the exact item, obscure identifying detail the same way
@@ -856,11 +882,13 @@ function visibleCharacterIds(DE, entries, observerId) {
 }
 
 /**
+ * @param {DEItem["containerProperties"]} containerProperties
+ * @param {*} itemState
  * @param {DEItemPerception} perception
  * @param {'contents' | 'ontop'} kind
  * @returns {false | string}
  */
-function containerUnclearReason(perception, kind) {
+function containerUnclearReason(containerProperties, itemState, perception, kind) {
     const permission = kind === 'contents' ? perception.canSeeContents : perception.canSeeOntop;
     const where = kind === 'contents' ? 'inside' : 'what is on top';
     if (permission === 'YES') {
@@ -868,7 +896,8 @@ function containerUnclearReason(perception, kind) {
             ? false
             : `Perception is not sharp enough; some ${kind === 'contents' ? 'contents' : 'items on top'} might be missing.`;
     }
-    if (permission === 'NO_BECAUSE_CLOSED') return `It is closed, so ${where === "inside" ? "the inside" : where} cannot be seen.`;
+
+    if (permission === 'NO_BECAUSE_CLOSED') return `It is ${containerProperties?.usesLock && itemState.locked ? 'locked' : 'closed'}, so ${where === "inside" ? "the inside" : where} cannot be seen.`;
     if (permission === 'NO_BECAUSE_BAD_VISION') return `Vision is not clear enough to see ${where}.`;
     if (permission === 'NO') return `Cannot see ${where}.`;
     // NOT_A_CONTAINER

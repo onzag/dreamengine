@@ -141,7 +141,7 @@ export function loadCharacterItemGroups(characterId, context) {
         /** @type {(ItemNodeData | CharacterNodeData)[]} */
         const nodes = [...items];
         if (label === 'Carrying') nodes.push(...characterNodes(character.characterCarryingOtherCharactersIds, context));
-        return { label, items: nodes, message: !visible ? 'Details of clothing and carried items cannot be made out.'
+        return { label, items: nodes, message: !visible ? (label === 'Carrying' ? 'Cannot see carried objects.' : 'Cannot see clothing or accessories.')
             : nodes.length ? '' : character.characterNameDefinite + ' is not ' + label.toLowerCase() + ' any items.' };
     });
 }
@@ -151,9 +151,9 @@ export function loadLocationSlotItemGroups(slotId, context) {
     const { perspective } = context;
     const slot = getPerspectiveIndex(perspective).slots.get(slotId);
     if (!slot) throw new Error('Location slot is not available in this perspective.');
-    const characters = slot.canSeeCharacters ? slot.characters.map(character => characterNode(character)) : [];
+    const characters = slot.characters.map(character => characterNode(character));
     if (slotId === perspective.ownLocationSlotId) characters.unshift(characterNode(perspective.self));
-    const items = slot.canSeeItems ? slot.items.map(item => itemNode(item)) : [];
+    const items = slot.items.map(item => itemNode(item));
     return [
         { label: 'Characters', items: characters, message: slot.characterListsAreUnclear ||
             (!slot.canSeeCharacters ? 'Cannot see the characters here.' : characters.length ? '' : 'There are no characters here.') },

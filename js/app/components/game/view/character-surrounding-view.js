@@ -1,3 +1,4 @@
+import { sharedStyles, identifierLinkStyles, characterTagStyles } from './shared-styles.js';
 import '../../world-image.js';
 import './tooltip.js';
 import { createNarrationNodes } from './narration.js';
@@ -28,7 +29,44 @@ export class CharacterSurroundingView extends HTMLElement {
 
     connectedCallback() {
         this.lifecycle++;
-        this.root.innerHTML = `<link rel="stylesheet" href="${new URL('./character-surrounding-view.css', import.meta.url).href}">
+        this.root.innerHTML = `<style>
+${sharedStyles}
+${identifierLinkStyles}
+${characterTagStyles}
+:host { display: block; min-width: 0; min-height: 0; }
+.scene { height: 100%; min-width: 0; overflow-y: auto; overflow-x: hidden; overflow-wrap: anywhere; overscroll-behavior: contain; background: transparent; }
+.groups { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 2vh; min-width: 0; }
+.group { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1.5vh; max-width: 100%; min-width: 0; padding: 2vh; border: .15vh solid var(--border); background: rgba(12, 26, 42, .24); }
+.group.primary { flex-basis: 100%; border-color: var(--accent); background: rgba(20, 43, 65, .3); }
+.group-title { flex-basis: 100%; margin: 0 0 .3vh; color: var(--accent); font-size: 2.2vh; font-weight: 600; line-height: 1.3; }
+.surroundings-heading { display: flex; align-items: center; gap: 1.2vh; flex-basis: 100%; min-width: 0; margin: .5vh 0 0; color: var(--muted); font-size: 2vh; font-weight: 500; line-height: 1.35; }
+.surroundings-heading::after { content: ''; flex: 1; min-width: 2vh; height: .15vh; background: var(--border); }
+.group.solo:not(.primary) { border-color: transparent; background: transparent; }
+.character { width: 9vh; max-width: 100%; min-width: 0; margin: 0; color: var(--ink); }
+.primary .character { width: 13vh; }
+.portrait-tooltip { display: block; width: 100%; aspect-ratio: 1; }
+.portrait-tooltip:focus-visible { outline: .2vh solid var(--accent); outline-offset: .3vh; }
+app-world-image { --asset-image-border-width: .2vh; display: block; width: 100%; height: auto; aspect-ratio: 1; }
+/* Filter the portrait inside its clipped frame, leaving borders and labels sharp. */
+.groups { --portrait-blur: 0vh; }
+.groups[data-blindness="partial-good"] { --portrait-blur: .45vh; }
+.groups[data-blindness="partial-bad"] { --portrait-blur: 1.2vh; }
+.groups[data-blindness="full"] { --portrait-blur: 3vh; }
+app-world-image::part(asset-image) { filter: blur(var(--portrait-blur)); }
+figcaption { margin-top: .6vh; line-height: 1.25; }
+.name { display: block; font-size: 1.8vh; }
+.primary .name { font-size: 2.2vh; }
+.position { display: block; margin-top: .3vh; min-height: 2vh; color: var(--muted); font-size: 2vh; }
+.communicator { display: block; margin-top: .4vh; color: var(--accent); font-size: 1.5vh; }
+.character.remote .portrait-tooltip { outline: .15vh dashed var(--accent); outline-offset: .3vh; }
+.character.remote .portrait-tooltip:focus-visible { outline-style: solid; outline-width: .2vh; }
+.name:empty, .position:empty, .communicator:empty { display: none; }
+.blindness-notice { margin: 1.5vh 0 0; padding: 1vh 1.4vh; border-left: .2vh solid var(--border); color: var(--muted); font-size: 2vh; line-height: 1.45; }
+
+.character-tags { margin-top: .5vh; }
+.character-tags:empty { display: none; }
+.character-tags .information-chip, .character-tags .state-chip { min-height: 2.8vh; padding: 1vh 2vh; font-size: 2vh; }
+            </style>
             <section class="scene" aria-label="Characters in the scene"><div class="groups"></div><p class="blindness-notice" role="status" hidden></p></section>`;
         this.cards.clear();
         this.rendering = false;
@@ -234,9 +272,11 @@ export class CharacterSurroundingView extends HTMLElement {
                 }
                 const tags = card.element.querySelector('.character-tags');
                 if (tags instanceof HTMLElement) {
-                    const key = JSON.stringify(character.states);
+                    // Internal traits stay private to the detailed views; the scene shows outward states only.
+                    const visibleStates = character.states.filter(state => state.type !== 'INTERNAL');
+                    const key = JSON.stringify(visibleStates);
                     if (tags.dataset.states !== key) {
-                        tags.replaceChildren(...createCharacterTags(character.states));
+                        tags.replaceChildren(...createCharacterTags(visibleStates));
                         tags.dataset.states = key;
                     }
                 }

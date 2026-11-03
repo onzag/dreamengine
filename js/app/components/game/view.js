@@ -1,3 +1,4 @@
+﻿import { sharedStyles } from './view/shared-styles.js';
 ﻿import './view/background.js';
 import './view/stats.js';
 import './view/character-surrounding-view.js';
@@ -195,13 +196,53 @@ export class GameView extends HTMLElement {
         this.currentPerspectiveId = this.getAttribute('initial-perspective-id') || '';
         
         this.root.innerHTML = `
-            <link rel="stylesheet" href="${new URL('./view.css', import.meta.url).href}">
+            <style>
+${sharedStyles}
+:host {
+    position: relative;
+    background: #000;
+    display: block;
+    height: 100%;
+    font-family: inherit;
+    font-size: max(13px, 1.8vh);
+    --ink: #eaf3ff;
+    --muted: #bdcfe1;
+    --accent: #c9e2ff;
+    --border: #c9e2ff;
+    --control-height: 4.5vh;
+    color: var(--ink);
+}
+.container {
+    position: relative;
+    height: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, min(35vh, 45%)) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas: "sidebar surroundings" "story story";
+    gap: 1vh 2vh;
+    overflow: visible;
+    isolation: isolate;
+    background: #111f23;
+}
+app-game-background { position: absolute; inset: 0; z-index: -1; }
+app-game-stats { display: block; min-width: 0; }
+.sidebar { grid-area: sidebar; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 1vh; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 2vh; }
+app-game-character-surrounding-view { grid-area: surroundings; min-width: 0; min-height: 0; padding: 2vh 2vh 2vh 0; margin-top: 7vh; border-top: 1vh solid var(--border); }
+.toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1vh; }
+.story { grid-area: story; min-width: 0; display: block; overflow-wrap: anywhere; }
+.items-toggle { display: flex; align-items: center; justify-content: space-between; gap: 1.2vh; min-height: var(--control-height); padding: 1vh 2vh; font-size: 2.2vh; }
+kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid var(--border); border-radius: .4vh; padding: .1vh .5vh; }
+.items-toggle:hover { background-color: rgba(80, 130, 180, .35); }
+.items-toggle { min-width: 0; flex-wrap: wrap; overflow-wrap: anywhere; }
+
+.black-overlay { position: absolute; inset: 0; z-index: 1000; background: #000; }
+            </style>
             <div class="container" inert style="visibility: hidden">
                 <app-game-background></app-game-background>
                 <div class="sidebar">
                     <div class="toolbar">
                         <app-game-menu></app-game-menu>
-                        <button class="items-toggle glass" type="button" aria-haspopup="dialog" aria-expanded="false" id="surroundings">Surroundings <kbd>Tab</kbd></button>
+                        <button class="items-toggle glass" type="button" aria-haspopup="dialog" aria-expanded="false" id="surroundings">Surroundings <kbd>F1</kbd></button>
                     </div>
                     <app-game-stats></app-game-stats>
                 </div>
@@ -224,7 +265,7 @@ export class GameView extends HTMLElement {
         button.addEventListener("mouseenter", () => playHoverSound());
         window.addEventListener('keydown', event => {
             if (!this.currentPerspective || event.defaultPrevented || event.repeat || event.altKey || event.ctrlKey || event.metaKey || document.querySelector('app-dialog')) return;
-            if (event.key === 'Tab' && !event.shiftKey) {
+            if (event.key === 'F1') {
                 event.preventDefault();
                 if (overlay.open) overlay.close();
                 else overlay.show();
@@ -278,6 +319,9 @@ export class GameView extends HTMLElement {
         surroundings?.updatePerspective(perspective);
         stats?.updatePerspective(perspective);
         items?.updatePerspective(perspective);
+
+        console.log('Perspective updated:', perspective);
+
         if (perspective) this.removePotentialBlackOverlay();
         else this.showBlackOverlay();
     }

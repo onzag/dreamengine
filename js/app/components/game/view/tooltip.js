@@ -1,3 +1,4 @@
+import { sharedStyles, identifierLinkStyles } from './shared-styles.js';
 import { openIdentifierDialog } from './identifier-dialog.js';
 import { createNarrationNodes } from './narration.js';
 import { getPerspectiveFor, parsePerspectiveNarration } from './perspective-data.js';
@@ -10,7 +11,40 @@ export class GameTooltip extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
-        this.root.innerHTML = `<link rel="stylesheet" href="${new URL('./tooltip.css', import.meta.url).href}">
+        this.root.innerHTML = `<style>
+${sharedStyles}
+${identifierLinkStyles}
+:host { display: inline-flex; position: relative; min-width: 0; max-width: 100%; }
+.tip {
+    /* The popover top layer escapes overflow, transforms and glass backdrops. */
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    box-sizing: border-box;
+    width: max-content;
+    max-width: min(34vh, calc(100vw - 2vh));
+    padding: .8vh 1vh;
+    border: 1px solid rgba(190, 220, 255, .5);
+    border-radius: .55vh;
+    background: rgba(9, 20, 39, .96);
+    box-shadow: 0 .5vh 1.4vh rgba(0, 0, 0, .35);
+    color: #edf6ff;
+    font-family: inherit;
+    font-size: 2vh;
+    line-height: 1.4;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    opacity: 1;
+    transition: opacity .15s;
+}
+.tip::backdrop { background: transparent; pointer-events: none; }
+:host([identifier-id]) { cursor: pointer; }
+:host([identifier-id]:focus-visible) { outline: .2vh solid var(--accent, #a7d9ff); outline-offset: .3vh; }
+@starting-style { .tip:popover-open { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
+            </style>
             <slot></slot><div class="tip" role="tooltip" popover="manual"></div>`;
         this.tip = /** @type {HTMLElement} */ (this.root.querySelector('.tip'));
         /** @type {AbortController|null} */

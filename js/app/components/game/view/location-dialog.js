@@ -9,7 +9,7 @@ export class LocationDialog extends IdentifierDetail {
         if (location.locationId !== this.getAttribute('identifier-id')) {
             throw new Error('Location is not available in this perspective.');
         }
-        return { name: location.locationName, description: '', banner: location.locationMetadata.asset || '' };
+        return { name: location.locationName, description: location.description, banner: location.locationMetadata.asset || '' };
     }
 }
 customElements.define('app-game-location-dialog', LocationDialog);

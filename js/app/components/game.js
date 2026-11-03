@@ -20,7 +20,99 @@ export class GameOverlay extends HTMLElement {
 
     connectedCallback() {
         this.root.innerHTML = `
-            <link rel="stylesheet" href="${new URL('./game.css', import.meta.url).href}">
+            <style>
+/* Shared geometry and typography; each button keeps its own colors. */
+.overlay-button,
+.game-action-button {
+    appearance: none;
+    font: inherit;
+    font-size: 2vh;
+    line-height: normal;
+    letter-spacing: normal;
+    text-transform: none;
+    padding: 2vh 4vh;
+    border-width: 2px;
+    border-style: solid;
+    border-radius: .5vh;
+    text-align: center;
+    user-select: none;
+    cursor: pointer;
+    display: inline-block;
+}
+
+
+:host {
+    position: fixed;
+    inset: 0;
+    display: block;
+    z-index: 30;
+    font-family: inherit;
+    color: #eaf3ff;
+}
+
+.game-root {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    background: #2c426b;
+}
+
+.game-content {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+}
+
+.game-setup {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: #2c426b;
+}
+
+.game-exit {
+    position: absolute;
+    top: 2vh;
+    left: 2vw;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.9vh;
+    cursor: pointer;
+    backdrop-filter: blur(6px) saturate(140%);
+    -webkit-backdrop-filter: blur(6px) saturate(140%);
+    box-shadow: 0 0.3vh 1.2vh rgba(0, 0, 0, 0.45);
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.12s ease;
+    color: #f4dada;
+    background: rgba(120, 30, 40, 0.35);
+    border-color: rgba(220, 140, 140, 0.45);
+}
+
+.game-exit:hover, .game-exit:focus-visible {
+    background: rgba(170, 50, 60, 0.55);
+    border-color: rgba(255, 180, 180, 0.7);
+    color: #fff;
+}
+
+.game-exit:active {
+    transform: translateY(0.1vh);
+}
+
+.game-exit[hidden] {
+    display: none;
+}
+
+.intro .game-exit {
+    background: rgb(120, 30, 40);
+    border-color: rgb(120, 30, 40);
+    color: #fff;
+}
+
+.intro .game-exit:hover, .intro .game-exit:focus-visible {
+    background: rgb(170, 50, 60);
+    border-color: rgb(170, 50, 60);
+}
+            </style>
             <main class="game-root">
                 <div class="game-content"></div>
                 <div class="game-setup">

@@ -9,7 +9,14 @@ export class Background extends HTMLElement {
 
     connectedCallback() {
         this.root.innerHTML = `
-            <link rel="stylesheet" href="${new URL('./background.css', import.meta.url).href}">
+            <style>
+:host { display: block; overflow: hidden; background: #000; }
+img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; filter: blur(1vh); }
+img[data-totally-blind] { filter: contrast(500%) grayscale(100%) sepia(100%) hue-rotate(180deg) blur(2vh); }
+:host::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(transparent 50%, rgba(8, 21, 23, .2)); }
+
+img[hidden] { display: none; }
+            </style>
             <img alt="" aria-hidden="true" hidden>`;
         const image = /** @type {HTMLImageElement} */ (this.root.querySelector('img'));
         image.addEventListener('error', () => {
