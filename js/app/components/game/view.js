@@ -1,11 +1,11 @@
-﻿import { sharedStyles } from './view/shared-styles.js';
+import { sharedStyles } from './view/shared-styles.js';
 ﻿import './view/background.js';
 import './view/stats.js';
 import './view/character-surrounding-view.js';
 import './view/message-view.js';
 import './view/items-overlay.js';
 import './view/menu.js';
-import { playHoverSound } from '../../sound.js';
+import { playHoverSound, stopAllAmbiencesAndStartNewOne } from '../../sound.js';
 
 /** Coordinates message selection and hands its stored perspective to every display. */
 export class GameView extends HTMLElement {
@@ -64,7 +64,7 @@ export class GameView extends HTMLElement {
          * @type {number}
          */
         this.nextConversationMessageContentIndex = -1;
-         
+
         /**
          * @type {DEConversation | null}
          */
@@ -88,6 +88,9 @@ export class GameView extends HTMLElement {
         if (!this.currentUserId) return;
 
         if (!this.currentConversationId || !this.currentMessageId) {
+            /**
+             * @type {{conversation: DEConversation | null, message: DEConversationMessage | null} | null}
+             */
             const firstValue =
                 await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'conversations', 'getFirstConversationAndMessageForCharacter'], call: [this.currentUserId] });
 
@@ -97,7 +100,7 @@ export class GameView extends HTMLElement {
 
                 this.currentConversation = firstValue.conversation || null;
                 this.currentConversationMessage = firstValue.message || null;
-                this.currentConversationMessageContent = firstValue.message?.content?.[0] || null;
+                this.currentConversationMessageContent = firstValue.message?.perspectiveMessageByCharacterId?.[this.currentUserId]?.[0] || null;
                 this.currentConversationMessageContentIndex = 0;
                 const potentialPerspectiveInfo = this.currentConversationMessage?.perspectiveByCharacterId?.[this.currentUserId];
                 this.currentPerspectiveId = potentialPerspectiveInfo?.after || potentialPerspectiveInfo?.before || '';
@@ -108,34 +111,60 @@ export class GameView extends HTMLElement {
             if (recalculateCurrent) {
                 this.currentConversation = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'conversations', 'getConversation'], call: [this.currentConversationId] });
                 this.currentConversationMessage = this.currentConversation?.messages?.find(m => m.id === this.currentMessageId) || null;
-                this.currentConversationMessageContentIndex = 0;
-                this.currentConversationMessageContent = this.currentConversationMessage?.content?.[0] || null;
+                const contents = this.currentConversationMessage?.perspectiveMessageByCharacterId?.[this.currentUserId] || [];
+                this.currentConversationMessageContentIndex = contents.length
+                    ? Math.max(0, Math.min(this.currentConversationMessageContentIndex, contents.length - 1)) : -1;
+                this.currentConversationMessageContent = contents[this.currentConversationMessageContentIndex] || null;
                 const potentialPerspectiveInfo = this.currentConversationMessage?.perspectiveByCharacterId?.[this.currentUserId];
                 this.currentPerspectiveId = potentialPerspectiveInfo?.after || potentialPerspectiveInfo?.before || '';
             }
 
             if (recalculateNext) {
-                const nextValue =
-                    await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'conversations', 'getNextConversationAndMessageForCharacter'], call: [this.currentUserId, this.currentConversationId, this.currentMessageId] });
+                const nextIndex = this.currentConversationMessageContentIndex + 1;
+                const nextContent = this.currentConversationMessage?.perspectiveMessageByCharacterId?.[this.currentUserId]?.[nextIndex];
+                if (nextContent) {
+                    this.nextConversation = this.currentConversation;
+                    this.nextConversationMessage = this.currentConversationMessage;
+                    this.nextConversationMessageContent = nextContent;
+                    this.nextConversationMessageContentIndex = nextIndex;
+                } else {
+                    /**
+                     * @type {{conversation: DEConversation | null, message: DEConversationMessage | null} | null}
+                     */
+                    const nextValue =
+                        await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'conversations', 'getNextConversationAndMessageForCharacter'], call: [this.currentUserId, this.currentConversationId, this.currentMessageId] });
 
-                this.nextConversation = nextValue?.conversation || null;
-                this.nextConversationMessage = nextValue?.message || null;
-                this.nextConversationMessageContent = nextValue?.message?.content?.[0] || null;
-                this.nextConversationMessageContentIndex = this.nextConversationMessageContent ? 0 : -1;
+                    this.nextConversation = nextValue?.conversation || null;
+                    this.nextConversationMessage = nextValue?.message || null;
+                    this.nextConversationMessageContent = nextValue?.message?.perspectiveMessageByCharacterId?.[this.currentUserId]?.[0] || null;
+                    this.nextConversationMessageContentIndex = this.nextConversationMessageContent ? 0 : -1;
+                }
             }
 
             if (recalculatePrev) {
-                const prevValue =
-                    await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'conversations', 'getPreviousConversationAndMessageForCharacter'], call: [this.currentUserId, this.currentConversationId, this.currentMessageId] });
+                const prevIndex = this.currentConversationMessageContentIndex - 1;
+                const prevContent = this.currentConversationMessage?.perspectiveMessageByCharacterId?.[this.currentUserId]?.[prevIndex];
+                if (prevContent) {
+                    this.prevConversation = this.currentConversation;
+                    this.prevConversationMessage = this.currentConversationMessage;
+                    this.prevConversationMessageContent = prevContent;
+                    this.prevConversationMessageContentIndex = prevIndex;
+                } else {
+                    /**
+                     * @type {{conversation: DEConversation | null, message: DEConversationMessage | null} | null}
+                     */
+                    const prevValue =
+                        await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'conversations', 'getPreviousConversationAndMessageForCharacter'], call: [this.currentUserId, this.currentConversationId, this.currentMessageId] });
 
-                this.prevConversation = prevValue?.conversation || null;
-                this.prevConversationMessage = prevValue?.message || null;
-                this.prevConversationMessageContentIndex = (prevValue?.message?.content?.length || 0) - 1;
-                this.prevConversationMessageContent = prevValue?.message?.content?.[this.prevConversationMessageContentIndex] || null;
+                    this.prevConversation = prevValue?.conversation || null;
+                    this.prevConversationMessage = prevValue?.message || null;
+                    this.prevConversationMessageContentIndex = (prevValue?.message?.perspectiveMessageByCharacterId?.[this.currentUserId]?.length || 0) - 1;
+                    this.prevConversationMessageContent = prevValue?.message?.perspectiveMessageByCharacterId?.[this.currentUserId]?.[this.prevConversationMessageContentIndex] || null;
+                }
             }
         }
     }
-    
+
     async goPrevMessage() {
         await this.pendingPerspectiveUpdate;
         if (!this.prevConversation || !this.prevConversationMessage || !this.prevConversationMessageContent) return;
@@ -162,6 +191,7 @@ export class GameView extends HTMLElement {
 
     async goNextMessage() {
         await this.pendingPerspectiveUpdate;
+        if (this.currentConversationMessage?.isProcessingSideEffects) return;
         if (!this.nextConversation || !this.nextConversationMessage || !this.nextConversationMessageContent) return;
 
         this.currentConversationId = this.nextConversation.id;
@@ -194,7 +224,7 @@ export class GameView extends HTMLElement {
         this.currentConversationId = this.getAttribute('initial-conversation-id') || '';
         this.currentMessageId = this.getAttribute('initial-message-id') || '';
         this.currentPerspectiveId = this.getAttribute('initial-perspective-id') || '';
-        
+
         this.root.innerHTML = `
             <style>
 ${sharedStyles}
@@ -255,6 +285,12 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
             <div class="black-overlay" style="position:absolute;inset:0;background:#000;z-index:1000" aria-hidden="true"></div>`;
         const button = /** @type {HTMLButtonElement} */ (this.root.querySelector('.items-toggle'));
         const overlay = /** @type {import('./view/items-overlay.js').ItemsOverlay} */ (this.root.querySelector('app-game-items-overlay'));
+        const messageView = /** @type {import('./view/message-view.js').MessageView} */ (this.root.querySelector('app-game-message-view'));
+        messageView.onNext = () => this.goNextMessage();
+        messageView.onPrev = () => this.goPrevMessage();
+        messageView.addEventListener('message-input', event => {
+            this.onMessageInput(/** @type {CustomEvent<string>} */ (event).detail);
+        });
         button.addEventListener('click', () => overlay.show());
         overlay.addEventListener('toggle', () => {
             button.setAttribute('aria-expanded', String(overlay.open));
@@ -272,14 +308,21 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
             }
         }, { signal: this.controller.signal });
 
-        this.unsubscribe = window.ENGINE_WORKER_CLIENT.addDEObjectUpdatedListener(() => { void this.updatePerspective(); });
+        this.unsubscribe = window.ENGINE_WORKER_CLIENT.addDEObjectUpdatedListener(() => {
+            console.log('Perspective update queued due to engine notification.');
+            void this.updatePerspective();
+        });
         void this.updatePerspective();
     }
 
     /** Serialize engine notifications so an older message query cannot win a race. */
     async updatePerspective() {
+        console.log("Updating perspective...");
         this.perspectiveUpdateQueued = true;
-        if (this.pendingPerspectiveUpdate) return this.pendingPerspectiveUpdate;
+        if (this.pendingPerspectiveUpdate) {
+            console.log('Perspective update queued while another update is pending.');
+            return this.pendingPerspectiveUpdate;
+        }
         const lifecycle = this.lifecycle;
         this.pendingPerspectiveUpdate = (async () => {
             while (this.perspectiveUpdateQueued && this.isConnected && lifecycle === this.lifecycle) {
@@ -303,7 +346,10 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
     async renderCurrentPerspective() {
         const id = this.currentPerspectiveId;
         // A missing snapshot is retried even when the message's ID has not changed.
-        if (this.currentPerspective && id === this.loadedPerspectiveId) return;
+        if (this.currentPerspective && id === this.loadedPerspectiveId) {
+            this.renderMessageView();
+            return;
+        }
         const version = ++this.perspectiveVersion;
         const perspective = id ? await window.ENGINE_WORKER_CLIENT.queryDEObject({
             path: ['utils', 'characterInfo', 'getStoredPerspective'], call: [id],
@@ -320,10 +366,74 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
         stats?.updatePerspective(perspective);
         items?.updatePerspective(perspective);
 
-        console.log('Perspective updated:', perspective);
+        this.renderMessageView();
+
+        if (perspective) this.playThemeSongOfPerspective(perspective);
 
         if (perspective) this.removePotentialBlackOverlay();
         else this.showBlackOverlay();
+    }
+
+    renderMessageView() {
+        const messageView = /** @type {import('./view/message-view.js').MessageView | null} */ (this.root.querySelector('app-game-message-view'));
+        messageView?.updateMessageView(
+            this.currentPerspective,
+            this.currentConversation,
+            this.currentConversationMessage,
+            this.currentConversationMessageContent,
+            !!this.prevConversationMessageContent,
+            !!this.nextConversationMessageContent,
+            this.currentConversationMessageContentIndex,
+        );
+    }
+
+    /** Placeholder for sending the user's turn to the engine. @param {string} text */
+    onMessageInput(text) { console.log('User message:', text); }
+
+    /**
+     * @param {DECharacterPerspective} perspective
+     */
+    async playThemeSongOfPerspective(perspective) {
+        try {
+            const themeOfLocation = perspective.ownLocation.locationMetadata.themeAlternateByWeather?.[perspective.ownLocation.weatherName] || perspective.ownLocation.locationMetadata.theme;
+            const themeOfWorld = perspective.worldMetadata.themeAlternateByWeather?.[perspective.ownLocation.weatherName] || perspective.worldMetadata?.theme;
+            const ambienceOfLocation = perspective.ownLocation.locationMetadata.weatherSounds?.[perspective.ownLocation.weatherName];
+            const ambienceOfWorld = perspective.worldMetadata.weatherSounds?.[perspective.ownLocation.weatherName];
+
+            /**
+             * @type {ThemeSong | null | undefined}
+             */
+            const themeToPlay = themeOfLocation || themeOfWorld;
+            /**
+             * @type {ThemeSong | null | undefined}
+             */
+            const ambienceToPlay = ambienceOfLocation || ambienceOfWorld;
+
+            /**
+             * @type {Array<{id: string, srcs: Array<{src: string, fadeDurationMs: number, volume: number}>}>}
+             */
+            const newGroups = [];
+
+            if (themeToPlay && themeToPlay.asset) {
+                const isSystemAsset = themeToPlay.asset.startsWith('@');
+                const base = isSystemAsset ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
+                const src = `${base}/${isSystemAsset ? themeToPlay.asset.slice(1) : themeToPlay.asset}`;
+
+                newGroups.push({ id: src, srcs: [{ src, fadeDurationMs: 2000, volume: themeToPlay.volume ?? 1 }] });
+            }
+
+            if (ambienceToPlay && ambienceToPlay.asset) {
+                const isSystemAsset = ambienceToPlay.asset.startsWith('@');
+                const base = isSystemAsset ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
+                const src = `${base}/${isSystemAsset ? ambienceToPlay.asset.slice(1) : ambienceToPlay.asset}`;
+
+                newGroups.push({ id: src, srcs: [{ src, fadeDurationMs: 2000, volume: ambienceToPlay.volume ?? 1 }] });
+            }
+
+            await stopAllAmbiencesAndStartNewOne(newGroups, 2000);
+        } catch (error) {
+            console.error('Failed to start world theme:', error);
+        }
     }
 
     showBlackOverlay() {

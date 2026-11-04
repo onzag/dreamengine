@@ -23,7 +23,6 @@ const messageFields = {
     isRejectedMessage: "boolean",
     isStoryMasterMessage: "boolean",
     isDebugMessage: "boolean",
-    isHiddenMessage: "boolean",
     content: "json",
     hiddenContent: "text",
     startTime: "json",

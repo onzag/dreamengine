@@ -51,6 +51,38 @@ function resolveCharacter(DE, c) {
 
 /**
  * @param {DEObject} DE
+ * @param {string} characterId
+ * @param {DEConversation} conversation
+ * @param {number} startIndex
+ * @param {1 | -1} direction
+ * @returns {Promise<{ conversation: DEConversation | null, message: DEConversationMessage | null }>}
+ */
+async function findVisibleConversationMessage(DE, characterId, conversation, startIndex, direction) {
+    while (true) {
+        for (let index = startIndex; index >= 0 && index < conversation.messages.length; index += direction) {
+            const message = conversation.messages[index];
+            if (!message.canOnlyBeSeenByCharacter || message.canOnlyBeSeenByCharacter === characterId) {
+                return { conversation, message };
+            }
+        }
+
+        const conversationId = direction === 1
+            ? conversation.nextConversationIdsPerParticipant[characterId]
+            : conversation.previousConversationIdsPerParticipant[characterId];
+        if (!conversationId) {
+            return { conversation: null, message: null };
+        }
+        const nextConversation = await DE.utils.conversations.getConversation(conversationId);
+        if (!nextConversation) {
+            throw new Error(`${direction === 1 ? "Next" : "Previous"} conversation ${conversationId} not found`);
+        }
+        conversation = nextConversation;
+        startIndex = direction === 1 ? 0 : conversation.messages.length - 1;
+    }
+}
+
+/**
+ * @param {DEObject} DE
  * @param {DEItem | string} item
  * @returns {DEItem | undefined}
  */
@@ -1017,10 +1049,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 }
                 currentlyConsideredConversation = previousConversation;
             }
-            return {
-                conversation: currentlyConsideredConversation,
-                message: currentlyConsideredConversation.messages.length > 0 ? currentlyConsideredConversation.messages[0] : null,
-            };
+            return findVisibleConversationMessage(DE, resolvedCharacter.id, currentlyConsideredConversation, 0, 1);
         },
         getLastConversationAndMessageForCharacter: async (character) => {
             const resolvedCharacter = resolveCharacter(DE, character);
@@ -1045,12 +1074,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 throw new Error(`Conversation ${charState.conversationId} not found`);
             }
 
-            const lastMessage = conversation.messages.length > 0 ? conversation.messages[conversation.messages.length - 1] : null;
-
-            return {
-                conversation,
-                message: lastMessage,
-            };
+            return findVisibleConversationMessage(DE, resolvedCharacter.id, conversation, conversation.messages.length - 1, -1);
         },
         getPreviousConversationAndMessageForCharacter: async (character, conversation, message) => {
             const resolvedCharacter = resolveCharacter(DE, character);
@@ -1069,32 +1093,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (currentIndexInConversation === -1) {
                 throw new Error(`Message ${resolvedMessage.id} not found in conversation ${resolvedConversation.id}`);
             }
-            if (currentIndexInConversation === 0) {
-                const prev = resolvedConversation.previousConversationIdsPerParticipant[resolvedCharacter.id];
-                if (!prev) {
-                    return {
-                        conversation: null,
-                        message: null,
-                    };
-                } else {
-                    const previousConversation = await DE.utils.conversations.getConversation(prev);
-                    if (!previousConversation) {
-                        throw new Error(`Previous conversation ${prev} not found`);
-                    }
-
-                    const lastMessageInPreviousConversation = previousConversation.messages.length > 0 ? previousConversation.messages[previousConversation.messages.length - 1] : null;
-                    return {
-                        conversation: previousConversation,
-                        message: lastMessageInPreviousConversation,
-                    };
-                }
-            } else {
-                const previousMessage = resolvedConversation.messages[currentIndexInConversation - 1];
-                return {
-                    conversation: resolvedConversation,
-                    message: previousMessage,
-                };
-            }
+            return findVisibleConversationMessage(DE, resolvedCharacter.id, resolvedConversation, currentIndexInConversation - 1, -1);
         },
         getNextConversationAndMessageForCharacter: async (character, conversation, message) => {
             const resolvedCharacter = resolveCharacter(DE, character);
@@ -1114,30 +1113,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 throw new Error(`Message ${resolvedMessage.id} not found in conversation ${resolvedConversation.id}`);
             }
 
-            if (currentIndexInConversation === resolvedConversation.messages.length - 1) {
-                const next = resolvedConversation.nextConversationIdsPerParticipant[resolvedCharacter.id];
-                if (!next) {
-                    return {
-                        conversation: null,
-                        message: null,
-                    };
-                }
-                const nextConversation = await DE.utils.conversations.getConversation(next);
-                if (!nextConversation) {
-                    throw new Error(`Next conversation ${next} not found`);
-                }
-                const firstMessageInNextConversation = nextConversation.messages.length > 0 ? nextConversation.messages[0] : null;
-                return {
-                    conversation: nextConversation,
-                    message: firstMessageInNextConversation,
-                };
-            } else {
-                const nextMessage = resolvedConversation.messages[currentIndexInConversation + 1];
-                return {
-                    conversation: resolvedConversation,
-                    message: nextMessage,
-                };
-            }
+            return findVisibleConversationMessage(DE, resolvedCharacter.id, resolvedConversation, currentIndexInConversation + 1, 1);
         },
         getConversation: async function (conversationId) {
             return typeof conversationId === "string" ? DE.database.getConversation(conversationId) : conversationId;
@@ -1242,10 +1218,12 @@ export const deEngineUtilsFn = (DE, engine) => ({
                             }
                         }
                         locationsRecord[participantId] = {
-                            locationId: expectedLocationId,
-                            locationNameAtTheTime: DE.world.locations[expectedLocationId]?.name || "Unknown Location",
-                            locationSlotId: expectedLocationSlotId,
-                            locationSlotNameAtTheTime: DE.world.locations[expectedLocationId]?.slots?.[expectedLocationSlotId]?.name || "Unknown Place",
+                            // A location-only teleport keeps the current slot when already
+                            // there. Record the actual position, not the unused random slot.
+                            locationId: charState.location,
+                            locationNameAtTheTime: DE.world.locations[charState.location]?.name || "Unknown Location",
+                            locationSlotId: charState.locationSlot,
+                            locationSlotNameAtTheTime: DE.world.locations[charState.location]?.slots?.[charState.locationSlot]?.name || "Unknown Place",
                         };
                     }
                 }
@@ -1312,7 +1290,19 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 newConversation.previousConversationIdsPerParticipant[participantId] = oldConversation ? oldConversation.id : null;
             }
 
+            // The new ID must be known before persisting the previous conversations'
+            // forward links. These objects are database snapshots, not live records.
+            const addedConversation = await DE.database.newConversation(newConversation);
+            if (!addedConversation) {
+                throw new Error("Failed to add conversation to the database");
+            }
+
             for (const endedConversation of conversationsEnded) {
+                for (const participantId of endedConversation.participants) {
+                    if (participants.includes(participantId)) {
+                        endedConversation.nextConversationIdsPerParticipant[participantId] = addedConversation.id;
+                    }
+                }
                 const participantsLeft = endedConversation.participants.filter(p => !participants.includes(p));
 
                 if (participantsLeft.length !== 0) {
@@ -1332,20 +1322,21 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         nextConversationIdsPerParticipant: {},
                     };
 
-                    const actualNewConversationForRemainingParticipants = await DE.database.newConversation(newConversationForRemainingParticipants);
-
-                    if (!actualNewConversationForRemainingParticipants) {
-                        throw new Error("Failed to add new conversation for remaining participants to the database");
-                    }
-
                     for (const allParticipantId of participantsLeft) {
-                        const charState = DE.stateFor[allParticipantId];
-                        charState.conversationId = actualNewConversationForRemainingParticipants.id;
                         newConversationForRemainingParticipants.bondsAtStart[allParticipantId] = {
                             active: DE.bonds[allParticipantId].active.map(b => ({ ...b })),
                             ex: DE.bonds[allParticipantId].ex.map(b => ({ ...b })),
                         };
                         newConversationForRemainingParticipants.previousConversationIdsPerParticipant[allParticipantId] = endedConversation.id;
+                    }
+
+                    const actualNewConversationForRemainingParticipants = await DE.database.newConversation(newConversationForRemainingParticipants);
+                    if (!actualNewConversationForRemainingParticipants) {
+                        throw new Error("Failed to add new conversation for remaining participants to the database");
+                    }
+
+                    for (const allParticipantId of participantsLeft) {
+                        DE.stateFor[allParticipantId].conversationId = actualNewConversationForRemainingParticipants.id;
                         endedConversation.nextConversationIdsPerParticipant[allParticipantId] = actualNewConversationForRemainingParticipants.id;
                     }
                 }
@@ -1362,12 +1353,6 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         nextConversationIdsPerParticipant: endedConversation.nextConversationIdsPerParticipant,
                     });
                 }
-            }
-
-            const addedConversation = await DE.database.newConversation(newConversation);
-
-            if (!addedConversation) {
-                throw new Error("Failed to add conversation to the database");
             }
 
             for (const fn of fnsToRunOnceIdIsKnown) {

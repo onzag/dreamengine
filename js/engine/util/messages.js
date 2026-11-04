@@ -133,7 +133,6 @@ export function renderNarrationFragmentsToText(fragments) {
  * @property {string | null} id the id of the message, if this is a conversation message, otherwise null
  * @property {boolean} debug whether this is a debug message
  * @property {boolean} rejected whether this message was rejected by the story master or not
- * @property {boolean} hidden whether this message is hidden or not
  * @property {boolean} storyMaster whether this message is from the story master or not
  * @property {string[]} interactingCharacters the interacting characters in this message
  * @property {string} gid a global id, always available, always unique, can be used to identify a message uniquely
@@ -156,7 +155,6 @@ export function renderNarrationFragmentsToText(fragments) {
  *  excludeFrom?: string[] | null,
  *  includeDebugMessages?: boolean | null,
  *  includeRejectedMessages?: boolean | null,
- *  includeHiddenMessages?: boolean | null,
  *  useExponentialShrinkingSelectiveContextWindowStrategy?: boolean,
  *  enrichedMode?: boolean,
  * }} options
@@ -183,7 +181,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
         }
 
         // process the conversation messages
-        const conversationMessages = currentConversationObject.messages.filter(msg => (options.includeRejectedMessages || !msg.isRejectedMessage) && (options.includeDebugMessages || !msg.isDebugMessage) && (options.includeHiddenMessages || !msg.isHiddenMessage) &&
+        const conversationMessages = currentConversationObject.messages.filter(msg => (options.includeRejectedMessages || !msg.isRejectedMessage) && (options.includeDebugMessages || !msg.isDebugMessage) &&
             (!msg.canOnlyBeSeenByCharacter || msg.canOnlyBeSeenByCharacter === character.id));
 
         const conversationLocation = currentConversationObject.locations[character.id];
@@ -280,7 +278,6 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     debug: message.isDebugMessage,
                     rejected: message.isRejectedMessage,
                     storyMaster: message.isStoryMasterMessage,
-                    hidden: message.isHiddenMessage,
                     interactingCharacters: message.interactingCharacters || [],
                     gid: message.id,
                     emotion: message.emotion,

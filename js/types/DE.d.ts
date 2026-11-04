@@ -3297,17 +3297,6 @@ declare interface DEConversationMessage {
      */
     isDebugMessage: boolean;
     /**
-     * Hidden messages are messages that are basically exclusively used to be seen only by that character
-     * but not form part of the story, therefore do not account for inference ever
-     * 
-     * Hidden messages are basically used to tell user that a state has been applied to that character,
-     * eg. "you have been mind controlled" but other characters are not aware of that
-     * 
-     * This is the only way to communicate mind states to the user without other characters being aware of it,
-     * since states are by definition hidden from other characters, as they represent the character's internal monologue and private thoughts
-     */
-    isHiddenMessage: boolean;
-    /**
      * The content of the message
      */
     content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>;
@@ -4176,6 +4165,10 @@ declare interface DECharacterPerspective {
      * The time when the perspective was taken
      */
     timeOfPerspective: DETimeDescription;
+    /**
+     * Metadata of the world that is in perspective at that moment in time, this includes all the world's attributes, states, and other properties
+     */
+    worldMetadata: Record<string, any>;
 }
 
 declare interface DESocialGroupInPerspective {

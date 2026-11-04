@@ -111,6 +111,7 @@ export async function getPerspective(DE, character) {
     }
 
     return {
+        worldMetadata: DE.world.metadata || {},
         self,
         ownId,
         ownName: ownChar.name,

@@ -700,7 +700,6 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
                     // excludeFrom: [this.username],
                     includeDebugMessages: true,
                     includeRejectedMessages: true,
-                    includeHiddenMessages: true,
                     enrichedMode: false,
                     useExponentialShrinkingSelectiveContextWindowStrategy: false,
                 },

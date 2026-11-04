@@ -28,6 +28,14 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 button:disabled { cursor: default; opacity: .4; }
 `;
 
+export const messageButtonStyles = `
+button { appearance: none; font: inherit; font-size: 2.2vh; height: 6vh; line-height: normal; padding: 1vh 2vh; border: 2px solid #ccc; border-radius: .5vh; color: inherit; background: rgba(255, 255, 255, .1); transition: color .18s ease, transform .12s ease; }
+button:hover:not(:disabled), button:focus-visible:not(:disabled) { color: #FF6B6B; }
+button:active:not(:disabled) { transform: translateY(.1vh); }
+button kbd, button small { font: inherit; font-size: 2vh; }
+@media (prefers-reduced-motion: reduce) { button { transition: none; } }
+`;
+
 export const identifierLinkStyles = `
 .identifier { display: inline; margin: 0; padding: 0; border: 0; background: none; color: var(--accent, #a7d9ff); font: inherit; line-height: inherit; text-align: inherit; white-space: inherit; text-decoration: underline; text-underline-offset: .15em; cursor: pointer; }
 .identifier:hover { color: #fff; }

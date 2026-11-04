@@ -256,7 +256,7 @@ export class GameOverlay extends HTMLElement {
     /** @param {{ sceneName: string | null, alreadySelected: boolean }} result */
     async onInitialSceneSelected(result) {
         if (result.sceneName && !result.alreadySelected) {
-            await window.ENGINE_WORKER_CLIENT.startScene({ sceneName: result.sceneName });
+            window.ENGINE_WORKER_CLIENT.startScene({ sceneName: result.sceneName });
         }
         if (!this.isConnected) return;
 

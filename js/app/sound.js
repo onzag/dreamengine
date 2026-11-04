@@ -2,6 +2,7 @@ const cancelSound = /** @type {HTMLAudioElement} */ (document.getElementById('ca
 const pauseSound = /** @type {HTMLAudioElement} */ (document.getElementById('pauseSound'));
 const hoverSound = /** @type {HTMLAudioElement} */ (document.getElementById('hoverSound'));
 const confirmSound = /** @type {HTMLAudioElement} */ (document.getElementById('confirmSound'));
+const typingSound = /** @type {HTMLAudioElement} */ (document.getElementById('typingSound'));
 
 let fxEnabled = (localStorage.getItem('fxEnabled') || "true") === 'true';
 let ambienceEnabled = (localStorage.getItem('ambienceEnabled') || "true") === 'true';
@@ -67,6 +68,20 @@ function playHoverSound() {
   }
   hoverSound.currentTime = 0;
   hoverSound.play().catch(err => console.log('Hover sound play failed:', err));
+}
+
+function startPlayTypingSound() {
+  if (!fxEnabled || TEMP_SOUND_DISABLE) return;
+  const typingSound = /** @type {HTMLAudioElement} */ (document.getElementById('typingSound'));
+  typingSound.currentTime = 0;
+  typingSound.volume = 0.5;
+  typingSound.play().catch(err => console.log('Typing sound play failed:', err));
+}
+
+function stopPlayTypingSound() {
+  const typingSound = /** @type {HTMLAudioElement} */ (document.getElementById('typingSound'));
+  typingSound.pause();
+  typingSound.currentTime = 0;
 }
 
 /**
@@ -152,6 +167,7 @@ function playConfirmSound() {
 }
 
 function toggleFX() {
+  stopPlayTypingSound();
   fxEnabled = !fxEnabled;
   localStorage.setItem('fxEnabled', fxEnabled.toString());
   return fxEnabled;
@@ -627,5 +643,5 @@ export {
   stopAmbienceWithFade, startAmbienceWithFade, startAmbiencesWithFade,
   isAmbiencePlaying, setTempSoundDisable, playSound, playNarration, stopNarration,
   stopAllAmbiencesAndStartNewOne, randomizeAmbienceGroupSrc,
-  setAllAmbiencesVolume, restoreAllAmbiencesVolume
+  setAllAmbiencesVolume, restoreAllAmbiencesVolume, startPlayTypingSound, stopPlayTypingSound
 };

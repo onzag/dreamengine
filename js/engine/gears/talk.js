@@ -561,7 +561,6 @@ export async function talk(engine, character, options) {
         id: "message-" + Math.random().toString(36).substring(2, 15),
         isCharacter: true,
         isDebugMessage: false,
-        isHiddenMessage: false,
         isRejectedMessage: false,
         isStoryMasterMessage: false,
         perspectiveSummaryIds: {},

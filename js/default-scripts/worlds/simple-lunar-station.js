@@ -41,7 +41,19 @@ engine.exports = {
                         {
                             type: "dialogue",
                             "fragments": [
-                                "Booo! I am a ghost :3 Don't listen to Dema",
+                                "Booo! I am a ghost :3 Don't listen to ",
+                                {
+                                    foundAs: "character",
+                                    identifier: "character-dema-1",
+                                    text: "Dema",
+                                    type: "identifier",
+                                }
+                            ],
+                        },
+                        {
+                            type: "narration",
+                            "fragments": [
+                                "Said a random voice from nowhere.",
                             ],
                         },
                     ],
@@ -57,7 +69,6 @@ engine.exports = {
             isCharacter: true,
             isDebugMessage: false,
             isStoryMasterMessage: false,
-            isHiddenMessage: false,
             isRejectedMessage: false,
             summariesByCharacterId: {},
             rumors: [],

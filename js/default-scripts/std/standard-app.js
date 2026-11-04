@@ -108,6 +108,8 @@
 /**
  * @typedef {Object} WorldMetadataFields
  * @property {ThemeSong} [theme] - the theme song of the world
+ * @property {Record<string, ThemeSong>} [themeAlternateByWeather] - the theme song of the world, but can be overridden by weather conditions; not recommended to set at world level
+ * @property {Record<string, ThemeSong>} [weatherSounds] - the sounds of the weather in the world, when that weather is active, the sound will play along with the theme song, should loop, not recommended to set at world level
  * @property {CharacterVoiceEntry} [narrationVoice] - the voice of the narrator, if not specified, the default narrator voice will be used
  * @property {Record<string, {
  *   voice: CharacterVoiceAssets,
