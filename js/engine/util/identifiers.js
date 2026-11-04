@@ -1,66 +1,109 @@
 
 /**
  * @param {DEObject} DE
- * @param {string} id
+ * @param {Array<string>} ids
  * @param {string} name
  * @param {boolean} force
  * @returns {DEConversationMessageFragmentIdentifier|null}
  */
-function findIdentifierNaive(DE, id, name, force) {
+function findIdentifierNaive(DE, ids, name, force) {
     // try to find as character first
-    if (id.startsWith("character-")) {
-        const character = DE.characters[id];
-        if (character) {
+    if (ids.every(id => id.startsWith("character-"))) {
+        const everyCharacterExists = ids.every(id => DE.characters[id]);
+        if (everyCharacterExists) {
             return {
-                identifier: id,
-                text: name || character.name,
-                foundAs: "character",
+                identifiers: ids,
+                text: name || DE.utils.templates.formatAnd(ids.map(id => DE.characters[id].name)),
+                foundAs: ids.length === 1 ? "single-character" : "characters",
                 type: "identifier",
             };
         } else if (force) {
             return {
-                identifier: id,
-                text: name || "Unknown Character",
-                foundAs: "character",
+                identifiers: ids,
+                text: name || (ids.length === 1 ? "Unknown Character" : "Unknown Characters"),
+                foundAs: ids.length === 1 ? "single-character" : "characters",
                 type: "identifier",
             };
+        } else {
+            return null;
         }
-    } else if (id.startsWith("location-")) {
-        const location = DE.world.locations[id];
-        if (location) {
+    } else if (ids.every(id => id.startsWith("location-"))) {
+        const everyLocationExistsAndIsLocation = ids.every(id => DE.world.locations[id]);
+        if (everyLocationExistsAndIsLocation) {
             return {
-                identifier: id,
-                text: name || location.name,
-                foundAs: "location",
+                identifiers: ids,
+                text: name || DE.utils.templates.formatAnd(ids.map(id => DE.world.locations[id].name)),
+                foundAs: ids.length === 1 ? "single-location" : "locations",
                 type: "identifier",
             };
         }
 
-        for (const locationId in DE.world.locations) {
-            const location = DE.world.locations[locationId];
-            if (location.slots && location.slots[id]) {
-                return {
-                    identifier: id,
-                    text: name || location.slots[id].name,
-                    foundAs: "location-slot",
-                    type: "identifier",
-                };
+        const everyLocationExistsAndIsSlotNamesList = ids.map(id => {
+            for (const locationId in DE.world.locations) {
+                const location = DE.world.locations[locationId];
+                if (location.slots && location.slots[id]) {
+                    return location.slots[id].name;
+                }
             }
+            return null;
+        });
+        const everyLocationExistsAndIsSlot = everyLocationExistsAndIsSlotNamesList.every(name => name !== null);
+        if (everyLocationExistsAndIsSlot) {
+            return {
+                identifiers: ids,
+                text: name || DE.utils.templates.formatAnd(everyLocationExistsAndIsSlotNamesList.map(name => name || "Unknown Location")),
+                foundAs: ids.length === 1 ? "single-location-slot" : "location-slots",
+                type: "identifier",
+            };
         }
 
         if (force) {
             return {
-                identifier: id,
-                text: name || "Unknown Location",
-                foundAs: "location",
+                identifiers: ids,
+                text: name || (ids.length === 1 ? "Unknown Location" : "Unknown Locations"),
+                foundAs: ids.length === 1 ? "single-location" : "locations",
                 type: "identifier",
             };
         }
-    } else if (id.startsWith("item-") || force) {
+
+        return null;
+    } else if (ids.every(id => id.startsWith("item-"))) {
         return {
-            identifier: id,
-            text: name || "Unknown Item",
-            foundAs: "item",
+            identifiers: ids,
+            text: name || (ids.length === 1 ? "Unknown Item" : "Unknown Items"),
+            foundAs: ids.length === 1 ? "single-item" : "items",
+            type: "identifier",
+        };
+    }
+
+    const manualCheckMixedTypesNames = ids.map(id => {
+        if (id.startsWith("character-")) {
+            const character = DE.characters[id];
+            return character ? character.name : "Unknown Character";
+        } else if (id.startsWith("location-")) {
+            const location = DE.world.locations[id];
+            if (location) {
+                return location.name;
+            }
+            for (const locationId in DE.world.locations) {
+                const location = DE.world.locations[locationId];
+                if (location.slots && location.slots[id]) {
+                    return location.slots[id].name;
+                }
+            }
+            return "Unknown Location";
+        } else if (id.startsWith("item-")) {
+            return "Unknown Item";
+        } else {
+            return null;
+        }
+    });
+
+    if (manualCheckMixedTypesNames.every(name => name !== null) || force) {
+        return {
+            identifiers: ids,
+            text: name || DE.utils.templates.formatAnd(manualCheckMixedTypesNames.map(name => name || "Unknown Item")),
+            foundAs: "mixed",
             type: "identifier",
         };
     }
@@ -160,9 +203,9 @@ async function findALocationWithTheName(DE, name, characterIdThatEmittedTheIdent
         const matchesLocation = normalize(match.locationNameAtTheTime).includes(search);
         if (!matchesLocation && !location.slots?.[match.locationSlotId]) continue;
         return {
-            identifier: matchesLocation ? match.locationId : match.locationSlotId,
+            identifiers: matchesLocation ? [match.locationId] : [match.locationSlotId],
             text: name,
-            foundAs: matchesLocation ? "location" : "location-slot",
+            foundAs: matchesLocation ? "single-location" : "single-location-slot",
             type: "identifier",
         };
     }
@@ -176,64 +219,65 @@ async function findALocationWithTheName(DE, name, characterIdThatEmittedTheIdent
  * Nearby recovery may succeed before a distant, stronger match is inspected.
  * Always return a fragment, preserving unresolved inputs as an item reference.
  * @param {DEObject} DE
- * @param {string} id
+ * @param {string} ids
  * @param {string} name
  * @param {string|null} characterIdThatEmittedTheIdentifier
  * @returns {Promise<DEConversationMessageFragmentIdentifier>}
  */
-export async function findBestIdentifier(DE, id, name, characterIdThatEmittedTheIdentifier) {
+export async function findBestIdentifier(DE, ids, name, characterIdThatEmittedTheIdentifier) {
     const nameLower = name.toLowerCase().trim();
-    const idLower = id.toLowerCase().trim();
+    const idsLower = ids.toLowerCase().trim();
+    const idsLowerSplit = idsLower.split(/,|\|/g);
     const shouldReverse = nameLower.startsWith("character-") || nameLower.startsWith("item-") || nameLower.startsWith("location-");
 
-    const actualId1 = shouldReverse ? nameLower : idLower;
-    const actualName1 = shouldReverse ? id : name;
+    const actualIds1 = (shouldReverse ? nameLower : idsLower).split(/,|\|/g);
+    const actualName1 = shouldReverse ? ids : name;
 
-    const naiveResult = findIdentifierNaive(DE, actualId1, actualName1, false);
+    const naiveResult = findIdentifierNaive(DE, actualIds1, actualName1, false);
     if (naiveResult) {
         return naiveResult;
     }
-
+    
     if (shouldReverse) {
-        const naiveResult2 = findIdentifierNaive(DE, idLower, name, false);
+        const naiveResult2 = findIdentifierNaive(DE, idsLowerSplit, name, false);
         if (naiveResult2) {
             return naiveResult2;
         }
     }
 
-    const isBasicPrefix = startsWithBasicPrefix(idLower);
+    const isBasicPrefix = idsLowerSplit.every(id => startsWithBasicPrefix(id));
     if (!isBasicPrefix) {
         // we got no naive result, let's try to see if we can force it somehow
-        const potentialIdAsCharacter = "character-" + idLower;
-        const potentialIdAsLocation = "location-" + idLower;
+        const potentialIdsAsCharacter = idsLowerSplit.map(id => "character-" + id);
+        const potentialIdsAsLocation = idsLowerSplit.map(id => "location-" + id);
 
         // try to find them as character or location
-        const naiveResult3 = findIdentifierNaive(DE, potentialIdAsCharacter, name, false);
+        const naiveResult3 = findIdentifierNaive(DE, potentialIdsAsCharacter, name, false);
         if (naiveResult3) {
             return naiveResult3;
         }
-        const naiveResult4 = findIdentifierNaive(DE, potentialIdAsLocation, name, false);
+        const naiveResult4 = findIdentifierNaive(DE, potentialIdsAsLocation, name, false);
         if (naiveResult4) {
             return naiveResult4;
         }
     }
 
     // okay now we are stuck we cannot quite find what it is, let's do our last resort
-    const shouldBeCharacter = actualId1.startsWith("character-");
-    if (shouldBeCharacter) {
+    const shouldBeSingleCharacter = actualIds1.length === 1 && actualIds1[0].startsWith("character-");
+    if (shouldBeSingleCharacter) {
         const potentialCharacter = findACharacterWithTheName(DE, actualName1.toLowerCase().trim(), characterIdThatEmittedTheIdentifier);
         if (potentialCharacter) {
             return {
-                identifier: potentialCharacter.id,
+                identifiers: [potentialCharacter.id],
                 text: actualName1 || potentialCharacter.name,
-                foundAs: "character",
+                foundAs: "single-character",
                 type: "identifier",
             };
         }
     }
 
-    const shouldBeLocation = actualId1.startsWith("location-");
-    if (shouldBeLocation) {
+    const shouldBeSingleLocation = actualIds1.length === 1 && actualIds1[0].startsWith("location-");
+    if (shouldBeSingleLocation) {
         const potentialLocation = await findALocationWithTheName(DE, actualName1, characterIdThatEmittedTheIdentifier);
         if (potentialLocation) {
             return potentialLocation;
@@ -241,9 +285,9 @@ export async function findBestIdentifier(DE, id, name, characterIdThatEmittedThe
     }
 
     return {
-        identifier: actualId1,
+        identifiers: actualIds1,
         text: actualName1,
-        foundAs: "item",
+        foundAs: "mixed",
         type: "identifier",
     };
 }

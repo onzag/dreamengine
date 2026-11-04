@@ -285,7 +285,7 @@ figcaption { margin-top: .6vh; line-height: 1.25; }
                     tooltip.setAttribute('text', character.externalDescription);
                     tooltip.setAttribute('aria-label', character.name || 'Character description');
                     tooltip.setAttribute('identifier-id', character.id);
-                    tooltip.setAttribute('found-as', 'character');
+                    tooltip.setAttribute('found-as', 'single-character');
                     tooltip.setAttribute('role', 'button');
                     tooltip.setAttribute('aria-haspopup', 'dialog');
                 }

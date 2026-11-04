@@ -47,7 +47,7 @@ app-asset-image::part(asset-image-container) { border-radius: .5vh; }
             </article>`;
         this.root.querySelector('.slot-link')?.addEventListener('click', () => {
             this.dispatchEvent(new CustomEvent('identifier-navigate', {
-                bubbles: true, composed: true, detail: { identifier: this.getAttribute('slot-id'), foundAs: 'location-slot' },
+                bubbles: true, composed: true, detail: { identifier: this.getAttribute('slot-id'), foundAs: 'single-location-slot' },
             }));
         });
         this.updatePerspective(this.currentPerspective || getPerspectiveFor(this.parentNode));

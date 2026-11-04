@@ -83,7 +83,7 @@ app-game-tooltip, app-world-image { display: block; width: 14vh; height: 14vh; }
             tooltip.setAttribute('aria-label', speaker.name);
             tooltip.setAttribute('text', speaker.description);
             for (const [name, value] of Object.entries({
-                'identifier-id': speaker.id, 'found-as': 'character',
+                'identifier-id': speaker.id, 'found-as': 'single-character',
                 'tabindex': '0', 'role': 'button', 'aria-haspopup': 'dialog',
             })) {
                 if (speaker.id) tooltip.setAttribute(name, value);
@@ -96,7 +96,7 @@ app-game-tooltip, app-world-image { display: block; width: 14vh; height: 14vh; }
         // Snapshot rendered values, never retain object identity or processing metadata.
         const narrationKey = (/** @type {DEConversationMessageNarrationFragment[]} */ fragments) =>
             fragments.map(fragment => typeof fragment === 'string' ? fragment
-                : [fragment.text, fragment.identifier, fragment.foundAs]);
+                : [fragment.text, fragment.identifiers, fragment.foundAs]);
         const renderedFragments = content.type !== 'dialogue' ? narrationKey(content.fragments)
             : content.fragments.map(fragment => [fragment.type,
                 fragment.type === 'sound' ? fragment.text : narrationKey(fragment.fragments)]);

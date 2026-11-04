@@ -99,8 +99,8 @@ export function buildCharacterListNarrationFragments(engine, character, particip
         fragments.push({
             type: "identifier",
             text: getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine.getDEObject(), character, participantChar),
-            identifier: participantId,
-            foundAs: "character",
+            identifiers: [participantId],
+            foundAs: "single-character",
         });
     });
     return fragments;
@@ -212,15 +212,15 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 {
                     type: "identifier",
                     text: character.name,
-                    identifier: character.id,
-                    foundAs: "character",
+                    identifiers: [character.id],
+                    foundAs: "single-character",
                 },
                 " is at ",
                 !conversationLocationId ? "an Unknown Location" : {
                     type: "identifier",
                     text: conversationLocationName,
-                    identifier: conversationLocationId,
-                    foundAs: "location",
+                    identifiers: [conversationLocationId],
+                    foundAs: "single-location",
                 },
                 " "
             ];
@@ -318,15 +318,15 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     {
                         type: "identifier",
                         text: characterName,
-                        identifier: character.id,
-                        foundAs: "character",
+                        identifiers: [character.id],
+                        foundAs: "single-character",
                     },
                     " is at ",
                     !conversationLocationId ? "an Unknown Location" : {
                         type: "identifier",
                         text: conversationLocationName,
-                        identifier: conversationLocationId,
-                        foundAs: "location",
+                        identifiers: [conversationLocationId],
+                        foundAs: "single-location",
                     },
                     " ",
                 ];
@@ -371,7 +371,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
 }
 
 /**
- * @param {Array<DEConversationMessageNarration | DEConversationMessageDialogue>} content
+ * @param {Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>} content
  * @param {string} name
  * @param {string|null} characterId
  * @param {boolean} storyMaster
@@ -388,17 +388,21 @@ export function convertContentToSimpleList(
      */
     const finalList = [];
     for (const contentPart of content) {
-        if (contentPart.type === "narration") {
-            let message = "*";
+        if (contentPart.type === "narration" || contentPart.type === "thought") {
+            let message = contentPart.type === "thought" ? "" : "*";
             for (const fragment of contentPart.fragments) {
                 if (typeof fragment === "string") {
                     message += fragment;
                 } else if (fragment.type === "identifier") {
-                    message += "<" + fragment.identifier + ":" + fragment.text + ">";
+                    message += "<" + fragment.identifiers.map(id => id).join(",") + ":" + fragment.text + ">";
                 }
             }
-            message += "*";
-            finalList.push(message);
+            message += contentPart.type === "thought" ? "" : "*";
+            if (contentPart.type === "thought") {
+                finalList.push(storyMaster ? ("Story Master: " + message) : ("<" + characterId + ":" + name + "> (thought): " + message));
+            } else {
+                finalList.push(message);
+            }
         } else if (contentPart.type === "dialogue") {
             // Reconstruct the authored format: spoken words are plain, action-beat narration
             // goes back inside asterisks, and voice/sound tags back inside square brackets.
@@ -417,7 +421,7 @@ export function convertContentToSimpleList(
                         if (typeof subFragment === "string") {
                             text += subFragment;
                         } else if (subFragment.type === "identifier") {
-                            text += "<" + subFragment.identifier + ":" + subFragment.text + ">";
+                            text += "<" + subFragment.identifiers.map(id => id).join(",") + ":" + subFragment.text + ">";
                         }
                     }
                     text = text.trim();
@@ -478,7 +482,7 @@ export function convertMessagesToSimpleList(messages) {
  *   useExponentialShrinkingSelectiveContextWindowStrategy?: boolean,
  *   enrichedMode?: boolean,
  * }} options
- * @returns {Promise<{messages: Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null}>, conversingCharacters: string[], mentionedCharacters: string[]}>}
+ * @returns {Promise<{messages: Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null}>, conversingCharacters: string[], mentionedCharacters: string[]}>}
  */
 export async function getHistoryFragmentForCharacter(engine, character, options) {
     if (!engine.deObject) {
@@ -488,7 +492,7 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
     let generator = await allHistory.next();
 
     /**
-     * @type {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null}>}
+     * @type {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null}>}
      */
     let messagesToAdd = [];
     /**
@@ -579,22 +583,34 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
                 for (const contentBit of generator.value.content) {
                     if (contentBit.type === "narration") {
                         for (const fragment of contentBit.fragments) {
-                            if (typeof fragment !== "string" && fragment.type === "identifier" && !mentionedCharacters.includes(fragment.identifier) && fragment.foundAs === "character") {
-                                mentionedCharacters.push(fragment.identifier);
+                            if (typeof fragment !== "string" && fragment.type === "identifier") {
+                                for (const identifier of fragment.identifiers) {
+                                    if (!mentionedCharacters.includes(identifier) && identifier.startsWith("character-")) {
+                                        mentionedCharacters.push(identifier);
+                                    }
+                                }
                             }
                         }
                     } else if (contentBit.type === "dialogue") {
                         for (const fragment of contentBit.fragments) {
                             if (fragment.type === "narration") {
                                 for (const subFragment of fragment.fragments) {
-                                    if (typeof subFragment !== "string" && subFragment.type === "identifier" && !mentionedCharacters.includes(subFragment.identifier) && subFragment.foundAs === "character") {
-                                        mentionedCharacters.push(subFragment.identifier);
+                                    if (typeof subFragment !== "string" && subFragment.type === "identifier") {
+                                        for (const identifier of subFragment.identifiers) {
+                                            if (!mentionedCharacters.includes(identifier) && identifier.startsWith("character-")) {
+                                                mentionedCharacters.push(identifier);
+                                            }
+                                        }
                                     }
                                 }
                             } else if (fragment.type === "dialogue") {
                                 for (const subFragment of fragment.fragments) {
-                                    if (typeof subFragment !== "string" && subFragment.type === "identifier" && !mentionedCharacters.includes(subFragment.identifier) && subFragment.foundAs === "character") {
-                                        mentionedCharacters.push(subFragment.identifier);
+                                    if (typeof subFragment !== "string" && subFragment.type === "identifier") {
+                                        for (const identifier of subFragment.identifiers) {
+                                            if (!mentionedCharacters.includes(identifier) && identifier.startsWith("character-")) {
+                                                mentionedCharacters.push(identifier);
+                                            }
+                                        }
                                     }
                                 }
                             }

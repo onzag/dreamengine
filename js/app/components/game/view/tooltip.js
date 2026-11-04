@@ -144,7 +144,7 @@ ${identifierLinkStyles}
     openTarget() {
         const identifier = this.getAttribute('identifier-id');
         const foundAs = this.getAttribute('found-as');
-        if (identifier && (foundAs === 'character' || foundAs === 'location' || foundAs === 'location-slot' || foundAs === 'item')) {
+        if (identifier && (foundAs === 'single-character' || foundAs === 'single-location' || foundAs === 'single-location-slot' || foundAs === 'single-item')) {
             this.openIdentifier(identifier, foundAs);
         }
     }

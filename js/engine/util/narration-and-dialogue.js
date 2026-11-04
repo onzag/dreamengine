@@ -361,11 +361,11 @@ export async function putNarrationInPerspective(DE, message, resolvedEmitter, re
 
         let hasModified = false;
 
-        if (fragment.foundAs === "character" && resolvedPerspectiveCharacter) {
+        if (fragment.foundAs === "single-character" && resolvedPerspectiveCharacter) {
             // do first this cheap check, if it is already in the previouslyHeardIdentifiers, then we don't need to do anything
             // the perspective character has already heard this name, so it is safe to use it, no need to check if it is specific or not
             // this is a simple cheap check, but it is not enough, we will do a more complex check later on if this fails
-            const cheapCheck = previouslyHeardIdentifiers?.some(id => id.text.toLowerCase().trim() === fragment.text.toLowerCase().trim() && id.identifier === fragment.identifier);
+            const cheapCheck = previouslyHeardIdentifiers?.some(id => id.text.toLowerCase().trim() === fragment.text.toLowerCase().trim() && id.identifiers.some(identifier => identifier === fragment.identifiers[0]));
 
             if (!cheapCheck) {
 
@@ -393,7 +393,7 @@ export async function putNarrationInPerspective(DE, message, resolvedEmitter, re
                     if (!forcesName) {
                         // okay so it is not a highly unspecifc pronoun, which means it might contain
                         // unknown information, we must check it, by using the emitterCharacter, the targetCharacter, and the perspectiveCharacter
-                        const targetCharacter = DE.characters[fragment.identifier];
+                        const targetCharacter = DE.characters[fragment.identifiers[0]];
                         if (targetCharacter) {
                             const referredAs = splitNameInBits(fragment.text);
 
@@ -444,7 +444,7 @@ export async function putNarrationInPerspective(DE, message, resolvedEmitter, re
                                 // now we will add the heard names for the more complex (non-cheap) check
                                 if (previouslyHeardIdentifiers) {
                                     for (const heardIdentifier of previouslyHeardIdentifiers) {
-                                        if (heardIdentifier.identifier === targetCharacter.id) {
+                                        if (heardIdentifier.identifiers.some(identifier => identifier === targetCharacter.id) && heardIdentifier.foundAs === "single-character") {
                                             perspectiveCanReferToTargetAsBits.push(...splitNameInBits(heardIdentifier.text));
                                         }
                                     }
@@ -494,7 +494,7 @@ export async function putNarrationInPerspective(DE, message, resolvedEmitter, re
         const allGroups = {};
         for (const index of modifiedFragmentsIndexes) {
             const fragment = fragments[index];
-            if (typeof fragment !== "string" && fragment.foundAs === "character") {
+            if (typeof fragment !== "string" && fragment.foundAs === "single-character") {
                 const trimmed = fragment.text.trim();
                 if (!allGroups[trimmed]) {
                     allGroups[trimmed] = [];
@@ -505,7 +505,7 @@ export async function putNarrationInPerspective(DE, message, resolvedEmitter, re
 
         for (const group of Object.values(allGroups)) {
             if (group.length > 1) {
-                const individualCharacters = group.map(f => f.identifier).filter((v, i, a) => a.indexOf(v) === i);
+                const individualCharacters = group.map(f => f.identifiers[0]).filter((v, i, a) => a.indexOf(v) === i);
                 const amountOfCharacters = individualCharacters.length;
                 // okay so we have a group of characters that are using the same name, we must make a distinction between them
                 if (amountOfCharacters === 2) {
@@ -544,9 +544,9 @@ export async function putNarrationInPerspective(DE, message, resolvedEmitter, re
                     }
 
                     for (const fragment of group) {
-                        if (fragment.identifier === characterA.id) {
+                        if (fragment.identifiers[0] === characterA.id) {
                             fragment.text = addRelativeAttributeToName(fragment.text, characterAAddedAttribute);
-                        } else if (fragment.identifier === characterB.id) {
+                        } else if (fragment.identifiers[0] === characterB.id) {
                             fragment.text = addRelativeAttributeToName(fragment.text, characterBAddedAttribute);
                         }
                     }
@@ -556,7 +556,7 @@ export async function putNarrationInPerspective(DE, message, resolvedEmitter, re
 
                     // we will loop per character to ensure that each character gets the same and correct ordinal
                     for (let i = 0; i < individualCharacters.length; i++) {
-                        const fragments = group.filter(f => f.identifier === individualCharacters[i]);
+                        const fragments = group.filter(f => f.identifiers[0] === individualCharacters[i]);
                         const ordinalForThisCharacter = i < 10 ? ordinalWords[i] : `${i + 1}th`;
                         for (const fragment of fragments) {
                             fragment.text = addRelativeAttributeToName(fragment.text, ordinalForThisCharacter);
@@ -576,7 +576,7 @@ export async function putNarrationInPerspective(DE, message, resolvedEmitter, re
     // For that we will check single sentences starting with "The" or "As the" or "as this" or "as that" or "this" or "that" or similar cases that specify a character identity
     // only the modifiedFragmentsIndexes will be checked, all the others fragments will remain original, as they are not modified, and thus not a problem
     return {
-        fragments,
+        fragments: findAwkardness(fragments, modifiedFragmentsIndexes),
     };
 }
 
@@ -607,7 +607,7 @@ export async function putDialogueInPerspective(DE, message, resolvedEmitter, res
                 if (typeof innerFragment === "string") {
                     continue;
                 }
-                if (innerFragment.foundAs === "character") {
+                if (innerFragment.foundAs === "single-character") {
                     actualHeardIdentifiers.push(innerFragment)
                 }
             }
@@ -669,7 +669,7 @@ function normalizeDescriptor(text) {
 function findAwkardness(fragments, modifiedFragmentsIndexes) {
     for (const index of modifiedFragmentsIndexes) {
         const fragment = fragments[index];
-        if (typeof fragment === "string" || fragment.foundAs !== "character") continue;
+        if (typeof fragment === "string" || fragment.foundAs !== "single-character") continue;
 
         // the subject descriptor, if any, lives in the plain text right before this marker
         const previousFragment = fragments[index - 1];

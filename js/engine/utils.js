@@ -1428,7 +1428,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         const fragmentsOfDialogue = dialogueOrNarration.fragments;
                         const resultOfDialogueInPerspective = await putDialogueInPerspective(DE, fragmentsOfDialogue, emitterChar, participantChar, heardIdentifiers);
                         for (const newIdentifier of resultOfDialogueInPerspective.heardIdentifiers) {
-                            if (!heardIdentifiers.some(id => id.type === newIdentifier.type && id.text === newIdentifier.text && id.identifier === newIdentifier.identifier)) {
+                            if (!heardIdentifiers.some(id => id.type === newIdentifier.type && id.text === newIdentifier.text && id.identifiers.every(id => newIdentifier.identifiers.includes(id)))) {
                                 // this should also modify the DE.stateFor[participantId].heardIdentifiers array, since heardIdentifiers is a reference to that array
                                 heardIdentifiers.push(newIdentifier);
                             }

@@ -3263,8 +3263,8 @@ declare interface DEConversationMessageDialogueFragmentSound {
 declare interface DEConversationMessageFragmentIdentifier {
     type: "identifier";
     text: string;
-    identifier: string;
-    foundAs: "character" | "item" | "location" | "location-slot";
+    identifiers: string[];
+    foundAs: "single-character" | "single-item" | "single-location" | "single-location-slot" | "characters" | "items" | "locations" | "location-slots" | "mixed";
 }
 
 declare interface DEConversationMessage {

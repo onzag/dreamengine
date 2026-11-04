@@ -82,7 +82,7 @@ section[hidden] { display: none; }
         if (portraitTooltip) {
             portraitTooltip.setAttribute('text', data.externalDescription || '');
             portraitTooltip.setAttribute('identifier-id', data.userId);
-            portraitTooltip.setAttribute('found-as', 'character');
+            portraitTooltip.setAttribute('found-as', 'single-character');
             portraitTooltip.setAttribute('aria-label', data.userName || 'Character details');
         }
         const list = this.root.querySelector('.state-list');

@@ -81,14 +81,14 @@ h2 { margin: 0 0 1.5vh; font-size: 2.8vh; }
         this.root.querySelector('.close')?.addEventListener('click', () => this.close());
         this.root.querySelector('.backdrop')?.addEventListener('click', () => { if (isTopDialog(this)) this.close(); });
         this.root.addEventListener('identifier-navigate', event => {
-            const { identifier, foundAs } = /** @type {CustomEvent<DEConversationMessageFragmentIdentifier>} */ (event).detail;
+            const { identifier, foundAs } = /** @type {CustomEvent<{identifier: string, foundAs: DEConversationMessageFragmentIdentifier['foundAs']}>} */ (event).detail;
             event.stopPropagation();
             openIdentifierDialog(identifier, foundAs, getFocusedElement() || this.root.querySelector('.close') || this, this.currentPerspective);
         }, { signal });
         const locationButton = /** @type {HTMLButtonElement} */ (this.root.querySelector('.location-banner'));
-        locationButton.addEventListener('click', () => { if (this.locationId) openIdentifierDialog(this.locationId, 'location', locationButton); });
+        locationButton.addEventListener('click', () => { if (this.locationId) openIdentifierDialog(this.locationId, 'single-location', locationButton); });
         const characterButton = /** @type {HTMLButtonElement} */ (this.root.querySelector('.character-name'));
-        characterButton.addEventListener('click', () => { if (this.userId) openIdentifierDialog(this.userId, 'character', characterButton); });
+        characterButton.addEventListener('click', () => { if (this.userId) openIdentifierDialog(this.userId, 'single-character', characterButton); });
         document.addEventListener('keydown', event => {
             if (event.key !== 'Escape' || event.defaultPrevented || !this.open || !isTopDialog(this)) return;
             event.preventDefault();

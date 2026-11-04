@@ -71,7 +71,7 @@ textarea { display: block; resize: vertical; width: 100%; min-height: 10vh; max-
         tooltip.setAttribute('aria-label', name);
         tooltip.setAttribute('text', description);
         for (const [attribute, value] of Object.entries({
-            'identifier-id': id, 'found-as': 'character',
+            'identifier-id': id, 'found-as': 'single-character',
             'tabindex': '0', 'role': 'button', 'aria-haspopup': 'dialog',
         })) {
             if (id) tooltip.setAttribute(attribute, value);

@@ -8,6 +8,13 @@ import './item-dialog.js';
 /** @type {IdentifierDialog[]} */
 const dialogStack = [];
 
+const views = {
+    'single-character': 'app-game-character-dialog',
+    'single-location': 'app-game-location-dialog',
+    'single-location-slot': 'app-game-location-slot-dialog',
+    'single-item': 'app-game-item-dialog',
+};
+
 /** Find the focused control, including controls inside item-tree shadow roots. */
 function getFocusedElement() {
     let active = document.activeElement;
@@ -30,16 +37,11 @@ export class IdentifierDialog extends HTMLElement {
     }
 
     connectedCallback() {
+        const foundAs = /** @type {keyof typeof views} */ (this.getAttribute('found-as'));
+        const tag = Object.hasOwn(views, foundAs) ? views[foundAs] : null;
+        if (!tag) { this.remove(); return; }
         dialogStack[dialogStack.length - 1]?.setActive(false);
         dialogStack.push(this);
-        const views = {
-            character: ['app-game-character-dialog', 'Character'],
-            location: ['app-game-location-dialog', 'Location'],
-            'location-slot': ['app-game-location-slot-dialog', 'Location slot'],
-            item: ['app-game-item-dialog', 'Item'],
-        };
-        const foundAs = /** @type {keyof typeof views} */ (this.getAttribute('found-as'));
-        const [tag] = views[foundAs] || views.item;
         const dialog = document.createElement('app-dialog');
         dialog.setAttribute('dialog-title', 'Loading details…');
         dialog.setAttribute('pre-expand', 'true');
@@ -52,7 +54,7 @@ export class IdentifierDialog extends HTMLElement {
             dialog.setAttribute('dialog-title', /** @type {CustomEvent<string>} */ (event).detail);
         });
         view.addEventListener('identifier-navigate', event => {
-            const { identifier, foundAs } = /** @type {CustomEvent<DEConversationMessageFragmentIdentifier>} */ (event).detail;
+            const { identifier, foundAs } = /** @type {CustomEvent<{identifier: string, foundAs: DEConversationMessageFragmentIdentifier['foundAs']}>} */ (event).detail;
             openIdentifierDialog(identifier, foundAs, getFocusedElement() || this, this.currentPerspective);
         });
         dialog.append(view);
@@ -103,6 +105,7 @@ customElements.define('app-game-identifier-dialog', IdentifierDialog);
  * @param {DECharacterPerspective | null} [perspective]
  */
 export function openIdentifierDialog(identifier, foundAs, trigger, perspective = getPerspectiveFor(trigger)) {
+    if (!identifier || !Object.hasOwn(views, foundAs)) return;
     const dialog = /** @type {IdentifierDialog} */ (document.createElement('app-game-identifier-dialog'));
     dialog.setAttribute('identifier-id', identifier);
     dialog.setAttribute('found-as', foundAs);

@@ -43,8 +43,8 @@ engine.exports = {
                             "fragments": [
                                 "Booo! I am a ghost :3 Don't listen to ",
                                 {
-                                    foundAs: "character",
-                                    identifier: "character-dema-1",
+                                    foundAs: "single-character",
+                                    identifiers: ["character-dema-1"],
                                     text: "Dema",
                                     type: "identifier",
                                 }

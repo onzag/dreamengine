@@ -184,7 +184,7 @@ export class ItemNode extends HTMLElement {
         const open = /** @type {HTMLButtonElement} */ (this.root.querySelector('.item-open'));
         open.title = `View ${this.data.label}`;
         open.addEventListener('click', () => this.dispatchEvent(new CustomEvent('identifier-navigate', {
-            bubbles: true, composed: true, detail: { identifier: this.data?.id, foundAs: this.data?.kind === 'character' ? 'character' : 'item' },
+            bubbles: true, composed: true, detail: { identifier: this.data?.id, foundAs: this.data?.kind === 'character' ? 'single-character' : 'single-item' },
         })));
         this.root.querySelector('.item-toggle')?.addEventListener('click', () => {
             if (!this.context || !this.data) return;
