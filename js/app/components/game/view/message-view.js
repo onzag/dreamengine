@@ -108,7 +108,7 @@ kbd { opacity: .7; margin-left: 1vh; }
      * @param {DECharacterPerspective | null} perspective
      * @param {DEConversation | null} conversation
      * @param {DEConversationMessage | null} message
-     * @param {DEConversationMessageDialogue | DEConversationMessageNarration | null} content
+     * @param {DEConversationMessageDialogue | DEConversationMessageNarration | DEConversationMessageThought | null} content
      * @param {boolean} hasPrev
      * @param {boolean} hasNext
      * @param {number} [contentIndex]

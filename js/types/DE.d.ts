@@ -3231,6 +3231,12 @@ declare interface DEConversationMessageNarration {
     __debug_id?: string;
 }
 
+declare interface DEConversationMessageThought {
+    type: "thought";
+    fragments: Array<DEConversationMessageNarrationFragment>;
+    __debug_id?: string;
+}
+
 declare interface DEConversationMessageDialogue {
     type: "dialogue";
     fragments: Array<DEConversationMessageDialogueFragment>;
@@ -3299,7 +3305,7 @@ declare interface DEConversationMessage {
     /**
      * The content of the message
      */
-    content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>;
+    content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>;
     /**
      * Hidden content, metadata, etc...
      */
@@ -3364,9 +3370,11 @@ declare interface DEConversationMessage {
     /**
      * The perspective message by each character, this mirrors the content but as seen from the perspective of each character (or participant) in the conversation
      * at the moment in time when the message was sent
+     * 
+     * Normally it won't have the thoughts of other characters
      */
     perspectiveMessageByCharacterId: {
-        [characterId: string]: Array<DEConversationMessageNarration | DEConversationMessageDialogue>;
+        [characterId: string]: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>;
     };
 
     /**

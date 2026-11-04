@@ -40,7 +40,7 @@ export class GameView extends HTMLElement {
          */
         this.currentConversationMessage = null;
         /**
-         * @type {DEConversationMessageDialogue | DEConversationMessageNarration | null}
+         * @type {DEConversationMessageDialogue | DEConversationMessageNarration | DEConversationMessageThought | null}
          */
         this.currentConversationMessageContent = null;
         /**
@@ -57,7 +57,7 @@ export class GameView extends HTMLElement {
          */
         this.nextConversationMessage = null;
         /**
-         * @type {DEConversationMessageDialogue | DEConversationMessageNarration | null}
+         * @type {DEConversationMessageDialogue | DEConversationMessageNarration | DEConversationMessageThought | null}
          */
         this.nextConversationMessageContent = null;
         /**
@@ -74,7 +74,7 @@ export class GameView extends HTMLElement {
          */
         this.prevConversationMessage = null;
         /**
-         * @type {DEConversationMessageDialogue | DEConversationMessageNarration | null}
+         * @type {DEConversationMessageDialogue | DEConversationMessageNarration | DEConversationMessageThought | null}
          */
         this.prevConversationMessageContent = null;
         /**

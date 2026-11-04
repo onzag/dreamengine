@@ -7,7 +7,7 @@ import '../../world-image.js';
 import './tooltip.js';
 import { startPlayTypingSound, stopPlayTypingSound } from '../../../sound.js';
 
-/** One narration/dialogue value, with a cancellable word-by-word reveal. */
+/** One narration, dialogue or thought value, with a cancellable word-by-word reveal. */
 export class MessageObject extends HTMLElement {
     constructor() {
         super();
@@ -18,11 +18,15 @@ ${identifierLinkStyles}
 :host { display: block; }
 :host([hidden]), [hidden] { display: none !important; }
 article { display: flex; align-items: flex-start; gap: 2vh; min-height: 14vh; }
+article[data-type="thought"] { --accent: #b9d9ff; background: rgba(105, 160, 210, .09); }
+.body { flex: 1; min-width: 0; }
+.thought-label { display: inline-block; max-width: 100%; margin-bottom: .6vh; padding: .25vh .8vh; border: 1px solid rgba(150, 195, 235, .35); border-radius: .4vh; background: rgba(105, 160, 210, .14); font-size: 2vh; line-height: 1.4; color: #b9d9ff; overflow-wrap: anywhere; }
 .speaker { width: 14vh; flex: 0 0 14vh; }
 app-game-tooltip, app-world-image { display: block; width: 14vh; height: 14vh; }
 .name { font-size: 2.2vh; margin-top: .6vh; color: var(--accent); overflow-wrap: anywhere; }
 .text { flex: 1; min-width: 0; max-height: 28vh; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 2.5vh; line-height: 1.68; color: rgba(230, 240, 255, .93); letter-spacing: .012em; }
 .text[data-type="narration"] { font-style: italic; color: #fff; letter-spacing: .04em; }
+.text[data-type="thought"] { color: #c8def5; }
 .aside { font-style: italic; color: rgba(255, 224, 165, .86); letter-spacing: .02em; }
 .dialogue { font-style: normal; }
 .em-dash { color: rgba(230, 240, 255, .7); font-style: normal; white-space: pre; }
@@ -31,7 +35,7 @@ app-game-tooltip, app-world-image { display: block; width: 14vh; height: 14vh; }
 .identifier:empty { display: none; }
 </style><article><div class="speaker" hidden>
 <app-game-tooltip align-with="top"><app-world-image default-image="./images/default-profile.png" aria-hidden="true"></app-world-image></app-game-tooltip>
-<div class="name"></div></div><div class="text" aria-label="Message"></div></article>`;
+<div class="name"></div></div><div class="body"><div class="thought-label" hidden>Thinking...</div><div class="text" aria-label="Message"></div></div></article>`;
         this.text = /** @type {HTMLElement} */ (this.root.querySelector('.text'));
         /** @type {DECharacterPerspective | null} */
         this.currentPerspective = null;
@@ -51,12 +55,12 @@ app-game-tooltip, app-world-image { display: block; width: 14vh; height: 14vh; }
     /**
      * @param {DECharacterPerspective | null} perspective
      * @param {DEConversationMessage} message
-     * @param {DEConversationMessageDialogue | DEConversationMessageNarration} content
+     * @param {DEConversationMessageDialogue | DEConversationMessageNarration | DEConversationMessageThought} content
      * @param {string} selectionKey
      */
     updateMessage(perspective, message, content, selectionKey) {
         this.currentPerspective = perspective;
-        const character = content.type === 'dialogue' && perspective && message.characterId
+        const character = content.type !== 'narration' && perspective && message.characterId
             ? getPerspectiveIndex(perspective).characters.get(message.characterId) : null;
         // The message's primary emotion is stored as `emotion`. Use the same
         // related-emotion order as the old renderer before falling back to neutral.
@@ -65,7 +69,7 @@ app-game-tooltip, app-world-image { display: block; width: 14vh; height: 14vh; }
         const assets = character?.characterMetadata.assets;
         const image = [emotion, ...relatedEmotions, 'neutral'].map(key => assets?.[key]).find(Boolean) || '';
         const speaker = {
-            visible: content.type === 'dialogue', id: character?.characterId || '',
+            visible: content.type !== 'narration', id: character?.characterId || '',
             name: character?.characterNameSimple || 'Unknown speaker',
             description: character?.characterExternalDescription || '',
             image,
@@ -93,7 +97,7 @@ app-game-tooltip, app-world-image { display: block; width: 14vh; height: 14vh; }
         const narrationKey = (/** @type {DEConversationMessageNarrationFragment[]} */ fragments) =>
             fragments.map(fragment => typeof fragment === 'string' ? fragment
                 : [fragment.text, fragment.identifier, fragment.foundAs]);
-        const renderedFragments = content.type === 'narration' ? narrationKey(content.fragments)
+        const renderedFragments = content.type !== 'dialogue' ? narrationKey(content.fragments)
             : content.fragments.map(fragment => [fragment.type,
                 fragment.type === 'sound' ? fragment.text : narrationKey(fragment.fragments)]);
         const key = JSON.stringify([selectionKey, content.type, renderedFragments]);
@@ -101,11 +105,16 @@ app-game-tooltip, app-world-image { display: block; width: 14vh; height: 14vh; }
         this.contentKey = key;
         this.pause();
         this.text.replaceChildren();
+        const article = /** @type {HTMLElement} */ (this.root.querySelector('article'));
+        article.dataset.type = content.type;
+        const thoughtLabel = /** @type {HTMLElement} */ (this.root.querySelector('.thought-label'));
+        thoughtLabel.hidden = content.type !== 'thought';
+        this.text.setAttribute('aria-label', content.type === 'thought' ? 'Thought' : 'Message');
         this.text.dataset.type = content.type;
         this.text.scrollTop = 0;
         const onIdentifier = (/** @type {string} */ id, /** @type {DEConversationMessageFragmentIdentifier['foundAs']} */ foundAs) =>
             openIdentifierDialog(id, foundAs, this, this.currentPerspective);
-        if (content.type === 'narration') {
+        if (content.type !== 'dialogue') {
             this.text.append(...createNarrationNodes(content.fragments, onIdentifier));
         } else {
             let previousText = '';

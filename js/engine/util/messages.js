@@ -128,7 +128,7 @@ export function renderNarrationFragmentsToText(fragments) {
  * @typedef {Object} DEObjectMessageGeneratorResult
  * @property {string} name the name of the character or entity that generated the message as known by the character that was passed in
  * @property {string | null} characterId the id of the character that actually generated the message, if this message belongs to an actual character, otherwise null
- * @property {Array<DEConversationMessageNarration | DEConversationMessageDialogue>} content the message content, can be a narrative or a dialogue
+ * @property {Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>} content the message content, can be a narrative or a dialogue
  * @property {string | null} conversationId the id of the conversation this message belongs to, if any, otherwise null
  * @property {string | null} id the id of the message, if this is a conversation message, otherwise null
  * @property {boolean} debug whether this is a debug message
@@ -249,7 +249,6 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 debug: false,
                 rejected: false,
                 storyMaster: true,
-                hidden: false,
                 interactingCharacters: currentConversationObject.participants,
                 gid: expectedId,
                 emotion: null,
@@ -261,7 +260,22 @@ export async function* getHistoryForCharacter(engine, character, options) {
             }
         } else {
             for (const message of conversationMessages.reverse()) {
-                if (message.characterId && options.excludeFrom && options.excludeFrom.includes(message.characterId)) {
+                const isMessageAllThoughts = message.content.every(c => c.type === "thought");
+                const isMessageFromCharacter = message.characterId === character.id;
+                if (isMessageAllThoughts && !isMessageFromCharacter) {
+                    // skip messages that are all thoughts and not from the character themselves, as they are not relevant to the character's perspective
+                    // is probably equivalent to message.perspectiveMessageByCharacterId[character.id] being len 0 but whatever
+                    continue;
+                }
+                if (
+                    (
+                        (
+                            message.characterId &&
+                            options.excludeFrom &&
+                            options.excludeFrom.includes(message.characterId)
+                        ) || message.perspectiveMessageByCharacterId[character.id].length === 0
+                    )
+                ) {
                     continue;
                 }
 
@@ -340,7 +354,6 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     debug: false,
                     rejected: false,
                     storyMaster: true,
-                    hidden: false,
                     interactingCharacters: currentConversationObject.participants,
                     gid: `story-master-${currentConversationId}-interaction-info`,
                     emotion: null,

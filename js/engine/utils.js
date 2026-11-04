@@ -1413,8 +1413,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     before: savedPerspective,
                     after: null,
                 };
+
                 /**
-                 * @type {Array<DEConversationMessageDialogue | DEConversationMessageNarration>}
+                 * @type {Array<DEConversationMessageDialogue | DEConversationMessageNarration | DEConversationMessageThought>}
                  */
                 const perspectiveMessage = [];
 
@@ -1436,7 +1437,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                             ...dialogueOrNarration,
                             fragments: resultOfDialogueInPerspective.fragments,
                         });
-                    } else if (dialogueOrNarration.type === "narration") {
+                    } else if (dialogueOrNarration.type === "narration" || (dialogueOrNarration.type === "thought" && ((emitterChar && emitterChar.id === participantChar.id)) || !emitterChar)) {
                         /**
                          * @type {Array<DEConversationMessageNarrationFragment>}
                          */
