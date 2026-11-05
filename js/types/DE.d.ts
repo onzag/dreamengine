@@ -821,13 +821,37 @@ declare interface DEBondDeclaration {
      * 
      * You need to be explicit in each bond declaration if no sexual or romantic interactions should happen
      * in the bond description, otherwise the LLM may assume romantic/sexual interactions are allowed
+     * 
+     * Check out optional descriptionSurroundingNonConversing, descriptionNotSurrounding, descriptionSurroundingDead, descriptionNonSurroundingDead for more options to describe the bond in different contexts
+     * this description is only applicable when they are conversing otherwise the description will be empty, the more descriptions the more lifelike your character will be
      */
     description: DEStringTemplateCharAndOther;
     /**
-     * An additional description that gets injected into the general description by the bond system
-     * this is used for reasoning about the character relationships and what is possible
+     * An optional description that gets injected into the general description by the bond system when the other character is not conversing with this character
+     * this is useful for when the character is not participating in the current conversation but the other character is around
+     * 
+     * You might specify something like "{{char}} feels uneasy with {{other}}'s presence but does not want to say anything about it."
      */
-    bondAdditionalDescription?: DEStringTemplateCharAndOther;
+    descriptionSurroundingNonConversing?: DEStringTemplateCharAndOther;
+    /**
+     * An optional description that gets injected into the general description by the bond system when the other character is not around
+     * this is useful for when the character is not participating in the current conversation and the other character is not around
+     * 
+     * You might specify something like "{{char}} misses {{other}} and wishes they were here."
+     */
+    descriptionNotSurrounding?: DEStringTemplateCharAndOther;
+    /**
+     * An optional description that gets injected into the general description by the bond system when the other character is dead
+     * and present in the same location
+     * 
+     * It will fall back to descriptionNonSurroundingDead otherwise, if set
+     */
+    descriptionSurroundingDead?: DEStringTemplateCharAndOther;
+    /**
+     * An optional description that gets injected into the general description by the bond system when the other character is known
+     * to be dead but not present in the same location
+     */
+    descriptionNonSurroundingDead?: DEStringTemplateCharAndOther;
     /**
      * Used for descriptions of the character general bond state
      * get applied at system prompt level, per character that has this bond with this character
@@ -836,15 +860,6 @@ declare interface DEBondDeclaration {
      * {{char}} trusts {{other}} a lot and would do anything for {{format_object_pronoun other}}.
      */
     generalCharacterDescriptionInjection?: DEStringTemplateCharAndOther;
-    /**
-     * Used for descriptions of the character general bond state when the bond is an ex bond
-     * for the character has been removed from the story but the other character still exists
-     * get applied at system prompt level, per character that has this bond with this character
-     * mostly used for general information, eg.
-     * 
-     * {{char}} used to trust {{other}} a lot and be best friends but now {{other}} is gone and they feel sad about it.
-     */
-    generalCharacterDescriptionInjectionEx?: DEStringTemplateCharAndOther;
     /**
      * Description of intimacy
      */
@@ -1602,6 +1617,28 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          * "{{char}} is very cautious and takes time to build trust with others."
          */
         descriptionGeneralInjection: DEStringTemplateCharOnly | null;
+
+        /**
+         * A string template that describes generally how the character feels about the surrounding strangers
+         * this is used to inject into relationships, usually the title will be something like
+         * 
+         * <character-a:Stranger> (Other Surrounding Strangers)
+         * 
+         * or
+         * 
+         * <character-a,character-b,character-c:Everyone Else> (Other Surrounding Strangers)
+         * 
+         * And your description should be like
+         * 
+         * "{{char}} feels indifferent towards the surrounding strangers."
+         * 
+         * these strangers are non-interacting, basically just part of a crowd that the character doesn't know about and has had zero
+         * relationship or contact with ever.
+         * 
+         * You can even count the strangers by using DE.utils.characterInfo.getSurroundingCharacters and check for the total stranger count,
+         * you might want to use in perspective for an accurate list of what they actually see
+         */
+        totalStrangersBondDescription: DEStringTemplateCharAndOthers;
     };
 
     /**
@@ -2179,6 +2216,10 @@ declare interface DESingleBondDescription {
      * The names that the character knows the other character as, depends on introduction and how they introduce themselves
      */
     knowsAs: DECharacterBondIdentity[];
+    /**
+     * Whether the character knows (or believes) that the other character is dead
+     */
+    believesDead: boolean;
     /**
      * The time when this bond was created, this is used to determine how long the bond has been active and how it has evolved over time
      */
@@ -3642,6 +3683,20 @@ declare interface DEStringTemplateInfoCharAndOther {
     otherRelationship: string | null,
 }
 
+declare interface DEStringTemplateInfoCharAndOthers {
+    /**
+     * Available the character invoking the template
+     * Usually available, but in rare cases like in narration
+     * it may not be
+     */
+    char: DECompleteCharacterReference,
+
+    /**
+     * Only available in bond description templates
+     */
+    others: DECompleteCharacterReference[],
+}
+
 declare interface DEStringTemplateInfoCharAndItem {
     /**
      * Available the character invoking the template
@@ -3687,6 +3742,10 @@ declare type DEStringTemplateCharOnly = string | ((
 
 declare type DEStringTemplateCharAndOther = string | ((
     info: DEStringTemplateInfoCharAndOther
+) => Promise<string> | string);
+
+declare type DEStringTemplateCharAndOthers = string | ((
+    info: DEStringTemplateInfoCharAndOthers
 ) => Promise<string> | string);
 
 declare type DEStringTemplateCharAndItem = string | ((
@@ -4239,6 +4298,34 @@ declare interface DESocialGroupInPerspective {
     otherGroups: Array<Array<DECharacterPerspectiveCharacter>>;
 }
 
+declare interface DESurroundingCharacters {
+    location: string;
+    /**
+     * Conversing with the character, in person
+     */
+    conversing: string[];
+    /**
+     * Conversing with the character, but remotely, through a communicator
+     */
+    remotelyConversing: string[];
+    /**
+     * Known to the character in perspective but not conversing with them
+     */
+    knownAndNonConversing: string[];
+    /**
+     * Bunch of strangers that are around the character in perspective, but not conversing with them
+     */
+    totalStrangersSurroundingAndNonConversing: string[];
+    /**
+     * Dead characters that are known
+     */
+    deadKnownSomewhat: string[];
+    /**
+     * Dead characters that are not known
+     */
+    deadTotalStrangers: string[];
+}
+
 declare interface DEUtils {
     engine: {
         informUpdate: () => void;
@@ -4438,7 +4525,7 @@ declare interface DEUtils {
         getPreviousConversationAndMessageForCharacter(character: DECompleteCharacterReference | string, conversation: DEConversation | string, message: string | DEConversationMessage): Promise<{ conversation: DEConversation | null, message: DEConversationMessage | null }>;
         getNextConversationAndMessageForCharacter(character: DECompleteCharacterReference | string, conversation: DEConversation | string, message: string | DEConversationMessage): Promise<{ conversation: DEConversation | null, message: DEConversationMessage | null }>;
         getConversation(conversationId: DEConversation | string): Promise<DEConversation | null>;
-        getAllConversationsAtLocation(locationId: DELocation | string): Promise<{conversations: DEConversation[], leftoverCharacters: string[], foundCharacters: string[]}>; // leftoverCharacters are characters that are at the location but not in any conversation
+        getAllConversationsAtLocation(locationId: DELocation | string): Promise<{ conversations: DEConversation[], leftoverCharacters: string[], foundCharacters: string[] }>; // leftoverCharacters are characters that are at the location but not in any conversation
         addMessageToConversation(conversationId: DEConversation | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects" | "perspectiveMessageByCharacterId" | "perspectiveByCharacterId">, options: { unsafeMode?: boolean } = {}): Promise<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>;
         addMessageIntoCharactersConversation(targetCharacterId: DECompleteCharacterReference | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects" | "perspectiveMessageByCharacterId" | "perspectiveByCharacterId">, options?: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean, messageCommunicator?: { type: "new" | "inherit" | "remove"; communicatorName?: string; communicatorItemId?: string; } }): Promise<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>;
         /**
@@ -4455,6 +4542,7 @@ declare interface DEUtils {
         newConversation(conversation: Pick<DEConversation, "participants" | "communicators" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean } = {}): Promise<DEConversation>;
     },
     characterInfo: {
+        getSurroundingCharacters(char: DECompleteCharacterReference | string, inPerspective: boolean): Promise<DESurroundingCharacters>;
         getPerspective(char: DECompleteCharacterReference | string): Promise<DECharacterPerspective>;
         getStoredPerspective(perspectiveId: string): Promise<DECharacterPerspective | null>;
         /** Group directly carried items by equality ignoring ids, returning the first item and count for each group. */
@@ -4476,6 +4564,7 @@ declare interface DEUtils {
         };
         /** Resolve character visibility using location, sensory resolution and awareness of conversation partners or carriers. */
         canSeeCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf?: DECompleteCharacterReference | string | null): DEVisibility;
+        getInternalDescriptionOfCharacter(char: DECompleteCharacterReference | string): Promise<DEInternalDescriptionOfCharacter>;
         getExternalDescriptionOfCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf: DECompleteCharacterReference | string, onlyBasics?: boolean, hideCurrentPosture?: boolean): Promise<string>;
         getExternalDescriptionOfCharacterLocationSpecifics(char: DECompleteCharacterReference | string, inPerspectiveOf: DECompleteCharacterReference | string, hideCurrentPosture?: boolean, noName?: boolean): string;
 
@@ -4899,6 +4988,36 @@ declare interface DEWorldRule {
     rule: DEStringTemplateCharOnly;
 }
 
+declare interface DEInternalDescriptionOfCharacterActiveState {
+    /**
+     * The calculated dominance value of the state, which determines its influence on the character's behavior and narrative.
+     */
+    calculatedDominance: number;
+    /**
+     * The text to be injected that refers to the state, if it passed the dominance threshold or ignores it with ignoreDominanceForStateInjectionAndAlwaysInject, otherwise null
+     */
+    injection: string | null;
+    /**
+     * Human-readable labels for the active state (e.g. "Very Hungry"), filtered by dominance.
+     * only dominant ones or those that ignore dominance are included here
+     * 
+     * Only if the state is dominant or ignores dominance with ignoreDominanceForStateInjectionAndAlwaysInject, otherwise null
+     */
+    expressive: string | null;
+    /**
+     * The state information about the applying state, including its definition and any relevant metadata.
+     */
+    applyingState: DEApplyingState;
+    /**
+     * The definition of the character state, including its properties and effects.
+     */
+    stateInfo: DECharacterStateDefinition;
+    /**
+     * The action prompt injection associated with this state, if it passed the dominance threshold or ignores it with ignoreDominanceForActionPromptInjectionAndAlwaysInject, otherwise null
+     */
+    actions: DEActionPromptInjection<DEStringTemplateCharAndCauses>[] | null;
+}
+
 declare interface DEInternalDescriptionOfCharacter {
     /**
      * The general description of the character that is given by general
@@ -4908,35 +5027,7 @@ declare interface DEInternalDescriptionOfCharacter {
     general: string;
 
     /** Active states, all of them, unfiltered */
-    activeStates: Array<{
-        /**
-         * The calculated dominance value of the state, which determines its influence on the character's behavior and narrative.
-         */
-        calculatedDominance: number;
-        /**
-         * The text to be injected that refers to the state, if it passed the dominance threshold or ignores it with ignoreDominanceForStateInjectionAndAlwaysInject, otherwise null
-         */
-        injection: string | null;
-        /**
-         * Human-readable labels for the active state (e.g. "Very Hungry"), filtered by dominance.
-         * only dominant ones or those that ignore dominance are included here
-         * 
-         * Only if the state is dominant or ignores dominance with ignoreDominanceForStateInjectionAndAlwaysInject, otherwise null
-         */
-        expressive: string | null;
-        /**
-         * The state information about the applying state, including its definition and any relevant metadata.
-         */
-        applyingState: DEApplyingState;
-        /**
-         * The definition of the character state, including its properties and effects.
-         */
-        stateInfo: DECharacterStateDefinition;
-        /**
-         * The action prompt injection associated with this state, if it passed the dominance threshold or ignores it with ignoreDominanceForActionPromptInjectionAndAlwaysInject, otherwise null
-         */
-        action: DEActionPromptInjection<DEStringTemplateCharAndCauses> | null;
-    }>;
+    activeStates: Array<DEInternalDescriptionOfCharacterActiveState>;
 
     /**
      * The highest dominance value among all currently active states.
@@ -5086,31 +5177,31 @@ declare type DEConversationLocationMatch = DEConversation["locations"][string] &
 };
 
 declare interface DEDatabaseConversationFns {
-    getConversation(conversationId: string): Promise<DEConversation|null>;
+    getConversation(conversationId: string): Promise<DEConversation | null>;
     /**
      * Search every participant's recorded location/slot names in charId's conversations.
      * Partial matching ignores case, accents, punctuation and spacing; empty searches return [].
      * Newest first, one row per conversation and participant, retaining repeated locations.
      */
     getPossibleLocationsCharKnowsAlikeTo(charId: string, locationOrSlotName: string): Promise<DEConversationLocationMatch[]>;
-    getConversationMessage(messageId: string): Promise<DEConversationMessage|null>;
-    newConversation(conversation: Omit<DEConversation, "id">): Promise<DEConversation|null>;
-    newConversationMessage(conversationId: string, message: Omit<DEConversationMessage, "id" | "isProcessingSideEffects">): Promise<DEConversationMessage|null>;
+    getConversationMessage(messageId: string): Promise<DEConversationMessage | null>;
+    newConversation(conversation: Omit<DEConversation, "id">): Promise<DEConversation | null>;
+    newConversationMessage(conversationId: string, message: Omit<DEConversationMessage, "id" | "isProcessingSideEffects">): Promise<DEConversationMessage | null>;
     /** Update supplied fields without changing the conversation's ID or messages. */
-    updateConversation(conversationId: string, conversation: Partial<Omit<DEConversation, "id" | "messages">>): Promise<DEConversation|null>;
+    updateConversation(conversationId: string, conversation: Partial<Omit<DEConversation, "id" | "messages">>): Promise<DEConversation | null>;
     /** Update supplied fields without changing the message's ID or insertion order. */
-    updateConversationMessage(messageId: string, message: Partial<Omit<DEConversationMessage, "id">>): Promise<DEConversationMessage|null>;
+    updateConversationMessage(messageId: string, message: Partial<Omit<DEConversationMessage, "id">>): Promise<DEConversationMessage | null>;
 }
 
 declare interface DEDatabaseHistoricStateFns {
     /** Stored activation age plus snapshots since that state, counting the matching snapshot; -1 if absent. */
     getHistoricStateActivationCyclesAgo(charId: string, state: string): Promise<number>;
     storeHistoricState(charId: string, state: DEStateForCharacter): Promise<void>;
-    getFirstHistoricStateWithCharacter(charId: string, otherCharId: string): Promise<DEStateForCharacter|null>;
+    getFirstHistoricStateWithCharacter(charId: string, otherCharId: string): Promise<DEStateForCharacter | null>;
     /** Newest first; partial name matching ignores case, accents, punctuation and spacing. */
     getFirstNHistoricStatesWithCharacterName(charId: string, matches: number, otherCharacterName: string): Promise<DEStateForCharacter[]>;
-    getFirstHistoricStateWithState(charId: string, state: string): Promise<DEStateForCharacter|null>;
-    getFirstHistoricStateWithItem(charId: string, itemId: string): Promise<DEStateForCharacter|null>;
+    getFirstHistoricStateWithState(charId: string, state: string): Promise<DEStateForCharacter | null>;
+    getFirstHistoricStateWithItem(charId: string, itemId: string): Promise<DEStateForCharacter | null>;
     /** Newest first; partial name matching ignores case, accents, punctuation and spacing. */
     getFirstNHistoricStatesWithItemName(charId: string, matches: number, itemName: string): Promise<DEStateForCharacter[]>;
 }

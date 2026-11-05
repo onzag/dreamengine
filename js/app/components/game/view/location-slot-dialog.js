@@ -21,7 +21,7 @@ export class LocationSlotDialog extends IdentifierDetail {
         const id = this.getAttribute('identifier-id') || '';
         const slot = getPerspectiveIndex(perspective).slots.get(id);
         if (!slot) return [];
-        return [{ title: 'Location slot in perspective', value: slot }];
+        return [{ title: 'Location slot in perspective (at the time) (User\'s perspective)', value: slot }];
     }
 }
 customElements.define('app-game-location-slot-dialog', LocationSlotDialog);

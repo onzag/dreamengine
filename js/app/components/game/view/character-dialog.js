@@ -23,12 +23,21 @@ export class CharacterDialog extends IdentifierDetail {
         const id = this.getAttribute('identifier-id') || '';
         const character = getPerspectiveIndex(perspective).characters.get(id);
         if (!character) return [];
-        const characterInternalPrompt = 
+        const characterInternalDescription = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'characterInfo', 'getInternalDescriptionOfCharacter'], call: [id]});
+        const characterSurrounding = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'characterInfo', 'getSurroundingCharacters'], call: [id, true]});
         return [
             {
-                title: 'Character in perspective',
+                title: 'Character in perspective (at the time) (User\'s perspective)',
                 value: character,
-            }
+            },
+            {
+                title: "Surrounding Perspective Characters (realtime) (Character's perspective)",
+                value: characterSurrounding,
+            },
+            {
+                title: 'Character internal description (realtime) (Character\'s perspective)',
+                value: characterInternalDescription,
+            },
         ];
     }
 }

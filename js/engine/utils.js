@@ -1727,6 +1727,10 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     characterInfo: {
+        getSurroundingCharacters(char, inPerspective) {
+            const character = requireCharacter(DE, char);
+            return getSurroundingCharacters(DE, character.id, inPerspective);
+        },
         getPerspective(char) {
             const character = requireCharacter(DE, char);
             return getPerspective(DE, character);
@@ -2360,6 +2364,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     createdAt: DE.currentTime,
                     knowsAs: [],
                     stranger: true,
+                    believesDead: false,
                     undoableShifts: {},
                 };
                 DE.bonds[char1Ref.id].active.push(bond);

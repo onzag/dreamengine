@@ -21,7 +21,7 @@ export class ItemDialog extends IdentifierDetail {
         const id = this.getAttribute('identifier-id') || '';
         const context = getItemTreeContext(perspective);
         const node = loadItemNode(id, context, true);
-        return [{ title: 'Item in perspective', value: node.item }];
+        return [{ title: 'Item in perspective (at the time) (User\'s perspective)', value: node.item }];
     }
 }
 customElements.define('app-game-item-dialog', ItemDialog);

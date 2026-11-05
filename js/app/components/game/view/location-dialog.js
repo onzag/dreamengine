@@ -14,7 +14,7 @@ export class LocationDialog extends IdentifierDetail {
 
     /** @param {DECharacterPerspective} perspective */
     getDebugSections(perspective) {
-        return [{ title: 'Location in perspective', value: perspective.ownLocation }];
+        return [{ title: 'Location in perspective (at the time) (User\'s perspective)', value: perspective.ownLocation }];
     }
 }
 customElements.define('app-game-location-dialog', LocationDialog);

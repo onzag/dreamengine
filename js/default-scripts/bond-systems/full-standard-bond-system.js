@@ -6,9 +6,11 @@
  * @typedef {Object} FSSBase
  * @property {DEStringTemplateCharAndOther} description The template to use for this bond definition, should include {{char}} and {{other}} as placeholders and {{other_family_relation}} if family ties are relevant
  * @property {DEStringTemplateCharAndOther} relationshipName The relationship name, should be one word, eg. friend, lover, colleague, etc... this is used for reasoning about the relationship and for the character to refer to the other character in the relationship, for example, if the relationship name is "friend", the character may refer to the other character as "my friend" or just "friend" when talking about them
- * @property {DEStringTemplateCharAndOther} [bondAdditionalDescription] additional description to be added to the bond description
  * @property {DEStringTemplateCharAndOther} [generalCharacterDescriptionInjection] A template that can be injected into the general character description when this bond declaration is active, it will have access to the same variables as the description, but it is meant to be a smaller piece of text that can be added to the general description when relevant, instead of being the main description of the bond level.
- * @property {DEStringTemplateCharAndOther} [generalCharacterDescriptionInjectionEx] Similar to generalCharacterDescriptionInjection but it will only be injected in the general character description and not in the bond description, this is useful for cases where the information is relevant for the character description but not for the bond description, for example if you want to add a sentence about how the character's family relationship with the other character affects their behavior towards them, you might want that to be in the general description injection but not in the bond description, since the bond description might be focused on romantic feelings and the family relationship might not be relevant for that.
+ * @property {DEStringTemplateCharAndOther} [descriptionSurroundingNonConversing] An optional description injected when the other character is present but not conversing with this character
+ * @property {DEStringTemplateCharAndOther} [descriptionNotSurrounding] An optional description injected when the other character is not around
+ * @property {DEStringTemplateCharAndOther} [descriptionSurroundingDead] An optional description injected when the other character is dead and present in the same location
+ * @property {DEStringTemplateCharAndOther} [descriptionNonSurroundingDead] An optional description injected when the other character is known to be dead but not present
  * @property {(char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<DEOpenToIntimacyResponse>} openToAffection
  * @property {(char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<DEOpenToIntimacyResponse>} openToIntimateAffection
  * @property {(char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<DEOpenToIntimacyResponse>} openToSex
@@ -92,6 +94,8 @@
  * @property {FSSLoveDefinitionNoFamily} strangerBad_n100_n5
  * @property {FSSLoveDefinitionNoFamily} strangerNeutral_n5_5
  * @property {FSSLoveDefinitionNoFamily} strangerGood_5_100
+ * 
+ * @property {DEStringTemplateCharAndOthers} totalStrangersBondDescription
  */
 
 /**
@@ -121,6 +125,8 @@
  * @property {FSSCreepyLoveDefinitionNoFamily} strangerBad_n100_n5
  * @property {FSSCreepyLoveDefinitionNoFamily} strangerNeutral_n5_5
  * @property {FSSCreepyLoveDefinitionNoFamily} strangerGood_5_100
+ * 
+ * @property {DEStringTemplateCharAndOthers} totalStrangersBondDescription
  */
 
 
@@ -315,6 +321,7 @@ engine.exports = {
                 closeFriend: 35,
                 bestFriend: 50,
             },
+            totalStrangersBondDescription: options.totalStrangersBondDescription,
             neutralInteractionBondChange: valueOrDefault(options.neutralInteractionBondChange, 0.5), // number to add on a bond on a neutral interaction, does not apply to anything above bond graduation of unfriendly or friend, it maxes there
         };
 
@@ -370,9 +377,11 @@ engine.exports = {
                             max2BondLevel: secondaryMax,
                             strangerBond: isStranger,
                             familyBond: familyStatus === "family",
-                            bondAdditionalDescription: baseRule.bondAdditionalDescription,
                             generalCharacterDescriptionInjection: baseRule.generalCharacterDescriptionInjection,
-                            generalCharacterDescriptionInjectionEx: baseRule.generalCharacterDescriptionInjectionEx,
+                            descriptionSurroundingNonConversing: baseRule.descriptionSurroundingNonConversing,
+                            descriptionNotSurrounding: baseRule.descriptionNotSurrounding,
+                            descriptionSurroundingDead: baseRule.descriptionSurroundingDead,
+                            descriptionNonSurroundingDead: baseRule.descriptionNonSurroundingDead,
                             intimacy: {
                                 openToAffection: baseRule.openToAffection,
                                 openToIntimateAffection: baseRule.openToIntimateAffection,

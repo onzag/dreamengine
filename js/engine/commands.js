@@ -416,6 +416,7 @@ export const commands = {
                     stranger: true,
                     createdAt: engine.deObject.currentTime,
                     knowsAs: [],
+                    believesDead: false,
                     undoableShifts: {},
                 });
                 return `No active bond found from "${characterId}" towards "${otherCharacterId}". A new bond has been created with the specified bond value.`;
@@ -459,6 +460,7 @@ export const commands = {
                     stranger: true,
                     createdAt: engine.deObject.currentTime,
                     knowsAs: [],
+                    believesDead: false,
                     undoableShifts: {},
                 });
                 return `No active bond found from "${characterId}" towards "${otherCharacterId}". A new bond has been created with the specified bond2 value.`;
@@ -502,6 +504,7 @@ export const commands = {
                     stranger: strangerValue,
                     createdAt: engine.deObject.currentTime,
                     knowsAs: [],
+                    believesDead: false,
                     undoableShifts: {},
                 });
                 return `No active bond found from "${characterId}" towards "${otherCharacterId}". A new bond has been created with the specified stranger value.`;
@@ -555,6 +558,7 @@ export const commands = {
                         nickname: isNicknameValue,
                         primary: isPrimaryNameValue,
                     }],
+                    believesDead: false,
                     undoableShifts: {},
                 });
                 return `No active bond found from "${characterId}" towards "${otherCharacterId}". A new bond has been created with the specified knowsName value.`;

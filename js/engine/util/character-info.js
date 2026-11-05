@@ -353,53 +353,74 @@ export function isBottomNaked(deObject, characterId) {
 /**
  * @param {DEObject} deObject
  * @param {string} characterId
- * @returns {{
- *   location: string,
- *   nonStrangers: string[],
- *   totalStrangers: string[],
- *   deadNonStrangers: string[],
- *   deadTotalStrangers: string[],
- * }}
+ * @param {boolean} inPerspective
+ * @returns {Promise<DESurroundingCharacters>}
  */
-export function getSurroundingCharacters(deObject, characterId) {
+export async function getSurroundingCharacters(deObject, characterId, inPerspective) {
     const charState = deObject.stateFor[characterId];
     if (!charState) {
         throw new Error(`Character ${characterId} not found in engine state.`);
     }
 
-    const location = charState.location;
-    const locationState = deObject.world.locations[location];
-    const nonStrangers = [];
-    const totalStrangers = [];
-    const deadNonStrangers = [];
-    const deadTotalStrangers = [];
+    /**
+     * @type {DESurroundingCharacters}
+     */
+    const result = {
+        deadKnownSomewhat: [],
+        deadTotalStrangers: [],
+        conversing: [],
+        knownAndNonConversing: [],
+        remotelyConversing: [],
+        location: charState.location,
+        totalStrangersSurroundingAndNonConversing: [],
+    }
+
     for (const charToCheck in deObject.stateFor) {
         const charStateToCheck = deObject.stateFor[charToCheck];
-        if (charStateToCheck.location !== location || charToCheck === characterId) {
+        if (charStateToCheck.location !== charState.location || charToCheck === characterId) {
             continue;
         }
+
+        if (inPerspective) {
+            const canSeeThem = deObject.utils.characterInfo.canSeeCharacter(charToCheck, characterId);
+            if (canSeeThem === "invisible") {
+                continue;
+            }
+        }
+
+        const isConversing = deObject.stateFor[characterId].conversationId === deObject.stateFor[charToCheck].conversationId;
         if (deObject.bonds[characterId].active.find(b => b.towards === charToCheck) || deObject.bonds[characterId].ex.find(b => b.towards === charToCheck)) {
             if (charStateToCheck.dead) {
-                deadNonStrangers.push(charToCheck);
+                result.deadKnownSomewhat.push(charToCheck);
+            } else if (!isConversing) {
+                result.knownAndNonConversing.push(charToCheck);
             } else {
-                nonStrangers.push(charToCheck);
+                result.conversing.push(charToCheck);
             }
         } else {
             if (charStateToCheck.dead) {
-                deadTotalStrangers.push(charToCheck);
+                result.deadTotalStrangers.push(charToCheck);
+            } else if (!isConversing) {
+                result.totalStrangersSurroundingAndNonConversing.push(charToCheck);
             } else {
-                totalStrangers.push(charToCheck);
+                result.conversing.push(charToCheck);
             }
         }
     }
 
-    return {
-        location,
-        nonStrangers,
-        totalStrangers,
-        deadTotalStrangers,
-        deadNonStrangers,
-    };
+    if (deObject.stateFor[characterId].conversationId) {
+        const conversationInfo = await deObject.database.getConversation(deObject.stateFor[characterId].conversationId);
+        if (conversationInfo) {
+            for (const participant of conversationInfo.participants) {
+                if (participant !== characterId && !result.conversing.includes(participant)) {
+                    // I mean it must be a remote one if it didn't show up in the local environment
+                    result.remotelyConversing.push(participant);
+                }
+            }
+        }
+    }
+
+    return result;
 }
 
 /**
@@ -1798,7 +1819,22 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
         throw new Error(`Character state for ${characterId} not found.`);
     }
 
-    let general = typeof character.general === "string" ? character.general : await character.general({
+    const selfName = deObject.utils.templates.formatCharacterName(character, character);
+
+    /**
+     * @type {DEInternalDescriptionOfCharacter}
+     */
+    const finalResult = {
+        general: "",
+        actions: [],
+        activeStates: [],
+        dislikes: [],
+        likes: [],
+        relationships: [],
+        stateDominance: 0,
+    }
+
+    finalResult.general = typeof character.general === "string" ? character.general : await character.general({
         char: character,
     });
 
@@ -1807,122 +1843,102 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
             char: character,
         });
         if (injectableV) {
-            if (!general.endsWith("\n\n")) {
-                general += "\n\n";
+            if (!finalResult.general.endsWith("\n\n")) {
+                finalResult.general += "\n\n";
             }
-            general += injectableV;
+            finalResult.general += injectableV;
         }
     }
 
-    let maxStateDominance = 0;
     for (const state of characterState.states) {
         const stateInfo = character.stateDefinitions[state.state];
         let dominanceOfThisState = stateInfo.dominance;
         if (state.relieving && typeof stateInfo.dominanceAfterRelief === "number") {
             dominanceOfThisState = stateInfo.dominanceAfterRelief;
         }
-        if (dominanceOfThisState > maxStateDominance) {
-            maxStateDominance = dominanceOfThisState;
+        if (dominanceOfThisState > finalResult.stateDominance) {
+            finalResult.stateDominance = dominanceOfThisState;
         }
     }
 
-    /**
-     * @type {string[]}
-     */
-    const expressiveStates = [];
-    /**
-     * @type {string[]}
-     */
-    const stateInjections = [];
-
-    /**
-     * @type {Array<{
-     *   applyingState: DEApplyingState,
-     *   action: DEActionPromptInjection<DEStringTemplateCharAndCauses>,
-     *   stateInfo: DECharacterStateDefinition,
-     * } | {
-     *   applyingState: null,
-     *   action: DEActionPromptInjection<DEStringTemplateCharOnly>,
-     *   stateInfo: null,
-     * }>}
-     */
-    const actions = [];
-
-    /**
-    * @type {Array<{
-    *   applyingState: DEApplyingState,
-    *   stateInfo: DECharacterStateDefinition,
-    * }>}
-    */
-    const activeStates = [];
-    
     for (const injectable of character.actionPromptInjection) {
-        actions.push({
-            applyingState: null,
-            action: injectable,
-            stateInfo: null,
-        });
+        finalResult.actions.push(injectable);
     }
     for (const state of characterState.states) {
         const stateInfo = character.stateDefinitions[state.state];
 
-        let dominanceOfThisState = stateInfo.dominance;
-        if (state.relieving && typeof stateInfo.dominanceAfterRelief === "number") {
-            dominanceOfThisState = stateInfo.dominanceAfterRelief;
-        }
+        /**
+         * @type {DEInternalDescriptionOfCharacterActiveState}
+         */
+        const activeStateToAdd = {
+            actions: null,
+            applyingState: state,
+            stateInfo,
+            calculatedDominance: state.relieving && typeof stateInfo.dominanceAfterRelief === "number" ? stateInfo.dominanceAfterRelief : stateInfo.dominance,
+            expressive: null,
+            injection: null,
+        };
 
-        if (dominanceOfThisState >= maxStateDominance || stateInfo.ignoreDominanceForActionPromptInjectionAndAlwaysInject) {
+        if (activeStateToAdd.calculatedDominance >= finalResult.stateDominance || stateInfo.ignoreDominanceForActionPromptInjectionAndAlwaysInject) {
             const origin = state.relieving ? stateInfo.relievingActionPromptInjection : stateInfo.actionPromptInjection;
             if (origin) {
+                activeStateToAdd.actions = [];
                 for (const actionPromptInjectable of origin) {
-                    actions.push({
-                        applyingState: state,
-                        action: actionPromptInjectable,
-                        stateInfo,
-                    });
+                    activeStateToAdd.actions.push(actionPromptInjectable);
                 }
             }
         }
 
-        const stateNameForDescriptions = state.state.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
-
-        if (dominanceOfThisState >= maxStateDominance || stateInfo.ignoreDominanceForStateInjectionAndAlwaysInject) {
+        if (activeStateToAdd.calculatedDominance >= finalResult.stateDominance || stateInfo.ignoreDominanceForStateInjectionAndAlwaysInject) {
             let stateDescriptionForInjection = "";
             if (!state.relieving) {
                 if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
                     const roundedLevel = Math.round(state.intensity);
                     if (roundedLevel === 0) {
-                        stateDescriptionForInjection = `${character.name} is currently slightly ${stateNameForDescriptions}\n\n`;
+                        stateDescriptionForInjection = `${selfName} is currently slightly ${state.state}\n\n`;
+                        activeStateToAdd.expressive = `Slightly ${state.state}`;
                     } else if (roundedLevel === 1) {
-                        stateDescriptionForInjection = `${character.name} is currently ${stateNameForDescriptions}\n\n`;
+                        stateDescriptionForInjection = `${selfName} is currently ${state.state}\n\n`;
+                        activeStateToAdd.expressive = `${state.state}`;
                     } else if (roundedLevel === 2) {
-                        stateDescriptionForInjection = `${character.name} is currently very ${stateNameForDescriptions}\n\n`;
+                        stateDescriptionForInjection = `${selfName} is currently very ${state.state}\n\n`;
+                        activeStateToAdd.expressive = `Very ${state.state}`;
                     } else if (roundedLevel === 3) {
-                        stateDescriptionForInjection = `${character.name} is currently extremely ${stateNameForDescriptions}\n\n`;
+                        stateDescriptionForInjection = `${selfName} is currently extremely ${state.state}\n\n`;
+                        activeStateToAdd.expressive = `Extremely ${state.state}`;
                     } else if (roundedLevel === 4) {
-                        stateDescriptionForInjection = `${character.name} is currently overwhelmingly ${stateNameForDescriptions}\n\n`;
+                        stateDescriptionForInjection = `${selfName} is currently overwhelmingly ${state.state}\n\n`;
+                        activeStateToAdd.expressive = `Overwhelmingly ${state.state}`;
                     } else {
-                        stateDescriptionForInjection = `${character.name} is currently ${stateNameForDescriptions}\n\n`;
+                        stateDescriptionForInjection = `${selfName} is currently ${state.state}\n\n`;
+                        activeStateToAdd.expressive = `${state.state}`;
                     }
                 } else if (stateInfo.behaviourType === "BINARY") {
-                    stateDescriptionForInjection = `${character.name} is currently ${stateNameForDescriptions}\n\n`;
+                    stateDescriptionForInjection = `${selfName} is currently ${state.state}\n\n`;
+                    activeStateToAdd.expressive = `${state.state}`;
                 }
             } else {
                 if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
                     const roundedLevel = Math.round(state.intensity);
                     if (roundedLevel === 0) {
-                        stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still slightly ${stateNameForDescriptions}\n\n`;
+                        stateDescriptionForInjection = `${selfName} is currently relieving from being ${state.state}, nonetheless still slightly ${state.state}\n\n`;
+                        activeStateToAdd.expressive = `Relieving from being ${state.state}, nonetheless still Slightly ${state.state}`;
                     } else if (roundedLevel === 1) {
-                        stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still ${stateNameForDescriptions}\n\n`;
+                        stateDescriptionForInjection = `${selfName} is currently relieving from being ${state.state}, nonetheless still ${state.state}\n\n`;
+                        activeStateToAdd.expressive = `Relieving from being ${state.state}, nonetheless still ${state.state}`;
                     } else if (roundedLevel === 2) {
-                        stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still very ${stateNameForDescriptions}\n\n`;
+                        stateDescriptionForInjection = `${selfName} is currently relieving from being ${state.state}, nonetheless still very ${state.state}\n\n`;
+                        activeStateToAdd.expressive = `Relieving from being ${state.state}, nonetheless still Very ${state.state}`;
                     } else if (roundedLevel === 3) {
-                        stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still extremely ${stateNameForDescriptions}\n\n`;
+                        stateDescriptionForInjection = `${selfName} is currently relieving from being ${state.state}, nonetheless still extremely ${state.state}\n\n`;
+                        activeStateToAdd.expressive = `Relieving from being ${state.state}, nonetheless still Extremely ${state.state}`;
                     } else if (roundedLevel === 4) {
-                        stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still overwhelmingly ${stateNameForDescriptions}\n\n`;
+                        stateDescriptionForInjection = `${selfName} is currently relieving from being ${state.state}, nonetheless still overwhelmingly ${state.state}\n\n`;
+                        activeStateToAdd.expressive = `Relieving from being ${state.state}, nonetheless still Overwhelmingly ${state.state}`;
                     }
                 } else if (stateInfo.behaviourType === "BINARY") {
-                    stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still ${stateNameForDescriptions}\n\n`;
+                    stateDescriptionForInjection = `${selfName} is currently relieving from being ${state.state}, nonetheless still ${state.state}\n\n`;
+                    activeStateToAdd.expressive = `Relieving from being ${state.state}, nonetheless still ${state.state}`;
                 }
             }
 
@@ -1938,98 +1954,79 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
                 }
             }
 
-            if (stateDescriptionForInjection) {
-                stateInjections.push(stateDescriptionForInjection.trimEnd());
-            }
+            stateDescriptionForInjection = stateDescriptionForInjection.trimEnd()
 
-            activeStates.push({
-                applyingState: state,
-                stateInfo,
-            })
+            if (stateDescriptionForInjection) {
+                activeStateToAdd.injection = stateDescriptionForInjection;
+            }
         }
 
-        if (dominanceOfThisState >= maxStateDominance || stateInfo.ignoreDominanceForGeneralCharacterDescriptionAndAlwaysInject) {
-            let stateDescription = null;
+        if (activeStateToAdd.calculatedDominance >= finalResult.stateDominance || stateInfo.ignoreDominanceForGeneralCharacterDescriptionAndAlwaysInject) {
             if (!state.relieving) {
-                if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
-                    const roundedLevel = Math.round(state.intensity);
-                    if (roundedLevel === 0) {
-                        stateDescription = `Slightly ${stateNameForDescriptions}`;
-                    } else if (roundedLevel === 1) {
-                        stateDescription = `${stateNameForDescriptions}`;
-                    } else if (roundedLevel === 2) {
-                        stateDescription = `Very ${stateNameForDescriptions}`;
-                    } else if (roundedLevel === 3) {
-                        stateDescription = `Extremely ${stateNameForDescriptions}`;
-                    } else if (roundedLevel === 4) {
-                        stateDescription = `Overwhelmingly ${stateNameForDescriptions}`;
-                    } else {
-                        stateDescription = `${stateNameForDescriptions}`;
-                    }
-                } else if (stateInfo.behaviourType === "BINARY") {
-                    stateDescription = `${stateNameForDescriptions}`;
-                }
-
                 if (stateInfo.relievingGeneralCharacterDescriptionInjection) {
                     const relievingInjection = typeof stateInfo.relievingGeneralCharacterDescriptionInjection === "string" ? stateInfo.relievingGeneralCharacterDescriptionInjection : (await stateInfo.relievingGeneralCharacterDescriptionInjection({
                         char: character,
                         causes: state.causes,
                     })).trim();
                     if (relievingInjection) {
-                        if (!general.endsWith("\n\n")) {
-                            general += "\n\n";
+                        if (!finalResult.general.endsWith("\n\n")) {
+                            finalResult.general += "\n\n";
                         }
-                        general += relievingInjection;
+                        finalResult.general += relievingInjection;
                     }
                 }
             } else {
-                if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
-                    const roundedLevel = Math.round(state.intensity);
-                    if (roundedLevel === 0) {
-                        stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still Slightly ${stateNameForDescriptions}`;
-                    } else if (roundedLevel === 1) {
-                        stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still ${stateNameForDescriptions}`;
-                    } else if (roundedLevel === 2) {
-                        stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still Very ${stateNameForDescriptions}`;
-                    } else if (roundedLevel === 3) {
-                        stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still Extremely ${stateNameForDescriptions}`;
-                    } else {
-                        stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still Overwhelmingly ${stateNameForDescriptions}`;
-                    }
-                } else if (stateInfo.behaviourType === "BINARY") {
-                    stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still ${stateNameForDescriptions}`;
-                }
-
                 if (stateInfo.generalCharacterDescriptionInjection) {
                     const injection = typeof stateInfo.generalCharacterDescriptionInjection === "string" ? stateInfo.generalCharacterDescriptionInjection : (await stateInfo.generalCharacterDescriptionInjection({
                         char: character,
                         causes: state.causes,
                     })).trim();
                     if (injection) {
-                        if (!general.endsWith("\n\n")) {
-                            general += "\n\n";
+                        if (!finalResult.general.endsWith("\n\n")) {
+                            finalResult.general += "\n\n";
                         }
-                        general += injection;
+                        finalResult.general += injection;
                     }
                 }
-            }
-
-            if (stateDescription) {
-                expressiveStates.push(stateDescription);
             }
         }
     }
 
+    // no perspective, we are checking for actual reality of total strangers
+    const surroundingChars = await getSurroundingCharacters(deObject, characterId, false);
+    const perspectiveSurroundingChars = await getSurroundingCharacters(deObject, characterId, true);
+
     const bonds = deObject.bonds[characterId];
 
-    /**
-     * @type {Array<{title: string; description: string;}>}
-     */
-    const relationships = [];
+    const allBondsToConsider = [...bonds.active, ...bonds.ex];
 
-    const selfRef = getNameIdentificationForOneCharacterTowardsAnother(deObject, character, character);
+    const conversingChars = [...surroundingChars.conversing, ...surroundingChars.remotelyConversing];
+    for (const charId of conversingChars) {
+        if (!allBondsToConsider.some(bond => bond.towards === charId)) {
+            // must be a stranger, we want to add it
+            // make a fake bond for it
+            allBondsToConsider.push({
+                towards: charId,
+                bond: 0,
+                bond2: 0,
+                stranger: true,
+                knowsAs: [],
+                believesDead: false,
+                createdAt: {
+                    time: 0,
+                    dayOfMonth: 0,
+                    dayOfWeek: 0,
+                    hourOfDay: 0,
+                    minuteOfHour: 0,
+                    monthOfYear: 0,
+                    year: 0,
+                },
+                undoableShifts: {},
+            });
+        }
+    }
 
-    for (const activeBond of bonds.active) {
+    for (const activeBond of allBondsToConsider) {
         if (!character.bonds) {
             console.error(`Character ${characterId} has no bonds defined.`);
             continue;
@@ -2043,19 +2040,22 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
         const familyRelationship = getFamilyBondRelation(character, otherCharacter);
         const generalRelationship = await getRelationship(deObject, character, otherCharacter);
         if (bondDeclaration) {
-            let result = typeof bondDeclaration.description === "string" ? bondDeclaration.description : (await bondDeclaration.description({
-                char: character,
-                other: deObject.characters[activeBond.towards],
-                otherFamilyRelation: familyRelationship,
-                otherRelationship: generalRelationship,
-            })).trim();
-            if (bondDeclaration.bondAdditionalDescription) {
-                if (!result.endsWith(". ")) {
-                    result += ". ";
-                } else if (!result.endsWith(" ")) {
-                    result += " ";
+            const isConversing = surroundingChars.conversing.includes(activeBond.towards) || surroundingChars.remotelyConversing.includes(activeBond.towards);
+            let templateToUse = isConversing ? bondDeclaration.description : null;
+            if (!isConversing) {
+                const isSurroundingAndDead = perspectiveSurroundingChars.deadKnownSomewhat.includes(activeBond.towards) || perspectiveSurroundingChars.deadTotalStrangers.includes(activeBond.towards);
+                const isAround = perspectiveSurroundingChars.knownAndNonConversing.includes(activeBond.towards) || perspectiveSurroundingChars.totalStrangersSurroundingAndNonConversing.includes(activeBond.towards);
+                const believesDead = (activeBond.believesDead || isSurroundingAndDead) && !isAround;
+                if (believesDead) {
+                    templateToUse = (isSurroundingAndDead ? bondDeclaration.descriptionSurroundingDead || bondDeclaration.descriptionNonSurroundingDead : bondDeclaration.descriptionNonSurroundingDead) || null;
+                } else {
+                    templateToUse = (isAround ? bondDeclaration.descriptionSurroundingNonConversing : bondDeclaration.descriptionNotSurrounding) || null;
                 }
-                result += typeof bondDeclaration.bondAdditionalDescription === "string" ? bondDeclaration.bondAdditionalDescription : (await bondDeclaration.bondAdditionalDescription({
+            }
+
+            let result = "";
+            if (templateToUse) {
+                result = typeof templateToUse === "string" ? templateToUse : (await templateToUse({
                     char: character,
                     other: deObject.characters[activeBond.towards],
                     otherFamilyRelation: familyRelationship,
@@ -2063,19 +2063,37 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
                 })).trim();
             }
 
-            const otherRef = getNameIdentificationForOneCharacterTowardsAnother(deObject, character, otherCharacter);
+            const otherRef = deObject.utils.templates.formatCharacterName(otherCharacter, character, {
+                type: "definite",
+            });
+            const otherRefCapitalized = deObject.utils.templates.formatCharacterName(otherCharacter, character, {
+                type: "definite",
+                capitalize: true,
+            });
             if (activeBond.knowsAs.length === 0 && activeBond.stranger) {
-                result += `\n\n${otherRef} is a stranger to ${selfRef}, ${selfRef} does not know their name.`;
+                result += `\n\n${otherRefCapitalized} is a stranger to ${selfName}, ${selfName} does not know their name.`;
             } else if (activeBond.knowsAs.length === 0) {
-                result += `\n\n${otherRef} is an acquaintance to ${selfRef}, but ${selfRef} does not know their name!`;
-            } else if (activeBond.stranger) {
-                result += `\n\n${otherRef} is a stranger to ${selfRef}, but ${selfRef} knows their name and some details about them.`;
-            } else {
-                result += `\n\n${otherRef} is known to ${selfRef}, ${selfRef} knows their name and many details about them.`;
+                result += `\n\n${otherRefCapitalized} is an acquaintance to ${selfName}, but ${selfName} does not know their name!`;
+            }
+
+            if (activeBond.knowsAs.length >= 2) {
+                const primaryNameKnown = activeBond.knowsAs.find(nameKnown => nameKnown.primary) || activeBond.knowsAs[0];
+                const otherNames = activeBond.knowsAs.filter(nameKnown => nameKnown !== primaryNameKnown);
+                if (primaryNameKnown) {
+                    result += `\n\n${selfName} primarily refers to ${otherRef} as ${primaryNameKnown.name}${primaryNameKnown.nickname ? ` (nickname)` : ``}, but also as: `;
+                }
+                let first = true;
+                for (const otherName of otherNames) {
+                    if (!first) {
+                        result += `, `;
+                    }
+                    first = false;
+                    result += `${otherName.name}${otherName.nickname ? ` (nickname)` : ``}`;
+                }
             }
 
             if (familyRelationship) {
-                result += `\n\n${otherRef} is ${selfRef}'s ${familyRelationship}.`;
+                result += `\n\n${otherRefCapitalized} is ${selfName}'s ${familyRelationship}.`;
             }
 
             const isAttractive = deObject.utils.bonds.isAttractedToWithReasoning(character, activeBond.towards);
@@ -2094,12 +2112,12 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
             }
 
             if (openToAffection.value !== "not") {
-                result += `\n\n${selfRef} is ${valueToWord[openToAffection.value]} receptive to affection from ${otherRef}`;
+                result += `\n\n${selfName} is ${valueToWord[openToAffection.value]} receptive to affection from ${otherRef}`;
                 if (openToAffection.reason) {
                     result += `, reason: ${openToAffection.reason}`;
                 }
             } else {
-                result += `\n\n${selfRef} is not open to receiving affection from ${otherRef}`;
+                result += `\n\n${selfName} is not open to receiving affection from ${otherRef}`;
                 if (openToAffection.reason) {
                     result += `, reason: ${openToAffection.reason}`;
                 }
@@ -2110,32 +2128,38 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
             const openToIntimateAffection = await bondDeclaration.intimacy.openToIntimateAffection(character, deObject.characters[activeBond.towards]);
 
             if (openToIntimateAffection.value !== "not") {
-                result += `\n\n${selfRef} is ${valueToWord[openToIntimateAffection.value]} receptive to intimate romantic affection (${openToSex.value !== "not" ? "including sexual acts (" + valueToWord[openToSex.value] + ")" : "excluding sexual acts"}) from ${otherRef}`;
+                result += `\n\n${selfName} is ${valueToWord[openToIntimateAffection.value]} receptive to intimate romantic affection (${openToSex.value !== "not" ? "including sexual acts (" + valueToWord[openToSex.value] + ")" : "excluding sexual acts"}) from ${otherRef}`;
                 if (openToIntimateAffection.reason) {
                     result += `, reason: ${openToIntimateAffection.reason}`;
                 }
             } else {
-                result += `\n\n${selfRef} is not receptive to intimate romantic affection from ${otherRef}`;
+                result += `\n\n${selfName} is not receptive to intimate romantic affection from ${otherRef}`;
                 if (openToIntimateAffection.reason) {
                     result += `, reason: ${openToIntimateAffection.reason}`;
                 }
             }
 
             if (openToSex.value !== "not") {
-                result += `\n\n${selfRef} is ${valueToWord[openToSex.value]} receptive to sexual acts from ${otherRef}`;
+                result += `\n\n${selfName} is ${valueToWord[openToSex.value]} receptive to sexual acts from ${otherRef}`;
                 if (openToSex.reason) {
                     result += `, reason: ${openToSex.reason}`;
                 }
             } else {
-                result += `\n\n${selfRef} is not receptive to sexual acts from ${otherRef}`;
+                result += `\n\n${selfName} is not receptive to sexual acts from ${otherRef}`;
                 if (openToSex.reason) {
                     result += `, reason: ${openToSex.reason}`;
                 }
             }
 
-            const titleOfRelationship = `${otherCharacter.name} (${generalRelationship})`;
+            let titleOfRelationship = `${deObject.utils.templates.formatCharacterName(activeBond.towards, characterId, {
+                type: "definite",
+            })}${generalRelationship ? ` (${generalRelationship})` : ""}`;
 
-            relationships.push({
+            if (activeBond.believesDead) {
+                titleOfRelationship += " (Believes Dead)";
+            }
+
+            finalResult.relationships.push({
                 title: titleOfRelationship,
                 description: result,
             });
@@ -2148,37 +2172,10 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
                     otherRelationship: generalRelationship,
                 })).trim();
                 if (injection) {
-                    if (!general.endsWith("\n\n")) {
-                        general += "\n\n";
+                    if (!finalResult.general.endsWith("\n\n")) {
+                        finalResult.general += "\n\n";
                     }
-                    general += injection;
-                }
-            }
-        }
-    }
-
-    // ex bonds only inject system prompts, as they are not active relationships but ex-relationships
-    // they may be mourning or have other effects on the character's mindset so only relevant to system prompt injections
-    for (const exBond of bonds.ex) {
-        if (!character.bonds) {
-            throw new Error(`Character ${characterId} has no bonds defined.`);
-        }
-        const bondDeclaration = getBondDeclarationFromBondDescription(deObject, character, exBond);
-        const generalRelationship = await getRelationship(deObject, character, deObject.characters[exBond.towards]);
-        if (bondDeclaration) {
-            if (bondDeclaration.generalCharacterDescriptionInjectionEx) {
-                const familyRelationship = getFamilyBondRelation(character, deObject.characters[exBond.towards]);
-                const injection = typeof bondDeclaration.generalCharacterDescriptionInjectionEx === "string" ? bondDeclaration.generalCharacterDescriptionInjectionEx : (await bondDeclaration.generalCharacterDescriptionInjectionEx({
-                    char: character,
-                    other: deObject.characters[exBond.towards],
-                    otherFamilyRelation: familyRelationship,
-                    otherRelationship: generalRelationship,
-                })).trim();
-                if (injection) {
-                    if (!general.endsWith("\n\n")) {
-                        general += "\n\n";
-                    }
-                    general += injection;
+                    finalResult.general += injection;
                 }
             }
         }
@@ -2189,115 +2186,40 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
         throw new Error(`Character ${characterId} has no bonds defined.`);
     }
 
-    const surroundingChars = getSurroundingCharacters(deObject, characterId);
-
-
     // these do apply to all the total strangers
-    const allSurroundingTotalStrangers = surroundingChars.totalStrangers;
-    // TODO optimize this, if there are too many total strangers, we may want to bundle them up into a single description instead of doing them one by one, as it may be too verbose and not useful
-    for (const strangerName of allSurroundingTotalStrangers) {
-        const strangerCharacter = deObject.characters[strangerName];
-
-        const strangerBondDeclaration = getBondDeclarationFromBondDescription(deObject, character, {
-            stranger: true,
-            bond: 0,
-            bond2: 0,
-            knowsName: false,
-            towards: strangerName,
-
-            // @ts-ignore
-            createdAt: null,
+    const allSurroundingTotalStrangers = surroundingChars.totalStrangersSurroundingAndNonConversing;
+    if (allSurroundingTotalStrangers.length > 0) {
+        let titleToGive = "Every other character (Surrounding Strangers)";
+        if (surroundingChars.totalStrangersSurroundingAndNonConversing.length <= 10 && surroundingChars.totalStrangersSurroundingAndNonConversing.every(charId => perspectiveSurroundingChars.totalStrangersSurroundingAndNonConversing.includes(charId))) {
+            titleToGive = "<" + surroundingChars.totalStrangersSurroundingAndNonConversing.join(",") + ": Every other character> (Surrounding Strangers)";
+        }
+        finalResult.relationships.push({
+            title: titleToGive,
+            description: typeof character.bonds.totalStrangersBondDescription === "string" ? character.bonds.totalStrangersBondDescription : await character.bonds.totalStrangersBondDescription({
+                char: character,
+                others: perspectiveSurroundingChars.totalStrangersSurroundingAndNonConversing.map(otherCharId => deObject.characters[otherCharId]),
+            }),
         });
-
-        if (!strangerBondDeclaration) {
-            continue;
-        }
-
-        if (strangerCharacter) {
-            const familyRelationship = getFamilyBondRelation(character, strangerCharacter);
-            const generalRelationship = await getRelationship(deObject, character, strangerCharacter);
-            let result = typeof strangerBondDeclaration.description === "string" ? strangerBondDeclaration.description : (await strangerBondDeclaration.description({
-                char: character,
-                other: strangerCharacter,
-                otherFamilyRelation: familyRelationship,
-                otherRelationship: generalRelationship,
-            })).trim();
-            if (strangerBondDeclaration.bondAdditionalDescription) {
-                if (!result.endsWith(". ")) {
-                    result += ". ";
-                } else if (!result.endsWith(" ")) {
-                    result += " ";
-                }
-                result += typeof strangerBondDeclaration.bondAdditionalDescription === "string" ? strangerBondDeclaration.bondAdditionalDescription : (await strangerBondDeclaration.bondAdditionalDescription({
-                    char: character,
-                    other: strangerCharacter,
-                    otherFamilyRelation: familyRelationship,
-                    otherRelationship: generalRelationship,
-                })).trim();
-            }
-            result += ` ${strangerName} is a total stranger to ${characterId} and ${characterId} does not know their name.`;
-            if (familyRelationship) {
-                result += ` ${strangerName} is ${characterId}'s ${familyRelationship}.`;
-            }
-
-            const titleOfRelationship = `${strangerCharacter.name} (Totally Unknown Stranger)`;
-
-            relationships.push({
-                title: titleOfRelationship,
-                description: result,
-            });
-        }
-
-        if (strangerBondDeclaration.generalCharacterDescriptionInjection) {
-            const injection = typeof strangerBondDeclaration.generalCharacterDescriptionInjection === "string" ? strangerBondDeclaration.generalCharacterDescriptionInjection : (await strangerBondDeclaration.generalCharacterDescriptionInjection({
-                char: character,
-                other: strangerCharacter,
-                otherFamilyRelation: getFamilyBondRelation(character, strangerCharacter),
-                otherRelationship: await getRelationship(deObject, character, strangerCharacter),
-            })).trim();
-            if (injection) {
-                if (!general.endsWith("\n\n")) {
-                    general += "\n\n";
-                }
-                general += injection;
-            }
-        }
     }
-
-    /**
-     * @type {Array<string>}
-     */
-    const likes = [];
-    const dislikes = [];
 
     for (const like of character.likes) {
         const globalInterest = deObject.interests[like];
         if (globalInterest) {
-            likes.push(globalInterest.simple);
+            finalResult.likes.push(globalInterest.simple);
         } else {
-            likes.push(like);
+            finalResult.likes.push(like);
         }
     }
     for (const dislike of character.dislikes) {
         const globalInterest = deObject.interests[dislike];
         if (globalInterest) {
-            dislikes.push(globalInterest.simple);
+            finalResult.dislikes.push(globalInterest.simple);
         } else {
-            dislikes.push(dislike);
+            finalResult.dislikes.push(dislike);
         }
     }
 
-    return {
-        general: general.trim(),
-        expressiveStates: statesDescriptions,
-        activeStates,
-        relationships,
-        stateDominance: maxStateDominance,
-        actions,
-        stateInjections,
-        likes,
-        dislikes,
-    };
+    return finalResult;
 }
 
 /**
@@ -2848,6 +2770,7 @@ export async function getRelationshipBetweenCharacters(deObject, characterId, to
             towards: towards,
             createdAt: deObject.currentTime,
             knowsAs: [],
+            believesDead: false,
             undoableShifts: {},
         }
         pseudoBond = true;

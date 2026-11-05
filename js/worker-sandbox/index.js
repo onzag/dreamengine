@@ -466,10 +466,16 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
                 if (target == null || typeof target !== "object") {
                     throw new Error(`Path segment "${seg}" is not reachable - parent is ${typeof target}`);
                 }
+                if (!(seg in target)) {
+                    throw new Error(`Path segment "${seg}" does not exist on the target. Available keys: ${JSON.stringify(Object.keys(target))}`);
+                }
                 target = target[seg];
             }
 
             if (target == null || (typeof target !== "object" && typeof target !== "function")) {
+                if (call) {
+                    throw new Error("Path " + JSON.stringify(path) + " resolved to " + (target === null ? "null" : typeof target) + ", which is not a function. 'call' parameter is invalid here.");
+                }
                 // primitive – return as-is, no filtering applicable
                 return target;
             }

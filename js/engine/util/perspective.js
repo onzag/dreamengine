@@ -286,7 +286,7 @@ async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionFor
     } else if (bond && bond.knowsAs.length > 0) {
         characterAllNames = [...new Set(bond.knowsAs.map(k => k.name))];
     } else {
-        characterAllNames = [target.unknownName];
+        characterAllNames = [];
     }
 
     const familyRelation = isSelf ? null : getFamilyBondRelation(observer, target);
@@ -592,6 +592,7 @@ async function buildBondDescription(DE, observer, target) {
                 bond2: 0,
                 knowsAs: [],
                 createdAt: DE.currentTime,
+                believesDead: false,
                 undoableShifts: {},
             });
         }

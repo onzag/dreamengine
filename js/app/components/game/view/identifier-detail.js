@@ -166,11 +166,16 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
                 tab.setAttribute('aria-selected', String(tab.getAttribute('data-view') === 'normal'));
             }
             if (this.isDebugMode) {
-                const sections = await this.getDebugSections(perspective);
-                if (!this.isConnected || version !== this.loadVersion) return;
-                if (sections.length) {
-                    debugView.append(...sections.map(section => this.createDebugSection(section)));
-                    tabs.hidden = false;
+                try {
+                    const sections = await this.getDebugSections(perspective);
+                    if (!this.isConnected || version !== this.loadVersion) return;
+                    if (sections.length) {
+                        debugView.append(...sections.map(section => this.createDebugSection(section)));
+                        tabs.hidden = false;
+                    }
+                } catch (error) {
+                    if (!this.isConnected || version !== this.loadVersion) return;
+                    console.warn('Unable to load debug sections', error);
                 }
             }
             if (data.description) {
@@ -215,7 +220,7 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
     createDebugSection(section) {
         const details = document.createElement('details');
         details.className = 'debug-section';
-        details.open = true;
+        details.open = false;
         const summary = document.createElement('summary');
         summary.textContent = section.title;
         const pre = document.createElement('pre');
