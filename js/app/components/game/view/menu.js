@@ -1,22 +1,26 @@
-import { sharedStyles } from './shared-styles.js';
+﻿import { sharedStyles } from './shared-styles.js';
 ﻿import { playConfirmSound, playHoverSound } from '../../../sound.js';
 
 /** Game actions, kept separate from the story and inventory presentation. */
 export class GameMenu extends HTMLElement {
-    connectedCallback() {
+    async connectedCallback() {
         const root = this.shadowRoot || this.attachShadow({ mode: 'open' });
+        const userMode = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['userMode'] });
+        const isDebug = userMode === 'debug';
         root.innerHTML = `
             <style>
 ${sharedStyles}
-:host { display: flex; }
+:host { display: flex; flex-direction: column; align-items: flex-start; }
 button { display: flex; align-items: center; justify-content: space-between; gap: 1.2vh; min-height: var(--control-height); padding: 1vh 2vh; font-size: 3vh; }
 .trigger { width: 100%; anchor-name: --game-menu; }
 [popover] { position: fixed; position-anchor: --game-menu; inset: auto; top: anchor(bottom); left: anchor(left); margin: .8vh 0 0; min-width: 20vh; padding: .6vh; color: var(--ink); }
 [popover] button { width: 100%; border: 0; border-radius: .5vh; background: transparent; text-align: left; }
 button:hover:not(:disabled) { background-color: rgba(80, 130, 180, .35); }
 .wake-up { color: #f4dada; }
+.debug-label { display: block; font-size: 1.3vh; font-weight: bold; color: #ff44aa; letter-spacing: .08em; padding: .2vh .6vh; background: rgba(255, 30, 100, .18); border-radius: .4vh; position: fixed; top: 0; }
 @supports not (top: anchor(bottom)) { [popover] { top: calc(var(--edge) + var(--control-height)); left: var(--edge); } }
             </style>
+            ${isDebug ? '<span class="debug-label" aria-label="Debug build">⚠ DEBUG MODE</span>' : ''}
             <button class="trigger glass" type="button" popovertarget="game-options" aria-expanded="false">Menu <span aria-hidden="true">☰</span></button>
             <div id="game-options" class="glass" popover aria-label="Game options">
                 <button type="button" disabled>Save</button>

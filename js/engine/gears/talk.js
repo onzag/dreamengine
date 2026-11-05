@@ -53,8 +53,6 @@ export async function talk(engine, character, options) {
         throw new Error(`Character ${character.id} is not currently in a conversation and cannot talk.`);
     }
 
-    const conversationId = charState.conversationId;
-
     const ourCharacterName = getNameIdentificationForOneCharacterTowardsAnother(engine.deObject, character, character);
 
     const addedMessagesForStoryMaster = [];

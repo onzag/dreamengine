@@ -255,8 +255,8 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
             return { ok: true, warning };
         },
 
-        async initialize({ user, playMode }) {
-            await engine.initialize(user, playMode);
+        async initialize({ user, playMode, userMode }) {
+            await engine.initialize(user, playMode, userMode);
             return { ok: true };
         },
 

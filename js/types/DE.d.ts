@@ -119,6 +119,11 @@ declare interface DEMinimalCharacterReference {
     perception: number;
 
     /**
+     * Whether the character can read thoughts, this is useful for characters that are telepathic or have psychic abilities
+     */
+    canReadThoughts?: boolean;
+
+    /**
      * A number from 0 to 1 that represents how attractive the character is, higher means more attractive and more likely to be approached by other characters and have romantic interactions, this is useful for characters that are meant to be charming or have a strong romantic appeal, it can also affect how other characters perceive them and interact with them in social situations
      */
     attractiveness: number;
@@ -4957,6 +4962,14 @@ declare interface DEObject {
      * TODO implement these
      */
     playMode: "player" | "narrator" | "voice-in-the-head";
+
+    /**
+     * Debug mode enables the following in the engine
+     * 1. user can read all the thoughts and internal dialogue of the characters
+     * 2. user perception is beyond perfect, they can see everything and know everything about the world
+     * 3. user can see all the states of the characters, including their internal states and hidden states
+     */
+    userMode: "standard" | "debug";
 
 
     /**

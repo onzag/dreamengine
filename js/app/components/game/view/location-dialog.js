@@ -11,5 +11,10 @@ export class LocationDialog extends IdentifierDetail {
         }
         return { name: location.locationName, description: location.description, banner: location.locationMetadata.asset || '' };
     }
+
+    /** @param {DECharacterPerspective} perspective */
+    getDebugSections(perspective) {
+        return [{ title: 'Location in perspective', value: perspective.ownLocation }];
+    }
 }
 customElements.define('app-game-location-dialog', LocationDialog);

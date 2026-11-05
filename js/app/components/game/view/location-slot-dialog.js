@@ -15,5 +15,13 @@ export class LocationSlotDialog extends IdentifierDetail {
         const content = createItemTree(loadLocationSlotItemGroups(id, context), context);
         return { name: slot.slotName, description: slot.description, banner: slot.slotMetadata.asset || '', content };
     }
+
+    /** @param {DECharacterPerspective} perspective */
+    getDebugSections(perspective) {
+        const id = this.getAttribute('identifier-id') || '';
+        const slot = getPerspectiveIndex(perspective).slots.get(id);
+        if (!slot) return [];
+        return [{ title: 'Location slot in perspective', value: slot }];
+    }
 }
 customElements.define('app-game-location-slot-dialog', LocationSlotDialog);

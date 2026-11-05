@@ -65,6 +65,8 @@ export async function initializeNewGame(game) {
             ? 'voice-in-the-head'
             : 'player';
 
+    const userMode = (await window.API.getConfigValue('simulationType')).toLowerCase() === 'debug' ? 'debug' : 'standard';
+
     /** @type {DEMinimalCharacterReference | null} */
     let user = null;
     if (isSelfInsert) {
@@ -144,7 +146,7 @@ export async function initializeNewGame(game) {
 
     }
 
-    await window.ENGINE_WORKER_CLIENT.initialize({ user, playMode });
+    await window.ENGINE_WORKER_CLIENT.initialize({ user, playMode, userMode });
 
     const dreamStability = game.getAttribute('dream-stability') || 'stable';
     await window.ENGINE_WORKER_CLIENT.setDreamStability({ stability: dreamStability === "stable" ? 1 : (dreamStability === "unstable" ? 0.99 : 0.95) });

@@ -489,8 +489,9 @@ export class DEngine {
     /**
      * @param {Omit<DEMinimalCharacterReference, "id" | "scriptGivenId" | "script"> | null} user
      * @param {"player" | "narrator" | "voice-in-the-head"} playMode
+     * @param {"standard" | "debug"} userMode
      */
-    async initialize(user, playMode = "player") {
+    async initialize(user, playMode = "player", userMode = "standard") {
         if (this.initialized) {
             throw new Error("DEngine already initialized");
         }
@@ -548,6 +549,7 @@ export class DEngine {
                 itemId: {},
                 locationId: {},
             },
+            userMode: userMode || "standard",
             utils:  /** @type {*} */ (/** @type {unknown} */ (null)),
             database: this.dataManager.getDatabaseForDEObject(),
         };

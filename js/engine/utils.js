@@ -55,13 +55,14 @@ function resolveCharacter(DE, c) {
  * @param {DEConversation} conversation
  * @param {number} startIndex
  * @param {1 | -1} direction
+ * @param {boolean} isOmnicientUser
  * @returns {Promise<{ conversation: DEConversation | null, message: DEConversationMessage | null }>}
  */
-async function findVisibleConversationMessage(DE, characterId, conversation, startIndex, direction) {
+async function findVisibleConversationMessage(DE, characterId, conversation, startIndex, direction, isOmnicientUser) {
     while (true) {
         for (let index = startIndex; index >= 0 && index < conversation.messages.length; index += direction) {
             const message = conversation.messages[index];
-            if (!message.canOnlyBeSeenByCharacter || message.canOnlyBeSeenByCharacter === characterId) {
+            if ((!message.canOnlyBeSeenByCharacter || message.canOnlyBeSeenByCharacter === characterId) || isOmnicientUser) {
                 return { conversation, message };
             }
         }
@@ -1054,7 +1055,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 }
                 currentlyConsideredConversation = previousConversation;
             }
-            return findVisibleConversationMessage(DE, resolvedCharacter.id, currentlyConsideredConversation, 0, 1);
+            const isOmniscientUser = DE.user === resolvedCharacter.id && DE.userMode === "debug";
+            return findVisibleConversationMessage(DE, resolvedCharacter.id, currentlyConsideredConversation, 0, 1, isOmniscientUser);
         },
         getLastConversationAndMessageForCharacter: async (character) => {
             const resolvedCharacter = resolveCharacter(DE, character);
@@ -1079,7 +1081,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 throw new Error(`Conversation ${charState.conversationId} not found`);
             }
 
-            return findVisibleConversationMessage(DE, resolvedCharacter.id, conversation, conversation.messages.length - 1, -1);
+            const isOmniscientUser = DE.user === resolvedCharacter.id && DE.userMode === "debug";
+            return findVisibleConversationMessage(DE, resolvedCharacter.id, conversation, conversation.messages.length - 1, -1, isOmniscientUser);
         },
         getPreviousConversationAndMessageForCharacter: async (character, conversation, message) => {
             const resolvedCharacter = resolveCharacter(DE, character);
@@ -1098,7 +1101,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (currentIndexInConversation === -1) {
                 throw new Error(`Message ${resolvedMessage.id} not found in conversation ${resolvedConversation.id}`);
             }
-            return findVisibleConversationMessage(DE, resolvedCharacter.id, resolvedConversation, currentIndexInConversation - 1, -1);
+            const isOmniscientUser = DE.user === resolvedCharacter.id && DE.userMode === "debug";
+            return findVisibleConversationMessage(DE, resolvedCharacter.id, resolvedConversation, currentIndexInConversation - 1, -1, isOmniscientUser);
         },
         getNextConversationAndMessageForCharacter: async (character, conversation, message) => {
             const resolvedCharacter = resolveCharacter(DE, character);
@@ -1117,8 +1121,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (currentIndexInConversation === -1) {
                 throw new Error(`Message ${resolvedMessage.id} not found in conversation ${resolvedConversation.id}`);
             }
-
-            return findVisibleConversationMessage(DE, resolvedCharacter.id, resolvedConversation, currentIndexInConversation + 1, 1);
+            const isOmniscientUser = DE.user === resolvedCharacter.id && DE.userMode === "debug";
+            return findVisibleConversationMessage(DE, resolvedCharacter.id, resolvedConversation, currentIndexInConversation + 1, 1, isOmniscientUser);
         },
         getConversation: async function (conversationId) {
             return typeof conversationId === "string" ? DE.database.getConversation(conversationId) : conversationId;
@@ -1411,6 +1415,15 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     // must be a ghost participant, skip perspective generation
                     continue;
                 }
+
+                const isOminicientUser = participantId === DE.user && DE.userMode === "debug";
+                const canReadThoughts = participantChar.canReadThoughts || false;
+
+                if (newMessage.canOnlyBeSeenByCharacter && newMessage.canOnlyBeSeenByCharacter !== participantId && !isOminicientUser) {
+                    // do not generate anything for this participant, since they cannot see the message
+                    continue;
+                }
+
                 const heardIdentifiers = DE.stateFor[participantId].heardIdentifiers;
                 const perspective = await getPerspective(DE, participantChar);
                 const savedPerspective = await DE.database.storePerspective(perspective);
@@ -1442,7 +1455,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                             ...dialogueOrNarration,
                             fragments: resultOfDialogueInPerspective.fragments,
                         });
-                    } else if (dialogueOrNarration.type === "narration" || (dialogueOrNarration.type === "thought" && ((emitterChar && emitterChar.id === participantChar.id)) || !emitterChar)) {
+                    } else if (dialogueOrNarration.type === "narration" || (dialogueOrNarration.type === "thought" && (isOminicientUser || canReadThoughts || (emitterChar && emitterChar.id === participantChar.id)))) {
                         /**
                          * @type {Array<DEConversationMessageNarrationFragment>}
                          */

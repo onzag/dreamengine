@@ -15,5 +15,13 @@ export class ItemDialog extends IdentifierDetail {
         content.prepend(createItemTags(node.tags));
         return { name: node.label, description: node.item.description, portrait: node.asset, content };
     }
+
+    /** @param {DECharacterPerspective} perspective */
+    getDebugSections(perspective) {
+        const id = this.getAttribute('identifier-id') || '';
+        const context = getItemTreeContext(perspective);
+        const node = loadItemNode(id, context, true);
+        return [{ title: 'Item in perspective', value: node.item }];
+    }
 }
 customElements.define('app-game-item-dialog', ItemDialog);

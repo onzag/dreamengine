@@ -163,14 +163,14 @@ export function renderNarrationFragmentsToText(fragments) {
 export async function* getHistoryForCharacter(engine, character, options) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
-    } else if (!engine.deObject.stateFor[character.name]) {
-        throw new Error(`Character state for ${character.name} not found.`);
+    } else if (!engine.deObject.stateFor[character.id]) {
+        throw new Error(`Character state for ${character.id} not found.`);
     } else if (!engine.pseudoConversationSummaryGenerator) {
         // TODO reenable this error once we have a proper LLM integration
         // throw new Error("Pseudo conversation summary generator not initialized.");
     }
 
-    const characterState = engine.deObject.stateFor[character.name];
+    const characterState = engine.deObject.stateFor[character.id];
     let currentConversationId = characterState.conversationId;
 
     while (currentConversationId) {
@@ -260,20 +260,15 @@ export async function* getHistoryForCharacter(engine, character, options) {
             }
         } else {
             for (const message of conversationMessages.reverse()) {
-                const isMessageAllThoughts = message.content.every(c => c.type === "thought");
-                const isMessageFromCharacter = message.characterId === character.id;
-                if (isMessageAllThoughts && !isMessageFromCharacter) {
-                    // skip messages that are all thoughts and not from the character themselves, as they are not relevant to the character's perspective
-                    // is probably equivalent to message.perspectiveMessageByCharacterId[character.id] being len 0 but whatever
-                    continue;
-                }
+                const isOmnicientUser = character.id === engine.getDEObject().user && engine.getDEObject().userMode === "debug";
                 if (
                     (
+                        !isOmnicientUser &&
                         (
                             message.characterId &&
                             options.excludeFrom &&
                             options.excludeFrom.includes(message.characterId)
-                        ) || message.perspectiveMessageByCharacterId[character.id].length === 0
+                        ) || !message.perspectiveMessageByCharacterId[character.id] || message.perspectiveMessageByCharacterId[character.id].length === 0
                     )
                 ) {
                     continue;

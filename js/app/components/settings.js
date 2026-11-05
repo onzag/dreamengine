@@ -366,20 +366,19 @@ class Settings extends HTMLElement {
             </app-overlay-section>`;
         } else if (this.currentSectionIndex === 1 && tabsContainer) {
             const debug_desc = "Debug mode is not meant for playing, allows you to hear the voices of schizophrenic characters, see the system inference reasoning, rolling chances, you get debug commands, and more. Only use this mode for testing and debugging purposes.";
-            const easy_desc = "Easy mode shows characters hidden states, bond strengths, second bond strength, and shows how they feel about each other, making it easier to role-play and interact with them; editing messages is fully allowed in this mode.";
-            const normal_desc = "Normal mode is the default gameplay experience, characters will have hidden states and feelings, making interactions more immersive and challenging, editing is limited to typos and minor changes but you still are able to undo inferences, and get back to a previous state. (multiple timelines)";
-            const hard_desc = "Hard mode increases the challenge by removing the ability to undo inferences, making choices permanent; (single timeline)";
-            const diff_array = [debug_desc, easy_desc, normal_desc, hard_desc];
+            const standard_desc = "Standard mode is the default mode for playing, it provides a balanced experience with normal difficulty and standard features.";
+            const diff_array = [debug_desc, standard_desc];
 
             tabsContainer.innerHTML = `<app-overlay-section section-title="Simulation">
                 <app-overlay-select
-                    label="Difficulty"
-                    input-options='["Debug", "Easy", "Normal", "Hard"]'
-                    input-default-value="Normal"
+                    label="Simulation Type"
+                    input-options='["debug", "standard"]'
+                    input-default-value="standard"
                     input-options-descriptions='${JSON.stringify(diff_array)}'
-                    title="The difficulty level will affect the challenge and complexity of the game, choose based on your preferred gameplay experience."
-                    input-data-location="difficulty"
+                    title="The simulation type will affect how the AI interacts with your character in-game"
+                    input-data-location="simulationType"
                 ></app-overlay-select>
+                <div role="alert" data-de-aria-text="true" tabindex="0" style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The change in simulation will affect new campaigns, not old ones</div>
             </app-overlay-section>`;
         } else if (this.currentSectionIndex === 2 && tabsContainer) {
             const langOptions = JSON.stringify(["auto"].concat(supportedLanguages));

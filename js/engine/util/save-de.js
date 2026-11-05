@@ -100,7 +100,6 @@ export function regenerateDEFromSavedDE(engine, savedDE) {
      */
     const properDE = {
         bonds: savedDE.bonds,
-        conversations: savedDE.conversations,
         currentTime: savedDE.currentTime,
         gameOver: savedDE.gameOver,
         importantEvents: savedDE.importantEvents,
@@ -140,9 +139,10 @@ export function regenerateDEFromSavedDE(engine, savedDE) {
         },
         worldRules: {},
         counters: savedDE.counters,
-
-        // @ts-ignore
-        utils: null,
+        userMode: savedDE.userMode,
+        utils:  /** @type {*} */ (/** @type {unknown} */ (null)),
+        // @ts-expect-error
+        database: engine.dataManager.getDatabaseForDEObject(),
     };
     properDE.utils = deEngineUtilsFn(properDE, engine);
 

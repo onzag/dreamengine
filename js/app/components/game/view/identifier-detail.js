@@ -5,6 +5,21 @@ import { createNarrationNodes } from './narration.js';
 import { parsePerspectiveNarration } from './perspective-data.js';
 
 /** @typedef {{name: string, description: string, portrait?: string, banner?: string, content?: HTMLElement, states?: DECharacterStateInPerspective[];}} IdentifierDetailData */
+/** @typedef {{title: string, value: unknown}} DebugSection */
+
+/** JSON stringify that tolerates circular references and functions.
+ * @param {unknown} value */
+function debugStringify(value) {
+    const seen = new WeakSet();
+    return JSON.stringify(value, (key, val) => {
+        if (typeof val === 'function') return `[Function ${val.name || 'anonymous'}]`;
+        if (typeof val === 'object' && val !== null) {
+            if (seen.has(val)) return '[Circular]';
+            seen.add(val);
+        }
+        return val;
+    }, 2);
+}
 
 /** Shared loading, vision treatment and narration for the four detail views. */
 export class IdentifierDetail extends HTMLElement {
@@ -16,6 +31,8 @@ export class IdentifierDetail extends HTMLElement {
         this.currentPerspective = null;
         this.kind = 'Details';
         this.layout = 'location';
+        /** @type {boolean | null} Whether the simulation is a debug build (null until resolved). */
+        this.isDebugMode = null;
     }
 
     connectedCallback() {
@@ -47,6 +64,13 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
 
 .character-tags { margin: 0 0 2vh; }
 .description[hidden] { display: none; }
+.detail-debug { grid-column: 1 / -1; min-width: 0; margin-top: 2vh; }
+.debug-toggle { font-size: 2.2vh; padding: 1vh 2vh; border-radius: .6vh; border: .2vh solid #ff44aa; background: rgba(255, 30, 100, .12); color: #ffd6ea; cursor: pointer; }
+.debug-toggle:hover { background: rgba(255, 30, 100, .22); }
+.debug-info { margin-top: 1.5vh; }
+.debug-info[hidden] { display: none; }
+.debug-section-title { font-size: 2vh; color: #ff88c0; margin: 1.5vh 0 .5vh; }
+.debug-json { padding: 1.5vh; border-radius: .6vh; background: rgba(0, 0, 0, .4); font-family: monospace; font-size: 1.8vh; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
             </style>
             <article class="detail" data-blindness="full" aria-busy="true">
                 <div class="hero" hidden></div>
@@ -61,6 +85,10 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
     /** @param {DECharacterPerspective} perspective @returns {IdentifierDetailData} */
     getDisplayData(perspective) { throw new Error('A detail view must provide its display data.'); }
 
+    /** Debug-only sections to inspect the perspective data that produced this view.
+     * @param {DECharacterPerspective} perspective @returns {DebugSection[]} */
+    getDebugSections(perspective) { return []; }
+
     async load() {
         const version = ++this.loadVersion;
         const article = /** @type {HTMLElement} */ (this.root.querySelector('.detail'));
@@ -68,6 +96,12 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
         try {
             const perspective = this.currentPerspective;
             if (!perspective) throw new Error('No perspective available.');
+            if (this.isDebugMode === null) {
+                try {
+                    this.isDebugMode = (await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['userMode'] })) === 'debug';
+                } catch { this.isDebugMode = false; }
+                if (!this.isConnected || version !== this.loadVersion) return;
+            }
             const data = this.getDisplayData(perspective);
             const isSelf = this.layout === 'character' && this.getAttribute('identifier-id') === perspective.ownId;
             article.dataset.blindness = isSelf ? 'no' : perspective.ownCharacterBlindness;
@@ -96,6 +130,11 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
             if (data.content) {
                 data.content.classList.add('detail-extra');
                 article.append(data.content);
+            }
+            this.root.querySelector('.detail-debug')?.remove();
+            if (this.isDebugMode) {
+                const sections = this.getDebugSections(perspective);
+                if (sections.length) article.append(this.createDebugPanel(sections));
             }
             if (data.description) {
                 // Keep the description readable if narration parsing is temporarily unavailable.
@@ -133,5 +172,33 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
         image.setAttribute('role', 'img');
         image.setAttribute('aria-label', label);
         return image;
+    }
+
+    /** @param {DebugSection[]} sections */
+    createDebugPanel(sections) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'detail-debug';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'debug-toggle';
+        button.textContent = 'View debug information';
+        const panel = document.createElement('div');
+        panel.className = 'debug-info';
+        panel.hidden = true;
+        for (const { title, value } of sections) {
+            const heading = document.createElement('h3');
+            heading.className = 'debug-section-title';
+            heading.textContent = title;
+            const pre = document.createElement('pre');
+            pre.className = 'debug-json';
+            pre.textContent = debugStringify(value);
+            panel.append(heading, pre);
+        }
+        button.addEventListener('click', () => {
+            panel.hidden = !panel.hidden;
+            button.textContent = panel.hidden ? 'View debug information' : 'Hide debug information';
+        });
+        wrapper.append(button, panel);
+        return wrapper;
     }
 }
