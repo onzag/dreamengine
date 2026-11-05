@@ -128,6 +128,7 @@ export function minimizeModeDescription(mode) {
     if (!mode) return undefined;
     return {
         label: mode.label,
+        instructions: mode.instructions,
     }
 }
 

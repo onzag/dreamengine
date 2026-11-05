@@ -1,98 +1,3 @@
-/**
- * The scene payload consumed by `Voice.render_json` plus the output format
- * the caller wants back. When rendered, `file`/`ref`/`prompt_ref` references
- * resolve against the files uploaded for this connection via {@link sendFile}.
- *
- * @typedef {Object} VoiceJSONRequest
- * @property {("ogg"|"mp3")} [output_format]   // desired encoded output (default "ogg")
- * @property {VoiceGeneration} [generation]
- * @property {VoiceBackground} [background]
- * @property {VoiceSegment[]} segments
- */
-
-/**
- * Generation parameters shared by the whole scene (and overridable per speech
- * segment). Mirrors what vocalizer.py's `_resolve_generation_params` consumes.
- *
- * @typedef {Object} VoiceGeneration
- */
-
-/**
- * Background bed configuration. Rendered as a looping track underneath the
- * whole scene; `background_update` segments mutate it over time.
- *
- * @typedef {Object} VoiceBackground
- * @property {string} file                     // library filename of the bed audio
- * @property {number} [volume]                 // 1..9 (5 = natural), default 5
- * @property {("on"|"off"|boolean)} [presence] // whether the bed is audible
- * @property {number} [fade_ms]                // crossfade duration in ms
- */
-
-/**
- * A spoken segment. VoxCPM synthesizes `text`; an optional `ref` voice clip and
- * `voice_prompt` steer the delivery.
- *
- * @typedef {Object} VoiceSpeechSegment
- * @property {string} text                    // the line to speak (required)
- * @property {string} [ref]                   // library filename of a voice reference clip
- * @property {string} [voice_prompt]          // parenthetical style hint prepended to the text
- * @property {string} [prompt_ref]            // library filename of a prompt wav (voice cloning), you must specify prompt_text too if you specify this
- * @property {string} [prompt_text]           // transcript of prompt_ref (required if prompt_ref is present)
- * @property {(number|[number, number])} [volume] // 1..9 or a [min,max] random range
- */
-
-/**
- * @typedef {Object} VoiceAudioSegment
- * @property {string} ref                          // filename or "name-{n}.wav" glob pattern
- * @property {boolean} [randomize]                 // pick a random match instead of sequential
- * @property {number} [repeat]                     // number of clips to concatenate
- * @property {(number|[number, number])} [volume]  // 1..9 or a [min,max] random range
- * @property {(number|[number, number])} [volume_jitter] // per-repeat random volume range
- * @property {number} [fade_ms]                    // crossfade duration in ms
- */
-
-/**
- * A library sound clip segment (has `ref`, no `text`).
- *
- * @typedef {Object} VoiceFileSegment
- * @property {string} ref                          // filename or "name-{n}.wav" glob pattern
- * @property {boolean} [randomize]                 // pick a random match instead of sequential
- * @property {number} [repeat]                     // number of clips to concatenate
- * @property {(number|[number, number])} [volume]  // 1..9 or a [min,max] random range
- * @property {(number|[number, number])} [volume_jitter] // per-repeat random volume range
- * @property {number} [fade_ms]                    // crossfade duration in ms
- */
-
-/**
- * A silence/delay segment (has `duration_ms`, no `text`/`ref`).
- *
- * @typedef {Object} VoiceDelaySegment
- * @property {(number|[number, number])} duration_ms // ms of silence, or a [min,max] range
- */
-
-/**
- * A background bed mutation (no `text`, no `ref`, no `duration_ms`). Applied at
- * the point in the timeline where it appears.
- *
- * @typedef {Object} VoiceBackgroundUpdateSegment
- * @property {string} [file]                   // switch the bed to this library filename
- * @property {number} [volume]                 // new bed volume 1..9
- * @property {("on"|"off"|boolean)} [presence] // toggle audibility
- * @property {number} [fade_ms]                // fade duration for the change
- */
-
-/**
- * Any segment accepted by vocalizer.py. Its kind is inferred from which keys
- * are present (see `_infer_kind`): `text` -> speech, `duration_ms` -> delay,
- * `ref` (without `text`) -> file clip, otherwise -> background update.
- *
- * @typedef {(VoiceSpeechSegment
- *   | VoiceAudioSegment
- *   | VoiceFileSegment
- *   | VoiceDelaySegment
- *   | VoiceBackgroundUpdateSegment)} VoiceSegment
- */
-
 export class BaseVoiceAdapter {
     constructor() {
         /**
@@ -131,18 +36,226 @@ export class BaseVoiceAdapter {
     /**
      * @param {Blob} file
      * @param {string} filename
-     * @returns {Promise<{skipped: boolean, filename: string, hash?: string, size?: number}>}
+     * @returns {Promise<{skipped: boolean, id: string}>}
      */
-    sendFile(file, filename) {
-        throw new Error("Method 'sendFile()' must be implemented.");
+    uploadVoice(file, filename) {
+        throw new Error("Method 'uploadVoice()' must be implemented.");
     }
 
     /**
-     * @param {VoiceJSONRequest} request
-     * @returns {Promise<VoiceJSONResponse>}
+     * @param {DEConversationMessageNarration} narration
+     * @param {string} voiceId
+     * @param {DEVoiceModeMin[]} deliveryModes
+     * @returns {Promise<Blob>}
      */
-    runWorkflow(request) {
-        throw new Error("Method 'runWorkflow()' must be implemented.");
+    renderNarration(
+        narration,
+        voiceId,
+        deliveryModes,
+    ) {
+        throw new Error("Method 'renderNarration()' must be implemented.");
+    }
+
+    /**
+     * @param {DEConversationMessageThought} thought 
+     * @param {string} voiceId 
+     * @param {DEVoiceModeMin[]} deliveryModes
+     * @returns {Promise<Blob>}
+     */
+    renderThought(
+        thought,
+        voiceId,
+        deliveryModes,
+    ) {
+        throw new Error("Method 'renderThought()' must be implemented.");
+    }
+
+    /**
+     * 
+     * @param {Array<DEConversationMessageDialogueFragment>} dialogueFragment 
+     * @param {string} voiceId
+     * @param {DEVoiceModeMin[]} deliveryModes
+     * @param {CharacterSoundAssets} sounds
+     * @returns {Promise<Blob>}
+     */
+    renderDialogueFragmentChunk(
+        dialogueFragment,
+        voiceId,
+        deliveryModes,
+        sounds,
+    ) {
+        throw new Error("Method 'renderDialogueFragmentChunk()' must be implemented.");
+    }
+
+    /**
+     * @param {string} assetPath
+     */
+    async loadAsset(assetPath) {
+        // TODO implement this here
+        return new Blob([], { type: "audio/wav" });
+    }
+
+    /**
+     * @param {DEConversationMessageDialogue} dialogue
+     * @param {DEEmotionNames} primaryEmotion
+     * @param {CharacterVoiceAssets} voice
+     * @param {CharacterVoiceModifiersAssets} voiceModifiers
+     * @param {CharacterSoundAssets} sounds
+     * @param {string} narratorVoiceId
+     * @param {DEVoiceMode[]} narrationDeliveryModes
+     * @returns {Promise<Blob>}
+     */
+    async renderDialogue(
+        dialogue,
+        primaryEmotion,
+        voice,
+        narratorVoiceId,
+        voiceModifiers,
+        sounds,
+        narrationDeliveryModes,
+    ) {
+        const defaultVoice = voice[primaryEmotion] || voice.neutral;
+        /**
+         * @type {Blob[]}
+         */
+        const renderedBlobsInOrder = [];
+        /**
+         * @type {Array<"dialogue-chunk" | "narration-chunk">}
+         */
+        const renderedBlobsTypesInOrder = [];
+        /**
+         * @type {Array<DEConversationMessageDialogueFragment>}
+         */
+        let accumulatedChunks = [];
+        /**
+         * @type {DEVoiceModeMin[]}
+         */
+        let accumulatedDeliverModes = [];
+
+        /**
+         * Renders all accumulated chunks and clears the accumulation arrays. This is called when we encounter a sound with a delivery mode (and there was existing text for a previous)
+         * delivery mode (or the default, just if there is text beforehand)
+         * 
+         * Or when we find a narration, which is a separate type of fragment that needs to be rendered separately, triggering the end of the dialogue fragment accumulation.
+         */
+        const renderAccumulatedChunks = async () => {
+            // first we check if we have any accumulated chunks to render, if not, we can skip this step
+            if (accumulatedChunks.length > 0) {
+                // we need to determine which voice to use for this chunk, based on the delivery modes and the primary emotion
+                let voiceToUse = defaultVoice;
+                // add the primary emotion as the first delivery mode
+                // if there are no accumulated delivery modes, we will use the primary emotion as the default
+                // and its label
+                if (accumulatedDeliverModes.length === 0) {
+                    accumulatedDeliverModes.push({
+                        label: "voice_emotion",
+                        instructions: primaryEmotion,
+                    });
+                } else {
+                    // otherwise if there are modes, we will pick the first one that matches a voice file
+                    // if we get any
+                    for (const potentialVoiceOfMode of accumulatedDeliverModes) {
+                        const foundVoice = voiceModifiers[potentialVoiceOfMode.label];
+                        if (foundVoice) {
+                            voiceToUse = foundVoice;
+                            break;
+                        }
+                    }
+                }
+
+                const blob = await this.loadAsset(voiceToUse.asset);
+                const uploaded = await this.uploadVoice(blob, voiceToUse.asset);
+
+                // now we will build other instructions based on the tags of the voice we are using
+                const otherInstructions = voiceToUse.tags?.join(", ") || "";
+                if (otherInstructions) {
+                    accumulatedDeliverModes.push({
+                        label: "voice_desc",
+                        instructions: otherInstructions,
+                    });
+                }
+
+                // now we can render all that, this includes the sounds, we don't know how the specific
+                // API will handle this, specially things like pauses which could be natively handled
+                const renderedDialogueChunk = await this.renderDialogueFragmentChunk(
+                    accumulatedChunks,
+                    uploaded.id,
+                    accumulatedDeliverModes,
+                    sounds,
+                );
+
+                // finally we get all these rendered chunks and add them to the final array of blobs in order, and clear the accumulated arrays for the next chunk
+                renderedBlobsInOrder.push(renderedDialogueChunk);
+                renderedBlobsTypesInOrder.push("dialogue-chunk");
+
+                // clear up the accumulated arrays for the next chunk
+                accumulatedChunks = [];
+                accumulatedDeliverModes = [];
+            }
+        }
+
+        // start loop in the fragments of the dialogue
+        for (const fragment of dialogue.fragments) {
+            // if the fragment is a dialogue type
+            if (fragment.type === "dialogue") {
+                // we accumulate that simply
+                accumulatedChunks.push(fragment);
+            } else if (fragment.type === "sound") {
+                // sounds are more tricky let's see if it is a mode
+                // we worry that there are two modes in a row before a delivery eg.
+                // [screaming] [crying] [sobs] no you mean prick!
+                // we need to wait until we have text to deliver that
+                if (fragment.soundInfo.mode) {
+                    // so we check for text, any text, narration will also ensure
+                    // that we break if there is no text and only sounds, as well as at the very end whatever is left
+                    const alreadyHasText = accumulatedChunks.some(f => f.type === "dialogue" || f.type === "narration");
+                    // now if we already have text, render it
+                    // we don't want to wait for the next mode [screaming] [crying] [sobs] no you mean prick! [whispering] but...
+                    if (alreadyHasText) {
+                        await renderAccumulatedChunks();
+                    }
+                    // add the deliver mode for whatever comes next
+                    accumulatedDeliverModes.push(fragment.soundInfo.mode);
+                } else {
+                    // Let the adapter resolve assets and built-in pauses even when
+                    // a tag has no entry in the character's voice sound definitions.
+                    accumulatedChunks.push(fragment);
+                }
+            } else if (fragment.type === "narration") {
+                // now for narrations we just going to render whatever we have accumulated so far, and then render the narration separately, as it is a different type of fragment
+                await renderAccumulatedChunks();
+
+                // then we use the standard narration rendering
+                const renderedNarration = await this.renderNarration(
+                    {
+                        type: "narration",
+                        fragments: fragment.fragments,
+                    },
+                    narratorVoiceId,
+                    narrationDeliveryModes,
+                );
+                renderedBlobsInOrder.push(renderedNarration);
+                renderedBlobsTypesInOrder.push("narration-chunk");
+            }
+        }
+
+        // if we have anything left in the accumulated chunks, we need to render that as well
+        if (accumulatedChunks.length > 0) {
+            // render it
+            await renderAccumulatedChunks();
+        }
+
+        // combine and done
+        return await this.combineAudioBlobs(renderedBlobsInOrder, renderedBlobsTypesInOrder);
+    }
+
+    /**
+     * @param {Array<Blob>} blobs
+     * @param {Array<"dialogue-chunk" | "narration-chunk">} typesInOrder
+     * @returns {Promise<Blob>}
+     */
+    combineAudioBlobs(blobs, typesInOrder) {
+        throw new Error("Method 'combineAudioBlobs()' must be implemented.");
     }
 
     /**

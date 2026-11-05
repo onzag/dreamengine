@@ -337,6 +337,11 @@ async function getCausantsHelperLocal(DE, character, stateName) {
  * @returns {DEUtils}
  */
 export const deEngineUtilsFn = (DE, engine) => ({
+    engine: {
+        informUpdate: () => {
+            engine.informDEObjectUpdated();
+        }
+    },
     id: {
         async findBestIdentifier(id, name, characterEmitterId) {
             characterEmitterId = typeof characterEmitterId === "string" || !characterEmitterId ? characterEmitterId : characterEmitterId.id;

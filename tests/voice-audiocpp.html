@@ -1,0 +1,264 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>AudioCPP audio processing tests</title>
+<script type="module">
+import { VoiceAdapterLocalAudioCPP } from '../js/engine/voice/adapter-local-audiocpp.js';
+import { minimizeModeDescription } from '../js/engine/util/voice.js';
+import { AUDIO_SAMPLE_RATE as RATE, audioClip, decodeAudio, prepareAudio, joinAudio, encodeWav } from '../js/engine/voice/audio-processing.js';
+
+window.testResult = (async () => {
+    const results = [];
+    const assert = (value, message = 'Assertion failed') => { if (!value) throw new Error(message); };
+    const near = (value, expected, tolerance = 0.015) => assert(Math.abs(value - expected) <= tolerance, `${value} != ${expected} (+/- ${tolerance})`);
+    const rejects = async (fn, pattern) => {
+        try { await fn(); } catch (error) { assert(pattern.test(error.message), error.message); return; }
+        throw new Error('Expected rejection');
+    };
+    async function test(name, fn) {
+        const originalFetch = globalThis.fetch;
+        const originalRandom = Math.random;
+        try { await fn(); results.push(`PASS ${name}`); }
+        catch (error) { results.push(`FAIL ${name}: ${error.stack}`); }
+        finally { globalThis.fetch = originalFetch; Math.random = originalRandom; }
+    }
+    function tone({ rate = RATE, duration = 0.15, lead = 0.1, tail = 0.13, amplitude = 0.2, stereo = false } = {}) {
+        const count = Math.round(rate * (lead + duration + tail));
+        const left = new Float32Array(count);
+        for (let i = Math.round(lead * rate); i < Math.round((lead + duration) * rate); i++) {
+            left[i] = amplitude * Math.sin(2 * Math.PI * 400 * i / rate);
+        }
+        return encodeWav(stereo ? [left, left.map(value => value * 0.5)] : [left], rate);
+    }
+    const dialogue = (...fragments) => ({ type: 'dialogue', fragments });
+    const sound = (label, replacement = null) => ({ type: 'sound', text: label, soundInfo: { sound: { label, replacement } } });
+    const modes = [{ label: 'soft', instructions: 'Speak softly.' }];
+    const make = () => new VoiceAdapterLocalAudioCPP({ host: 'https://audio.example/', secret: 'secret', model: '' });
+    async function voice(adapter) { return (await adapter.uploadVoice(tone(), 'voice.wav')).id; }
+    const duration = clip => clip.channels[0].length / RATE;
+    const peak = clip => clip.channels.reduce((max, samples) => samples.reduce((m, v) => Math.max(m, Math.abs(v)), max), 0);
+    function audibleRuns(clip) {
+        const window = Math.round(RATE * 0.005);
+        const runs = [];
+        let start = null;
+        const samples = clip.channels[0];
+        for (let i = 0; i < samples.length; i += window) {
+            let energy = 0;
+            for (let j = i; j < Math.min(samples.length, i + window); j++) energy += samples[j] ** 2;
+            const active = Math.sqrt(energy / window) > 0.003;
+            if (active && start === null) start = i / RATE;
+            if (!active && start !== null) { runs.push([start, i / RATE]); start = null; }
+        }
+        if (start !== null) runs.push([start, duration(clip)]);
+        return runs;
+    }
+    function server(output = tone()) {
+        const calls = [];
+        globalThis.fetch = async (url, options) => {
+            assert(options.headers.Authorization === 'Bearer secret');
+            if (url.endsWith('/v1/models')) return Response.json({ data: [{ id: 'tts' }] });
+            assert(url === 'https://audio.example/v1/audio/speech');
+            assert(options.method === 'POST');
+            assert(options.headers['Content-Type'] === 'application/json');
+            const payload = JSON.parse(options.body);
+            assert(payload.model === 'tts' && payload.response_format === 'wav');
+            calls.push(payload);
+            return new Response(output, { headers: { 'Content-Type': 'audio/wav' } });
+        };
+        return calls;
+    }
+
+    await test('real WAV decoding resamples stereo assets and preserves channel balance', async () => {
+        const decoded = await decodeAudio(tone({ rate: 22050, stereo: true }));
+        assert(decoded.channels.length === 2);
+        near(duration(decoded), 0.38, 1 / RATE);
+        let left = 0, right = 0;
+        for (let i = 0; i < decoded.channels[0].length; i++) { left += decoded.channels[0][i] ** 2; right += decoded.channels[1][i] ** 2; }
+        near(right / left, 0.25, 0.001);
+    });
+
+    await test('boundary trimming preserves internal pauses and quiet speech, with bounded gain and fades', async () => {
+        const samples = new Float32Array(RATE);
+        for (let i = RATE * 0.2; i < RATE * 0.35; i++) samples[i] = 0.002 * Math.sin(2 * Math.PI * 400 * i / RATE);
+        for (let i = RATE * 0.6; i < RATE * 0.8; i++) samples[i] = 0.2 * Math.sin(2 * Math.PI * 400 * i / RATE);
+        const prepared = prepareAudio(audioClip([samples]));
+        near(duration(prepared), 0.63, 0.015);
+        assert(prepared.channels[0][0] === 0 && prepared.channels[0].at(-1) === 0);
+        const middle = prepared.channels[0].slice(Math.round(RATE * 0.2), Math.round(RATE * 0.35));
+        assert(middle.every(sample => sample === 0), 'internal silence changed');
+        const whisper = prepareAudio(await decodeAudio(tone({ amplitude: 0.002 })));
+        assert(peak(whisper) < 0.0041, 'quiet audio boosted too much');
+        const loud = prepareAudio(audioClip([new Float32Array(1000).fill(2)]));
+        assert(peak(loud) <= 0.89001, 'peak headroom exceeded');
+    });
+
+    await test('text flattening and replacements stay in a single continuous speech request', async () => {
+        const calls = server();
+        const adapter = make();
+        const id = await voice(adapter);
+        Math.random = () => 0.75;
+        await adapter.renderDialogueFragmentChunk([
+            dialogue('Hello, ', { id: 'never-spoken', text: 'Alice' }), sound('laugh', ['Ha!', 'Hehe!']), dialogue(' Welcome.')
+        ], id, modes, {});
+        assert(calls.length === 1);
+        assert(calls[0].input.includes('Hello, Alice Hehe!') && calls[0].input.includes('Welcome.'));
+        assert(!calls[0].input.includes('never-spoken') && !calls[0].input.includes('[laugh]'));
+        assert(calls[0].instructions === 'Speak softly.');
+        assert(!adapter._voiceCache.has(id));
+    });
+
+    await test('speech / manual pause / random asset / speech preserves order, gaps and one-use voice', async () => {
+        const calls = server();
+        const adapter = make();
+        const id = await voice(adapter);
+        const loaded = [];
+        adapter.loadAsset = async path => { loaded.push(path); return tone({ duration: 0.1, rate: 22050, stereo: true, amplitude: 0.4 }); };
+        Math.random = () => 0.5;
+        const blob = await adapter.renderDialogueFragmentChunk([
+            dialogue('One.'), sound('short pause'), dialogue('Two.'), sound('LAUGH'), dialogue('Three.')
+        ], id, modes, { laugh: { asset: ['a.wav', 'b.wav'], preGapRange: [100, 300], postGapRange: [200, 400], volume: 0.6 } });
+        assert(loaded.join() === 'b.wav');
+        assert(calls.map(call => call.input).join('|') === 'One.|Two.|Three.');
+        assert(calls.every(call => call.voice_ref.data === calls[0].voice_ref.data));
+        assert(!adapter._voiceCache.has(id));
+        const decoded = await decodeAudio(blob);
+        assert(decoded.channels.length === 2);
+        const runs = audibleRuns(decoded);
+        assert(runs.length === 4, JSON.stringify(runs));
+        near(runs[1][0] - runs[0][1], 0.18);
+        near(runs[2][0] - runs[1][1], 0.2);
+        near(runs[3][0] - runs[2][1], 0.3);
+        await rejects(() => adapter.renderDialogueFragmentChunk([dialogue('Again.')], id, modes, {}), /already been used/);
+    });
+
+    await test('sound-only chunks use cached assets without HTTP; volume zero retains its timed slot', async () => {
+        const adapter = make();
+        globalThis.fetch = () => { throw new Error('unexpected network'); };
+        let loads = 0;
+        adapter.loadAsset = async () => { loads++; return tone({ duration: 0.12 }); };
+        const entry = { asset: 'sound.wav', preGapRange: [100, 100], postGapRange: [200, 200], volume: 1 };
+        const normal = await adapter.renderDialogueFragmentChunk([sound('laugh')], await voice(adapter), [], { laugh: entry });
+        const muted = await adapter.renderDialogueFragmentChunk([sound('laugh')], await voice(adapter), [], { laugh: { ...entry, volume: 0 } });
+        const half = await adapter.renderDialogueFragmentChunk([sound('laugh')], await voice(adapter), [], { laugh: { ...entry, volume: 0.5 } });
+        const normalClip = await decodeAudio(normal), mutedClip = await decodeAudio(muted);
+        near(duration(normalClip), 0.42);
+        near(duration(mutedClip), duration(normalClip), 1 / RATE);
+        assert(peak(mutedClip) === 0);
+        near(peak(await decodeAudio(half)) / peak(normalClip), 0.5, 0.001);
+        const recombined = await decodeAudio(await adapter.combineAudioBlobs([muted, half], ['dialogue-chunk', 'dialogue-chunk']));
+        near(duration(recombined), duration(mutedClip) + duration(await decodeAudio(half)), 1 / RATE);
+        near(peak(recombined), peak(await decodeAudio(half)), 1 / 32767);
+        loads = 0;
+        await adapter.renderDialogueFragmentChunk([sound('laugh'), sound('laugh')], 'unused', [], { laugh: entry });
+        assert(loads === 1, 'duplicate asset was decoded/loaded again within the chunk');
+    });
+
+    await test('explicit leading, trailing and consecutive pauses survive final combination', async () => {
+        const adapter = make();
+        const calls = server();
+        const silent = await adapter.renderDialogueFragmentChunk([sound('short pause'), sound('pause'), sound('long pause')], await voice(adapter), [], {});
+        const silence = await decodeAudio(silent);
+        near(duration(silence), 1.43, 1 / RATE);
+        assert(peak(silence) === 0 && calls.length === 0);
+        const blob = await adapter.renderDialogueFragmentChunk([sound('long pause'), dialogue('Hello.'), sound('pause')], await voice(adapter), [], {});
+        const clip = await decodeAudio(blob);
+        const combined = await decodeAudio(await adapter.combineAudioBlobs([blob], ['dialogue-chunk']));
+        near(duration(combined), duration(clip), 1 / RATE);
+        const runs = audibleRuns(combined);
+        near(runs[0][0], 0.9);
+        near(duration(combined) - runs[0][1], 0.35);
+    });
+
+    await test('combining uses chunk types and counts existing silence toward each transition', async () => {
+        const adapter = make();
+        const source = tone();
+        for (const [types, expected] of [
+            [['dialogue-chunk', 'dialogue-chunk'], 0.08],
+            [['dialogue-chunk', 'narration-chunk'], 0.28],
+            [['narration-chunk', 'narration-chunk'], 0.22]
+        ]) {
+            const runs = audibleRuns(await decodeAudio(await adapter.combineAudioBlobs([source, source], types)));
+            assert(runs.length === 2);
+            near(runs[1][0] - runs[0][1], expected);
+        }
+        const longPause = await adapter.renderDialogueFragmentChunk([sound('long pause')], 'unused', [], {});
+        const runs = audibleRuns(await decodeAudio(await adapter.combineAudioBlobs([source, longPause, source], ['dialogue-chunk', 'dialogue-chunk', 'dialogue-chunk'])));
+        near(runs[1][0] - runs[0][1], 0.93, 0.02);
+        const empty = await decodeAudio(await adapter.combineAudioBlobs([], []));
+        assert(empty.channels[0].length === 1 && peak(empty) === 0);
+        await rejects(() => adapter.combineAudioBlobs([source], []), /matching/);
+    });
+
+    await test('asset configuration and loading errors fail before speech or voice consumption', async () => {
+        const adapter = make();
+        const id = await voice(adapter);
+        globalThis.fetch = () => { throw new Error('unexpected network'); };
+        await rejects(() => adapter.renderDialogueFragmentChunk([dialogue('Before.'), sound('sigh')], id, [], {}), /asset or a text replacement/);
+        const asset = { asset: 'missing.wav', preGapRange: [0, 0], postGapRange: [0, 0], volume: 1 };
+        await rejects(() => adapter.renderDialogueFragmentChunk([sound('sigh')], id, [], { sigh: { ...asset, asset: [] } }), /asset path/);
+        await rejects(() => adapter.renderDialogueFragmentChunk([sound('sigh')], id, [], { sigh: { ...asset, preGapRange: [100, 0] } }), /gap range/);
+        await rejects(() => adapter.renderDialogueFragmentChunk([sound('sigh')], id, [], { sigh: { ...asset, volume: NaN } }), /volume/);
+        await rejects(() => adapter.renderDialogueFragmentChunk([sound('sigh')], id, [], { sigh: asset }), /missing.wav.*empty/);
+        assert(adapter._voiceCache.has(id));
+    });
+
+    await test('generation rejects silent/invalid responses and propagates HTTP errors', async () => {
+        const adapter = make();
+        server(encodeWav([new Float32Array(1000)]));
+        await rejects(async () => adapter.renderDialogueFragmentChunk([dialogue('Hello.')], await voice(adapter), [], {}), /silent audio/);
+        server(new Blob(['invalid audio']));
+        await rejects(async () => adapter.renderDialogueFragmentChunk([dialogue('Hello.')], await voice(adapter), [], {}), /decode|encoding|audio/i);
+        globalThis.fetch = async () => new Response('server problem', { status: 503 });
+        await rejects(async () => adapter.renderDialogueFragmentChunk([dialogue('Hello.')], await voice(adapter), [], {}), /HTTP 503: server problem/);
+    });
+
+    await test('base renderDialogue forwards pause tags without soundInfo definitions', async () => {
+        const adapter = make();
+        const calls = server();
+        adapter.loadAsset = async () => tone();
+        const blob = await adapter.renderDialogue({ type: 'dialogue', fragments: [dialogue('Before.'), { type: 'sound', text: 'long pause', soundInfo: {} }, dialogue('After.')] },
+            'neutral', { neutral: { asset: 'voice.wav' } }, 'unused', {}, {}, []);
+        assert(calls.length === 2);
+        const runs = audibleRuns(await decodeAudio(blob));
+        near(runs[1][0] - runs[0][1], 0.9);
+    });
+
+    await test('thought rendering still includes the full soft echo tail', async () => {
+        const adapter = make();
+        const samples = new Float32Array(1000);
+        samples[100] = 0.5;
+        server(encodeWav([samples]));
+        const output = await decodeAudio(await adapter.renderThought({ type: 'thought', fragments: ['A thought.'] }, await voice(adapter), []));
+        assert(output.channels[0].length === 1000 + Math.round(RATE * 0.16) * 2);
+        near(output.channels[0][100], 0.4, 0.0001);
+        near(output.channels[0][100 + Math.round(RATE * 0.16)], 0.075, 0.0001);
+        near(output.channels[0][100 + Math.round(RATE * 0.32)], 0.025, 0.0001);
+    });
+
+    await test('multiple narration passages share one scoped reference, with cleanup on success and failure', async () => {
+        const adapter = make();
+        const calls = server();
+        adapter.loadAsset = async () => tone();
+        const fragments = [{ type: 'narration', fragments: ['She looked up.'] }, dialogue('Hello.'), { type: 'narration', fragments: ['Then she smiled.'] }];
+        const firstId = await voice(adapter), secondId = await voice(adapter);
+        const run = id => adapter.renderDialogue({ type: 'dialogue', fragments }, 'neutral', { neutral: { asset: 'voice.wav' } }, id, {}, {}, modes);
+        const outputs = await Promise.all([run(firstId), run(secondId)]);
+        assert(calls.length === 6 && outputs.every(blob => blob.size > 44));
+        assert(adapter._narrationReferences.size === 0 && adapter._voiceCache.size === 0);
+        globalThis.fetch = async () => new Response('failed', { status: 500 });
+        await rejects(async () => run(await voice(adapter)), /HTTP 500/);
+        assert(adapter._narrationReferences.size === 0 && adapter._voiceCache.size === 0);
+    });
+
+    await test('delivery-mode instructions survive conversion and the full dialogue flow', async () => {
+        const adapter = make();
+        const calls = server();
+        adapter.loadAsset = async () => tone();
+        const mode = minimizeModeDescription({ label: 'whispering', instructions: 'Speak in a whisper.' });
+        await adapter.renderDialogue({ type: 'dialogue', fragments: [
+            { type: 'sound', text: 'whispering', soundInfo: { mode } }, dialogue('Keep this quiet.')
+        ] }, 'neutral', { neutral: { asset: 'voice.wav' } }, 'unused', {}, {}, []);
+        assert(calls.length === 1 && calls[0].instructions === 'Speak in a whisper.');
+    });
+    return results;
+})();
+</script>

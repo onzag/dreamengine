@@ -1059,6 +1059,12 @@ declare interface DEVoiceModeMin {
      * prefer continous tense verbs, as they are more descriptive of the action being performed
      */
     label: string;
+    /**
+     * Delivery instructions for the voice mode, for example "speak in a whispering voice", "speak in a screaming voice", "sing the words", etc...
+     * 
+     * This is used to instruct the character how to deliver their lines in this voice mode
+     */
+    instructions: string;
 }
 
 declare interface DEVoiceMode extends DEVoiceModeMin {
@@ -4205,6 +4211,9 @@ declare interface DESocialGroupInPerspective {
 }
 
 declare interface DEUtils {
+    engine: {
+        informUpdate: () => void;
+    },
     id: {
         /**
          * Resolve a possibly malformed or swapped ID/name pair to an identifier
