@@ -64,20 +64,45 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
 
 .character-tags { margin: 0 0 2vh; }
 .description[hidden] { display: none; }
-.detail-debug { grid-column: 1 / -1; min-width: 0; margin-top: 2vh; }
-.debug-toggle { font-size: 2.2vh; padding: 1vh 2vh; border-radius: .6vh; border: .2vh solid #ff44aa; background: rgba(255, 30, 100, .12); color: #ffd6ea; cursor: pointer; }
-.debug-toggle:hover { background: rgba(255, 30, 100, .22); }
-.debug-info { margin-top: 1.5vh; }
-.debug-info[hidden] { display: none; }
-.debug-section-title { font-size: 2vh; color: #ff88c0; margin: 1.5vh 0 .5vh; }
-.debug-json { padding: 1.5vh; border-radius: .6vh; background: rgba(0, 0, 0, .4); font-family: monospace; font-size: 1.8vh; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+.view-tabs { display: flex; gap: .6vh; padding: 0 1vh 1.5vh; }
+.view-tabs[hidden] { display: none; }
+.view-tab { font-size: 2vh; padding: .8vh 2vh; border-radius: .6vh; border: .2vh solid transparent; background: rgba(255, 255, 255, .06); color: var(--muted); cursor: pointer; }
+.view-tab:hover { background: rgba(255, 255, 255, .12); }
+.view-tab[aria-selected="true"] { color: #ffd6ea; border-color: #ff44aa; background: rgba(255, 30, 100, .14); }
+.detail[hidden] { display: none; }
+.debug-view { min-width: 0; padding: 0 1vh 2vh; }
+.debug-view[hidden] { display: none; }
+.debug-section { margin-bottom: 1vh; border: .15vh solid rgba(255, 68, 170, .3); border-radius: .6vh; overflow: hidden; }
+.debug-section > summary { font-size: 2vh; color: #ff88c0; padding: 1vh 1.5vh; background: rgba(255, 30, 100, .1); cursor: pointer; user-select: none; }
+.debug-section > summary:hover { background: rgba(255, 30, 100, .18); }
+.debug-json { margin: 0; padding: 1.5vh; background: rgba(0, 0, 0, .4); font-family: monospace; font-size: 1.8vh; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
             </style>
+            <div class="view-tabs" role="tablist" hidden>
+                <button type="button" class="view-tab" data-view="normal" role="tab" aria-selected="true">Normal view</button>
+                <button type="button" class="view-tab" data-view="debug" role="tab" aria-selected="false">Debug</button>
+            </div>
             <article class="detail" data-blindness="full" aria-busy="true">
                 <div class="hero" hidden></div>
                 <section class="copy"><div class="description" role="status">Loading details…</div></section>
-            </article>`;
+            </article>
+            <div class="debug-view" role="tabpanel" hidden></div>`;
         this.root.querySelector('.detail')?.classList.add(this.layout);
+        this.setupTabs();
         void this.load();
+    }
+
+    setupTabs() {
+        const tabs = this.root.querySelectorAll('.view-tab');
+        const detail = /** @type {HTMLElement} */ (this.root.querySelector('.detail'));
+        const debugView = /** @type {HTMLElement} */ (this.root.querySelector('.debug-view'));
+        for (const tab of tabs) {
+            tab.addEventListener('click', () => {
+                const isDebug = tab.getAttribute('data-view') === 'debug';
+                for (const other of tabs) other.setAttribute('aria-selected', String(other === tab));
+                detail.hidden = isDebug;
+                debugView.hidden = !isDebug;
+            });
+        }
     }
 
     disconnectedCallback() { this.loadVersion++; }
@@ -86,7 +111,7 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
     getDisplayData(perspective) { throw new Error('A detail view must provide its display data.'); }
 
     /** Debug-only sections to inspect the perspective data that produced this view.
-     * @param {DECharacterPerspective} perspective @returns {DebugSection[]} */
+     * @param {DECharacterPerspective} perspective @returns {Promise<DebugSection[]> | DebugSection[]} */
     getDebugSections(perspective) { return []; }
 
     async load() {
@@ -131,10 +156,22 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
                 data.content.classList.add('detail-extra');
                 article.append(data.content);
             }
-            this.root.querySelector('.detail-debug')?.remove();
+            const tabs = /** @type {HTMLElement} */ (this.root.querySelector('.view-tabs'));
+            const debugView = /** @type {HTMLElement} */ (this.root.querySelector('.debug-view'));
+            debugView.replaceChildren();
+            tabs.hidden = true;
+            article.hidden = false;
+            debugView.hidden = true;
+            for (const tab of this.root.querySelectorAll('.view-tab')) {
+                tab.setAttribute('aria-selected', String(tab.getAttribute('data-view') === 'normal'));
+            }
             if (this.isDebugMode) {
-                const sections = this.getDebugSections(perspective);
-                if (sections.length) article.append(this.createDebugPanel(sections));
+                const sections = await this.getDebugSections(perspective);
+                if (!this.isConnected || version !== this.loadVersion) return;
+                if (sections.length) {
+                    debugView.append(...sections.map(section => this.createDebugSection(section)));
+                    tabs.hidden = false;
+                }
             }
             if (data.description) {
                 // Keep the description readable if narration parsing is temporarily unavailable.
@@ -174,31 +211,17 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
         return image;
     }
 
-    /** @param {DebugSection[]} sections */
-    createDebugPanel(sections) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'detail-debug';
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'debug-toggle';
-        button.textContent = 'View debug information';
-        const panel = document.createElement('div');
-        panel.className = 'debug-info';
-        panel.hidden = true;
-        for (const { title, value } of sections) {
-            const heading = document.createElement('h3');
-            heading.className = 'debug-section-title';
-            heading.textContent = title;
-            const pre = document.createElement('pre');
-            pre.className = 'debug-json';
-            pre.textContent = debugStringify(value);
-            panel.append(heading, pre);
-        }
-        button.addEventListener('click', () => {
-            panel.hidden = !panel.hidden;
-            button.textContent = panel.hidden ? 'View debug information' : 'Hide debug information';
-        });
-        wrapper.append(button, panel);
-        return wrapper;
+    /** @param {DebugSection} section */
+    createDebugSection(section) {
+        const details = document.createElement('details');
+        details.className = 'debug-section';
+        details.open = true;
+        const summary = document.createElement('summary');
+        summary.textContent = section.title;
+        const pre = document.createElement('pre');
+        pre.className = 'debug-json';
+        pre.textContent = debugStringify(section.value);
+        details.append(summary, pre);
+        return details;
     }
 }

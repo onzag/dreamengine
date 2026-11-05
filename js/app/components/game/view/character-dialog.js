@@ -19,11 +19,17 @@ export class CharacterDialog extends IdentifierDetail {
     }
 
     /** @param {DECharacterPerspective} perspective */
-    getDebugSections(perspective) {
+    async getDebugSections(perspective) {
         const id = this.getAttribute('identifier-id') || '';
         const character = getPerspectiveIndex(perspective).characters.get(id);
         if (!character) return [];
-        return [{ title: 'Character in perspective', value: character }];
+        const characterInternalPrompt = 
+        return [
+            {
+                title: 'Character in perspective',
+                value: character,
+            }
+        ];
     }
 }
 customElements.define('app-game-character-dialog', CharacterDialog);

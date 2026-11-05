@@ -311,49 +311,50 @@ declare interface DECharacterStateDefinition {
      * By default when injecting a general character description via relievingGeneralCharacterDescriptionInjection or
      * generalCharacterDescriptionInjection, dominance is used to decide whether to inject the descriptions or not, but in some cases you may want to ignore dominance for these descriptions as they are just for flavour and do not affect behaviour, and it would be nice to have them all injected even if the state is not the most dominant one
      */
-    ignoreDominanceWhenInjectedGeneralCharacterDescription?: boolean;
+    ignoreDominanceForGeneralCharacterDescriptionAndAlwaysInject?: boolean;
     /**
      * By default when injecting an action prompt injection via actionPromptInjection or relievingActionPromptInjection, dominance is used to decide whether to inject the descriptions or not, but in some cases you may want to ignore dominance for these descriptions as they are just for flavour and do not affect behaviour, and it would be nice to have them all injected even if the state is not the most dominant one
      */
-    ignoreDominanceForActionPromptInjection?: boolean;
+    ignoreDominanceForActionPromptInjectionAndAlwaysInject?: boolean;
     /**
      * Ignores the dominance to inject into the reasoning of the character about the state they are currently in
      * this is useful if it is always considered, like if it's an important state
      */
-    ignoreDominanceForStateInjection?: boolean;
+    ignoreDominanceForStateInjectionAndAlwaysInject?: boolean;
     /**
-     * Description of the state, used for reasoning about the state
-     * 
-     * You may want to use get_state_intensity function to describe different
-     * behaviours at different intensities, it is recommended to use lists
-     * of conditions for this purpose, eg. consider the state is ANGRY
-     * you may want to write something like a handlebars template like this:
-     * 
-     * """
-     * {{#if (<= (get_state_intensity "ANGRY") 2)}}
-     * {{char}} is annoyed and irritated.
-     * Because of this the following conditions apply:
-     * 1. {{char}} will raise their voice when speaking.
-     * 2. {{char}} may frown or scowl.
-     * 3. {{char}} may cross their arms or tap their foot impatiently.
-     * {{else if (<= (get_state_intensity "ANGRY") 3)}}
-     * {{char}} is angry and frustrated.
-     * Because of this the following conditions apply:
-     * 1. {{char}} will speak in a harsh and curt tone.
-     * 2. {{char}} may clench their fists or grit their teeth.
-     * 3. {{char}} may pace around or slam objects down.
-     * {{else if (<= (get_state_intensity "ANGRY") 4)}}
-     * {{char}} is very angry and furious.
-     * Because of this the following conditions apply:
-     * 1. {{char}} will shout and yell.
-     * 2. {{char}} will throw objects at those that angered {{format_object_pronoun char}}
-     * 3. {{char}} may become physically aggressive.
-     * {{/if}}
-     * """
+     * Description of the state, used for reasoning about the state.
+     *
+     * Use a JavaScript function for intensity-based descriptions. The function receives
+     * `{ char, causes }` and must return a string (or Promise<string>).
+     * Call `DE.utils.states.getStateIntensity(info.char, "STATE_NAME")` (closed over from
+     * the enclosing script scope) to branch on intensity. For BINARY states a plain string
+     * or a simple arrow function is sufficient.
+     *
+     * @example — INTENSITY_EXPRESSIVE state (ANGRY):
+     * ```js
+     * general: (info) => {
+     *     const intensity = DE.utils.states.getStateIntensity(info.char, "ANGRY");
+     *     if (intensity >= 3.5) return `${info.char.name} is overwhelmingly angry and furious.\n\nBecause of this:\n1. ${info.char.name} will shout and yell.\n2. ${info.char.name} may throw objects at people.\n3. ${info.char.name} may become physically aggressive.`;
+     *     if (intensity >= 2.5) return `${info.char.name} is very angry.\n\nBecause of this:\n1. ${info.char.name} will speak in a harsh and curt tone.\n2. ${info.char.name} may clench their fists or grit their teeth.\n3. ${info.char.name} may pace around or slam objects down.`;
+     *     return `${info.char.name} is annoyed and irritated.\n\nBecause of this:\n1. ${info.char.name} will raise their voice when speaking.\n2. ${info.char.name} may frown or scowl.\n3. ${info.char.name} may cross their arms or tap their foot impatiently.`;
+     * }
+     * ```
+     *
+     * @example — BINARY state (SLEEPING):
+     * ```js
+     * general: (info) => `${info.char.name} is currently asleep.`
+     * ```
      */
     general: DEStringTemplateCharAndCauses;
     /**
-     * Description of the state after being relieved, used for reasoning about the state
+     * Description of the state after being relieved, used for reasoning about the state.
+     * Shown instead of `general` once the character begins relieving — the underlying need
+     * has been addressed but the after-effect is still winding down.
+     *
+     * @example
+     * ```js
+     * generalAfterRelief: (info) => `${info.char.name} has just relieved themselves and is feeling much better, though still slightly uncomfortable from the experience.`
+     * ```
      */
     generalAfterRelief?: DEStringTemplateCharAndCauses;
     /**
@@ -380,23 +381,25 @@ declare interface DECharacterStateDefinition {
      * If two injections are set at the same time by different states, the one from the state with higher dominance will take precedence,
      * if they have the same dominance, one will be chosen at random
      * 
-     * Example use case:
-     * say the state is NEEDS_TO_URINATE, you may want to set an action prompt injection like:
-     * 
-     * """
-     * {{#if (== (get_state_intensity "NEEDS_TO_URINATE") 4)}}
-     * {{#if (== (get_random_seed_from_time 3) 0)}}
-     * {{char}} suddenly pees themselves right now, they cannot hold it anymore!
-     * {{/if}}
-     * {{/if}}
-     * """
-     * 
-     * This basically means that they have a 1 in 3 chance of peeing themselves when
-     * they are at maximum intensity of the NEEDS_TO_URINATE state, this will override
-     * any reasoning the LLM may otherwise do about what to do next
-     * 
-     * The injection can have intensity levels as well to allow for different instructions
-     * allowing it to be more dynamic
+     * @example — NEEDS_TO_URINATE state: 1-in-3 chance of an accident at max intensity:
+     * ```js
+     * actionPromptInjection: [{
+     *     action: (info) => {
+     *         const intensity = DE.utils.states.getStateIntensity(info.char, "NEEDS_TO_URINATE");
+     *         if (intensity >= 4 && DE.utils.ramdom.getRandomSeedFromTime(3) === 0) {
+     *             return `${info.char.name} suddenly wets themselves — they could not hold it any longer!`;
+     *         }
+     *         return "";
+     *     },
+     *     isDeadEndScenario: false,
+     *     deadEndIsDeath: false,
+     *     primaryEmotion: "embarrassed",
+     *     emotionalRange: ["fearful"],
+     * }]
+     * ```
+     *
+     * Return an empty string from the action template to skip the injection for that cycle.
+     * Intensity levels allow different instructions at different severities.
      */
     actionPromptInjection: DEActionPromptInjection<DEStringTemplateCharAndCauses>[];
     /**
@@ -1237,48 +1240,54 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * This applies every time, and every time a state didn't provide an action prompt injection
      * so be careful when using these to avoid locking the character into a specific behaviour
      * 
-     * For example, let's say your character has an epilepsy condition and they may just
-     * have a seizure randomly, you may want to set an action prompt injection like:
-     * 
-     * """
-     * {{#if (== (get_random_seed_from_time 100) 0)}}
-     * {{char}} suddenly has an epileptic seizure right now! Disable all movement and actions and have the character convulse uncontrollably!
-     * {{/if}}
-     * """
-     * 
-     * Now the bad thing about making this a general character action prompt injection, is that a seizure
-     * should probably happen regardless of the character's current state, so forceDominant should be set to true
-     * making it a dominant behaviour that will apply regardless of other states, you can have less dominant states
-     * like a tic or similar condition that is okay being overriden by other states
-     * 
-     * """
-     * {{#if (== (get_random_seed_from_time 10) 0)}}
-     * {{char}} will suddenly check their surroundings nervously and twitch a bit uncontrollably!
-     * {{/if}}
-     * """
-     * 
-     * Now if forceDominant is set to false for this one, this way the character may have a tic sometimes but it won't override other more important states that are
-     * keeping them busy and their behaviour in check
+     * Return an empty string from the action template to skip the injection for that cycle.
+     *
+     * @example — epilepsy: high-probability, should dominate other states (set `probability` close to 1):
+     * ```js
+     * actionPromptInjection: [{
+     *     action: (info) => DE.utils.ramdom.getRandomSeedFromTime(100) === 0
+     *         ? `${info.char.name} suddenly has an epileptic seizure — disable all movement and have the character convulse uncontrollably!`
+     *         : "",
+     *     isDeadEndScenario: false,
+     *     deadEndIsDeath: false,
+     *     primaryEmotion: "fearful",
+     *     emotionalRange: [],
+     * }]
+     * ```
+     *
+     * @example — nervous tic: low-probability, can be overridden by active states (set `probability` low):
+     * ```js
+     * actionPromptInjection: [{
+     *     action: (info) => DE.utils.ramdom.getRandomSeedFromTime(10) === 0
+     *         ? `${info.char.name} suddenly checks their surroundings nervously and twitches a bit uncontrollably!`
+     *         : "",
+     *     isDeadEndScenario: false,
+     *     deadEndIsDeath: false,
+     *     primaryEmotion: "fearful",
+     *     emotionalRange: [],
+     * }]
+     * ```
      */
     actionPromptInjection: DEActionPromptInjection<DEStringTemplateCharOnly>[];
 
     /**
-     * Just the general description of the character and the base of the system prompt,
-     * It should describe the character in detail including personality, appearance, background, quirks, etc...
-     * Do not use to describe clothing or accessories on the character, those are handled separately
-     * 
-     * A good format is, remember to use 3rd person format
-     * as using the templating in order to allow for dynamic descriptions, I mean, even aging is possible
-     * if you add a script for it that ages the character over time (by default characters are ageless)
-     * their weight is static, and their height too, but you can change those via scripts if you want to simulate growth
-     * 
-     * """
-     * {{char}} is a {{get_age char}} {{#if (== (get_age char) 1)}}year old {{else}}years old{{/if}} weighting {{get_weight char}}kg and measuring {{get_height char}}cm tall.
-     * 
-     * {{char}} is a very curious and adventurous individual, always eager to explore new places and meet new people. {{char}} has a knack for getting into trouble, but {{char}}'s quick wit and resourcefulness always help {{format_object_pronoun char}} find a way out.
-     * 
-     * When roleplaying as {{char}}, make sure to embody {{format_object_pronoun char}} adventurous spirit and insatiable curiosity. Embrace {{format_object_pronoun char}} love for exploration and discovery, and let that drive your interactions and decisions.
-     * """
+     * Just the general description of the character and the base of the system prompt.
+     * Describe the character in detail — personality, appearance, background, quirks, etc.
+     * Do not describe clothing or accessories here; those are handled separately.
+     * Write in 3rd person. Use a function for dynamic descriptions (e.g. computed age text).
+     * The function receives `{ char: DECompleteCharacterReference }` and must return a string.
+     *
+     * @example
+     * ```js
+     * general: (info) => {
+     *     const c = info.char;
+     *     return `${c.name} is ${c.ageYears} year${c.ageYears === 1 ? "" : "s"} old, weighing ${c.weightKg}kg and standing ${c.heightCm}cm tall.
+     *
+     * ${c.name} is a very curious and adventurous individual, always eager to explore new places and meet new people. They have a knack for getting into trouble, but their quick wit and resourcefulness always help them find a way out.
+     *
+     * When roleplaying as ${c.name}, embody their adventurous spirit and insatiable curiosity. Embrace their love for exploration and discovery, and let that drive your interactions and decisions.`;
+     * }
+     * ```
      */
     general: DEStringTemplateCharOnly;
     /**
@@ -2798,31 +2807,46 @@ declare interface DEWeatherSystem {
      */
     maxDurationInHours: number;
     /**
-     * Description of the weather system's full effects on an unsheltered location
-     * 
-     * Note that you can add more nuance to the partial effect description by checking
-     * the character's states, for example by having different partial effects if the character
-     * is very light
-     * 
-     * eg. "{{#if (and (< (get_weight char) 20) (is_outdoors char))}}{{char}} is drenched by the relentless rain, shivering as the cold water soaks through their light clothing.{{else}}...{{/if}}"
+     * Description of the weather system's full effects on an unsheltered character.
+     * Use a function to add nuance based on the character's properties or states.
+     *
+     * @example
+     * ```js
+     * fullEffectDescription: (info) => info.char.weightKg < 20
+     *     ? `${info.char.name} is completely soaked and shivering uncontrollably in the heavy rain.`
+     *     : `${info.char.name} is drenched by the relentless rain, shivering as the cold water soaks through their clothing.`
+     * ```
      */
     fullEffectDescription: DEStringTemplateCharOnly;
     /**
-     * Description of the weather system's partial effects on a partially sheltered location
-     * 
-     * Note that you can add more nuance to the partial effect description by checking
-     * the character's states, for example by having different partial effects if the character
-     * is very light
-     * 
-     * eg. "{{#if (and (< (get_weight char) 20) (is_outdoors char))}}{{char}} is drenched by the relentless rain, shivering as the cold water soaks through their light clothing.{{else}}...{{/if}}"
+     * Description of the weather system's partial effects on a partially sheltered character.
+     * Use a function to add nuance based on the character's properties or states.
+     *
+     * @example
+     * ```js
+     * partialEffectDescription: (info) => info.char.weightKg < 20
+     *     ? `${info.char.name} is getting wet despite the partial shelter, the cold seeping in quickly.`
+     *     : `${info.char.name} is partially sheltered from the rain but still getting damp.`
+     * ```
      */
     partialEffectDescription: DEStringTemplateCharOnly;
     /**
-     * Description when there is no effect on a fully sheltered location
+     * Description when there is no effect on a fully sheltered character.
+     *
+     * @example
+     * ```js
+     * noEffectDescription: (info) => `${info.char.name} is safely sheltered from the rain and stays completely dry.`
+     * ```
      */
     noEffectDescription: DEStringTemplateCharOnly;
     /**
      * Description of the weather system effects when it is having an extra negative effect on the character
+     * (e.g. they are naked, sick, or otherwise in a state that makes exposure worse).
+     *
+     * @example
+     * ```js
+     * negativelyExposedDescription: (info) => `${info.char.name} is completely exposed to the rain with no protection whatsoever, soaking to the bone and shivering at an alarming rate.`
+     * ```
      */
     negativelyExposedDescription: DEStringTemplateCharOnly;
     /**
@@ -4873,6 +4897,79 @@ declare interface DEWorldRule {
      * eg. "Magic does not exist in this world, so {{char}} cannot use magic."
      */
     rule: DEStringTemplateCharOnly;
+}
+
+declare interface DEInternalDescriptionOfCharacter {
+    /**
+     * The general description of the character that is given by general
+     * Plus any active states that are dominant or ignore dominance with ignoreDominanceForGeneralCharacterDescriptionAndAlwaysInject injections
+     * Plus any active bond general injection
+     */
+    general: string;
+
+    /** Active states, all of them, unfiltered */
+    activeStates: Array<{
+        /**
+         * The calculated dominance value of the state, which determines its influence on the character's behavior and narrative.
+         */
+        calculatedDominance: number;
+        /**
+         * The text to be injected that refers to the state, if it passed the dominance threshold or ignores it with ignoreDominanceForStateInjectionAndAlwaysInject, otherwise null
+         */
+        injection: string | null;
+        /**
+         * Human-readable labels for the active state (e.g. "Very Hungry"), filtered by dominance.
+         * only dominant ones or those that ignore dominance are included here
+         * 
+         * Only if the state is dominant or ignores dominance with ignoreDominanceForStateInjectionAndAlwaysInject, otherwise null
+         */
+        expressive: string | null;
+        /**
+         * The state information about the applying state, including its definition and any relevant metadata.
+         */
+        applyingState: DEApplyingState;
+        /**
+         * The definition of the character state, including its properties and effects.
+         */
+        stateInfo: DECharacterStateDefinition;
+        /**
+         * The action prompt injection associated with this state, if it passed the dominance threshold or ignores it with ignoreDominanceForActionPromptInjectionAndAlwaysInject, otherwise null
+         */
+        action: DEActionPromptInjection<DEStringTemplateCharAndCauses> | null;
+    }>;
+
+    /**
+     * The highest dominance value among all currently active states.
+     */
+    stateDominance: number;
+
+    /**
+     * Relationship descriptions for each known bond and visible total stranger.
+     */
+    relationships: Array<{
+        /**
+         * Title, normally the name of the other character, or however they know them, as well as the realionship, to use as title type
+         */
+        title: string;
+        /**
+         * The description of the relationship, including the bond level and any relevant context or history.
+         */
+        description: string;
+    }>;
+
+    /**
+     * Action prompt injections from the character's base definition
+     */
+    actions: DEActionPromptInjection<DEStringTemplateCharOnly>[];
+
+    /**
+     * Resolved display strings for each of the character's likes.
+     */
+    likes: string[];
+    /**
+     * Resolved display strings for each of the character's dislikes.
+     */
+    dislikes: string[];
 }
 
 declare interface DEObject {

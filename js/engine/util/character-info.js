@@ -1780,7 +1780,8 @@ export async function getCharacterCanSee(deObject, characterId) {
 
 /**
  * @param {DEObject} deObject 
- * @param {string} characterId 
+ * @param {string} characterId
+ * @return {Promise<DEInternalDescriptionOfCharacter>}
  */
 export async function getInternalDescriptionOfCharacter(deObject, characterId) {
     if (!deObject) {
@@ -1828,11 +1829,12 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
     /**
      * @type {string[]}
      */
-    const statesDescriptions = [];
+    const expressiveStates = [];
     /**
      * @type {string[]}
      */
     const stateInjections = [];
+
     /**
      * @type {Array<{
      *   applyingState: DEApplyingState,
@@ -1845,6 +1847,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
      * }>}
      */
     const actions = [];
+
     /**
     * @type {Array<{
     *   applyingState: DEApplyingState,
@@ -1852,6 +1855,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
     * }>}
     */
     const activeStates = [];
+    
     for (const injectable of character.actionPromptInjection) {
         actions.push({
             applyingState: null,
@@ -1867,7 +1871,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
             dominanceOfThisState = stateInfo.dominanceAfterRelief;
         }
 
-        if (dominanceOfThisState >= maxStateDominance || stateInfo.ignoreDominanceForActionPromptInjection) {
+        if (dominanceOfThisState >= maxStateDominance || stateInfo.ignoreDominanceForActionPromptInjectionAndAlwaysInject) {
             const origin = state.relieving ? stateInfo.relievingActionPromptInjection : stateInfo.actionPromptInjection;
             if (origin) {
                 for (const actionPromptInjectable of origin) {
@@ -1882,15 +1886,20 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
 
         const stateNameForDescriptions = state.state.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
 
-        if (dominanceOfThisState >= maxStateDominance || stateInfo.ignoreDominanceForStateInjection) {
+        if (dominanceOfThisState >= maxStateDominance || stateInfo.ignoreDominanceForStateInjectionAndAlwaysInject) {
             let stateDescriptionForInjection = "";
             if (!state.relieving) {
                 if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
-                    if (state.intensity >= 1.5) {
+                    const roundedLevel = Math.round(state.intensity);
+                    if (roundedLevel === 0) {
+                        stateDescriptionForInjection = `${character.name} is currently slightly ${stateNameForDescriptions}\n\n`;
+                    } else if (roundedLevel === 1) {
+                        stateDescriptionForInjection = `${character.name} is currently ${stateNameForDescriptions}\n\n`;
+                    } else if (roundedLevel === 2) {
                         stateDescriptionForInjection = `${character.name} is currently very ${stateNameForDescriptions}\n\n`;
-                    } else if (state.intensity >= 2.5) {
+                    } else if (roundedLevel === 3) {
                         stateDescriptionForInjection = `${character.name} is currently extremely ${stateNameForDescriptions}\n\n`;
-                    } else if (state.intensity >= 3.5) {
+                    } else if (roundedLevel === 4) {
                         stateDescriptionForInjection = `${character.name} is currently overwhelmingly ${stateNameForDescriptions}\n\n`;
                     } else {
                         stateDescriptionForInjection = `${character.name} is currently ${stateNameForDescriptions}\n\n`;
@@ -1900,12 +1909,17 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
                 }
             } else {
                 if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
-                    if (state.intensity >= 2.5) {
-                        stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still very ${stateNameForDescriptions}\n\n`;
-                    } else if (state.intensity >= 3.5) {
-                        stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still extremely ${stateNameForDescriptions}\n\n`;
-                    } else {
+                    const roundedLevel = Math.round(state.intensity);
+                    if (roundedLevel === 0) {
+                        stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still slightly ${stateNameForDescriptions}\n\n`;
+                    } else if (roundedLevel === 1) {
                         stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still ${stateNameForDescriptions}\n\n`;
+                    } else if (roundedLevel === 2) {
+                        stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still very ${stateNameForDescriptions}\n\n`;
+                    } else if (roundedLevel === 3) {
+                        stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still extremely ${stateNameForDescriptions}\n\n`;
+                    } else if (roundedLevel === 4) {
+                        stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still overwhelmingly ${stateNameForDescriptions}\n\n`;
                     }
                 } else if (stateInfo.behaviourType === "BINARY") {
                     stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still ${stateNameForDescriptions}\n\n`;
@@ -1934,67 +1948,75 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
             })
         }
 
-        if (dominanceOfThisState < maxStateDominance && !stateInfo.ignoreDominanceWhenInjectedGeneralCharacterDescription) {
-            continue;
-        }
-
-        let stateDescription = null;
-        if (!state.relieving) {
-            if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
-                if (state.intensity >= 1.5) {
-                    stateDescription = `Very ${stateNameForDescriptions}`;
-                } else if (state.intensity >= 2.5) {
-                    stateDescription = `Extremely ${stateNameForDescriptions}`;
-                } else if (state.intensity >= 3.5) {
-                    stateDescription = `Overwhelmingly ${stateNameForDescriptions}`;
-                } else {
+        if (dominanceOfThisState >= maxStateDominance || stateInfo.ignoreDominanceForGeneralCharacterDescriptionAndAlwaysInject) {
+            let stateDescription = null;
+            if (!state.relieving) {
+                if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
+                    const roundedLevel = Math.round(state.intensity);
+                    if (roundedLevel === 0) {
+                        stateDescription = `Slightly ${stateNameForDescriptions}`;
+                    } else if (roundedLevel === 1) {
+                        stateDescription = `${stateNameForDescriptions}`;
+                    } else if (roundedLevel === 2) {
+                        stateDescription = `Very ${stateNameForDescriptions}`;
+                    } else if (roundedLevel === 3) {
+                        stateDescription = `Extremely ${stateNameForDescriptions}`;
+                    } else if (roundedLevel === 4) {
+                        stateDescription = `Overwhelmingly ${stateNameForDescriptions}`;
+                    } else {
+                        stateDescription = `${stateNameForDescriptions}`;
+                    }
+                } else if (stateInfo.behaviourType === "BINARY") {
                     stateDescription = `${stateNameForDescriptions}`;
                 }
-            } else if (stateInfo.behaviourType === "BINARY") {
-                stateDescription = `${stateNameForDescriptions}`;
-            }
 
-            if (stateInfo.relievingGeneralCharacterDescriptionInjection) {
-                const relievingInjection = typeof stateInfo.relievingGeneralCharacterDescriptionInjection === "string" ? stateInfo.relievingGeneralCharacterDescriptionInjection : (await stateInfo.relievingGeneralCharacterDescriptionInjection({
-                    char: character,
-                    causes: state.causes,
-                })).trim();
-                if (relievingInjection) {
-                    if (!general.endsWith("\n\n")) {
-                        general += "\n\n";
+                if (stateInfo.relievingGeneralCharacterDescriptionInjection) {
+                    const relievingInjection = typeof stateInfo.relievingGeneralCharacterDescriptionInjection === "string" ? stateInfo.relievingGeneralCharacterDescriptionInjection : (await stateInfo.relievingGeneralCharacterDescriptionInjection({
+                        char: character,
+                        causes: state.causes,
+                    })).trim();
+                    if (relievingInjection) {
+                        if (!general.endsWith("\n\n")) {
+                            general += "\n\n";
+                        }
+                        general += relievingInjection;
                     }
-                    general += relievingInjection;
                 }
-            }
-        } else {
-            if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
-                if (state.intensity >= 2.5) {
-                    stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still Very ${stateNameForDescriptions}`;
-                } else if (state.intensity >= 3.5) {
-                    stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still Extremely ${stateNameForDescriptions}`;
-                } else {
+            } else {
+                if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
+                    const roundedLevel = Math.round(state.intensity);
+                    if (roundedLevel === 0) {
+                        stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still Slightly ${stateNameForDescriptions}`;
+                    } else if (roundedLevel === 1) {
+                        stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still ${stateNameForDescriptions}`;
+                    } else if (roundedLevel === 2) {
+                        stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still Very ${stateNameForDescriptions}`;
+                    } else if (roundedLevel === 3) {
+                        stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still Extremely ${stateNameForDescriptions}`;
+                    } else {
+                        stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still Overwhelmingly ${stateNameForDescriptions}`;
+                    }
+                } else if (stateInfo.behaviourType === "BINARY") {
                     stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still ${stateNameForDescriptions}`;
                 }
-            } else if (stateInfo.behaviourType === "BINARY") {
-                stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still ${stateNameForDescriptions}`;
-            }
 
-            if (stateInfo.generalCharacterDescriptionInjection) {
-                const injection = typeof stateInfo.generalCharacterDescriptionInjection === "string" ? stateInfo.generalCharacterDescriptionInjection : (await stateInfo.generalCharacterDescriptionInjection({
-                    char: character,
-                    causes: state.causes,
-                })).trim();
-                if (injection) {
-                    if (!general.endsWith("\n\n")) {
-                        general += "\n\n";
+                if (stateInfo.generalCharacterDescriptionInjection) {
+                    const injection = typeof stateInfo.generalCharacterDescriptionInjection === "string" ? stateInfo.generalCharacterDescriptionInjection : (await stateInfo.generalCharacterDescriptionInjection({
+                        char: character,
+                        causes: state.causes,
+                    })).trim();
+                    if (injection) {
+                        if (!general.endsWith("\n\n")) {
+                            general += "\n\n";
+                        }
+                        general += injection;
                     }
-                    general += injection;
                 }
             }
-        }
 
-        if (stateDescription) {
-            statesDescriptions.push(stateDescription);
+            if (stateDescription) {
+                expressiveStates.push(stateDescription);
+            }
         }
     }
 

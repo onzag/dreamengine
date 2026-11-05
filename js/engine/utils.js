@@ -1,4 +1,4 @@
-import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter, whatCanTheyMakeOfALocation, whatCanTheyMakeOfAnotherCharacter, whatCanTheyMakeOfAnItem, getCharacterExactLocation, getExternalDescriptionOfCharacterPostureOnly } from "./util/character-info.js";
+import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter, whatCanTheyMakeOfALocation, whatCanTheyMakeOfAnotherCharacter, whatCanTheyMakeOfAnItem, getCharacterExactLocation, getExternalDescriptionOfCharacterPostureOnly, getInternalDescriptionOfCharacter } from "./util/character-info.js";
 import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/random.js";
 import { getCharacterVolume, getCharacterWeight } from "./util/weight-and-volume.js";
 import { emotions } from "./util/emotions.js";
@@ -1800,6 +1800,10 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 hideCurrentPosture,
                 noName,
             );
+        },
+        getInternalDescriptionOfCharacter(char) {
+            const target = requireCharacter(DE, char);
+            return getInternalDescriptionOfCharacter(DE, target.id);
         },
         isWithinAttractionGroupFor(opt, char1, char2) {
             const char1Ref = resolveCharacter(DE, char1);
