@@ -160,6 +160,38 @@ export class BaseDataManager {
     }
 
     /**
+     * Begin a new transaction. Only one transaction may be active at a time.
+     * Throws if a transaction is already active.
+     * @returns {Promise<void>}
+     */
+    async newTransaction() {
+
+    }
+
+    /**
+     * Commit the active transaction. Throws if no transaction is active.
+     * @returns {Promise<void>}
+     */
+    async commitTransaction() {
+
+    }
+
+    /**
+     * Roll back the active transaction. Throws if no transaction is active.
+     * @returns {Promise<void>}
+     */
+    async rollbackTransaction() {
+
+    }
+
+    /**
+     * @returns {boolean}
+     */
+    hasActiveTransaction() {
+        return false;
+    }
+
+    /**
      * Serialize a character perspective snapshot and return its new storage ID.
      * @param {DECharacterPerspective} perspective
      * @returns {Promise<string>}
@@ -180,90 +212,33 @@ export class BaseDataManager {
     }
 
     /**
-     * Stores a historic state information for a character
+     * Return this observer's most recently stored snapshot, or null if absent.
      * @param {string} charId
-     * @param {DEStateForCharacter} state 
-     * @returns {Promise<void>}
+     * @returns {Promise<DECharacterPerspective | null>}
      */
-    async storeHistoricState(charId, state) {
-
-    }
-
-    /**
-     * Stored activation age plus the number of this character's snapshots from
-     * the matching state onward, including the matching snapshot. Returns -1 if absent.
-     * @param {string} charId
-     * @param {string} state
-     * @returns {Promise<number>}
-     */
-    async getHistoricStateActivationCyclesAgo(charId, state) {
-        return -1;
-    }
-
-    /**
-     * Returns the first historic state (aka going backwards in time) for a character that matches the other character's ID.
-     * which means that the character was in a scene with the other character, at least to that character memory.
-     * 
-     * This match is precise as it is based on the character's ID, not the name.
-     * 
-     * @param {string} charId 
-     * @param {string} otherCharId 
-     * @return {Promise<DEStateForCharacter|null>}
-     */
-    async getFirstHistoricStateWithCharacter(charId, otherCharId) {
+    async getLastPerspectiveOfCharacter(charId) {
         return null;
     }
 
     /**
-     * Returns the first N historic states (aka going backwards in time) for a character that matches the other character's name.
-     * This match is based on the name, so it may not be precise if multiple characters share the same name. Or if the character
-     * doesn't know the other character's name properly at that time
-     * Partial name matching ignores case, accents, punctuation and spacing.
-     * 
-     * @param {string} charId 
-     * @param {number} matches 
-     * @param {string} otherCharacterName
-     * @return {Promise<DEStateForCharacter[]>}
+     * @param {string} charId
+     * @param {string} otherCharId
+     * @param {number} useMemoryFromTime Story Unix milliseconds.
+     * @returns {Promise<DECharacterPerspective | null>}
      */
-    async getFirstNHistoricStatesWithCharacterName(charId, matches, otherCharacterName) {
-        return [];
-    }
-
-    /**
-     * Returns the first historic state (aka going backwards in time) for a character that matches the given mental/physical state.
-     * 
-     * @param {string} charId 
-     * @param {string} state 
-     * @returns {Promise<DEStateForCharacter|null>}
-     */
-    async getFirstHistoricStateWithState(charId, state) {
+    async getLatestPerspectiveWithCharacter(charId, otherCharId, useMemoryFromTime) {
         return null;
     }
 
     /**
-     * Returns the first historic state (aka going backwards in time) for a character that matches the given item ID.
-     * 
      * @param {string} charId
      * @param {string} itemId
-     * @returns {Promise<DEStateForCharacter|null>}
+     * @param {number} useMemoryFromTime Story Unix milliseconds.
+     * @param {boolean} [openContainerOnly=false]
+     * @returns {Promise<DECharacterPerspective | null>}
      */
-    async getFirstHistoricStateWithItem(charId, itemId) {
+    async getLatestPerspectiveWithItem(charId, itemId, useMemoryFromTime, openContainerOnly = false) {
         return null;
-    }
-
-    /**
-     * Returns the first N historic states (aka going backwards in time) for a character that matches the given item name.
-     * since this is based on the name, it may not be precise if multiple items share the same name. Or if the character
-     * doesn't know the item's name properly at that time.
-     * Partial name matching ignores case, accents, punctuation and spacing.
-     * 
-     * @param {string} charId 
-     * @param {number} matches 
-     * @param {string} itemName 
-     * @returns {Promise<DEStateForCharacter[]>}
-     */
-    async getFirstNHistoricStatesWithItemName(charId, matches, itemName) {
-        return [];
     }
 
     /**
@@ -280,13 +255,13 @@ export class BaseDataManager {
             updateConversationMessage: this.updateConversationMessage.bind(this),
             storePerspective: this.storePerspective.bind(this),
             getPerspectiveById: this.getPerspectiveById.bind(this),
-            storeHistoricState: this.storeHistoricState.bind(this),
-            getHistoricStateActivationCyclesAgo: this.getHistoricStateActivationCyclesAgo.bind(this),
-            getFirstHistoricStateWithCharacter: this.getFirstHistoricStateWithCharacter.bind(this),
-            getFirstNHistoricStatesWithCharacterName: this.getFirstNHistoricStatesWithCharacterName.bind(this),
-            getFirstHistoricStateWithState: this.getFirstHistoricStateWithState.bind(this),
-            getFirstHistoricStateWithItem: this.getFirstHistoricStateWithItem.bind(this),
-            getFirstNHistoricStatesWithItemName: this.getFirstNHistoricStatesWithItemName.bind(this),
+            getLastPerspectiveOfCharacter: this.getLastPerspectiveOfCharacter.bind(this),
+            getLatestPerspectiveWithCharacter: this.getLatestPerspectiveWithCharacter.bind(this),
+            getLatestPerspectiveWithItem: this.getLatestPerspectiveWithItem.bind(this),
+            newTransaction: this.newTransaction.bind(this),
+            commitTransaction: this.commitTransaction.bind(this),
+            rollbackTransaction: this.rollbackTransaction.bind(this),
+            hasActiveTransaction: this.hasActiveTransaction.bind(this),
         }
     }
 }

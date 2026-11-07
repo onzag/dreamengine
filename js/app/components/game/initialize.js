@@ -108,6 +108,7 @@ export async function initializeNewGame(game) {
             scriptGivenId: "",
             unknownName: (species || 'human') ? "Stranger" : "Unknown Creature",
             name: game.getAttribute('character-name') || name || 'Unnamed Dreamer',
+            attention: 0,
             metadata: {
                 assets: {
                     neutral: game.getAttribute('character-asset') || 'profile',

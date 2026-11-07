@@ -1189,10 +1189,15 @@ export function humanReadablePostureToPosture(humanReadable) {
 }
 
 /**
+ * This function works similarly to the one at perspective, but unlike that one
+ * it does display all the items and character in the location, even if the character cannot see them
+ * this is meant to be used in the prompt settings, as the inference should know everything
+ * about the location, even if the character cannot see it.
+ * 
  * @param {DEObject} deObject 
  * @param {string} characterId 
  */
-export async function getCharacterCanSee(deObject, characterId) {
+export async function getCharacterSurroundingInformation(deObject, characterId) {
     if (!deObject) {
         throw new Error("DEngine not initialized");
     }

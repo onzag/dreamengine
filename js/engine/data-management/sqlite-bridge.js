@@ -42,26 +42,8 @@ const messageFields = {
     rumors: "json",
 };
 
-/** @type {typeof messageFields} */
-const historicStateFields = {
-    location: "text",
-    locationSlot: "text",
-    states: "json",
-    time: "json",
-    conversationId: "text",
-    posture: "text",
-    carrying: "json",
-    carryingCharactersDirectly: "json",
-    wearing: "json",
-    dead: "boolean",
-    deadEnded: "boolean",
-    deadEndReason: "text",
-    seenItems: "json",
-    seenCharacters: "json",
-};
-
 /** @param {string} name */
-function normalizeHistoricName(name) {
+function normalizeSearchName(name) {
     return name.normalize("NFKD").toLowerCase().replace(/[\p{M}]/gu, "").replace(/[^\p{L}\p{N}]/gu, "");
 }
 
@@ -113,9 +95,74 @@ function numericId(value, prefix) {
     return Number.isSafeInteger(id) ? id : null;
 }
 
+/** @param {DECharacterPerspective} perspective */
+function perspectiveMembership(perspective) {
+    /** @type {Map<string, {level: number, softLevel: number}>} */
+    const items = new Map();
+    /** @type {Map<string, {level: number, softLevel: number}>} */
+    const openContainers = new Map();
+    /** @type {Map<string, {level: number, softLevel: number}>} */
+    const characters = new Map([[perspective.ownId, { level: 0, softLevel: 0 }]]);
+    /**
+     * @param {Map<string, {level: number, softLevel: number}>} entries
+     * @param {string} id
+     * @param {number} level
+     * @param {number} [softLevel=level]
+     */
+    function remember(entries, id, level, softLevel = level) {
+        if (!Number.isInteger(level) || level < 0 || level > 5) {
+            throw new Error("Perspective memory level must be an integer from 0 to 5.");
+        }
+        if (!Number.isFinite(softLevel)) {
+            throw new Error("Perspective memory softLevel must be a finite number.");
+        }
+        const existing = entries.get(id);
+        if (!existing || level > existing.level || (level === existing.level && softLevel > existing.softLevel)) {
+            entries.set(id, { level, softLevel });
+        }
+    }
+    /** @param {DEItemInPerspective[]} entries */
+    function visitItems(entries) {
+        for (const item of entries) {
+            for (const { id } of item.ids) {
+                const level = item.memory?.level ?? 0;
+                const softLevel = item.memory?.softLevel ?? level;
+                remember(items, id, level, softLevel);
+                if (item.containerProperties?.openable && item.state?.opened) remember(openContainers, id, level, softLevel);
+            }
+            for (const id of [...item.containingCharacters, ...item.ontopCharacters]) remember(characters, id, 0);
+            visitItems(item.containing);
+            visitItems(item.ontop);
+        }
+    }
+    /** @param {DECharacterPerspectiveCharacter} character */
+    function visitCharacter(character) {
+        remember(characters, character.characterId, character.memory?.level ?? 0,
+            character.memory?.softLevel ?? character.memory?.level ?? 0);
+        for (const id of character.characterCarryingOtherCharactersIds) remember(characters, id, 0);
+        visitItems(character.characterCarryingItems);
+        visitItems(character.characterWearingItems);
+    }
+    visitCharacter(perspective.self);
+    for (const slot of perspective.ownLocation.slots) {
+        visitItems(slot.items);
+        slot.characters.forEach(visitCharacter);
+    }
+    const groups = perspective.socialGroups;
+    for (const character of [...groups.soloCharacters, ...groups.ownGroup, ...groups.otherGroups.flat()]) {
+        visitCharacter(character);
+    }
+    return { items, openContainers, characters };
+}
+
 export class SQLiteBridge extends BaseDataManager {
-    // Share one queue so conversation and history transactions cannot overlap.
+    // Share one queue so conversation and perspective transactions cannot overlap.
     #operations = Promise.resolve();
+    /** @type {Map<string, any>} */
+    #readCache = new Map();
+    // A single user-facing transaction may be active at a time. Setters require it;
+    // getters see its uncommitted changes because every query uses the same connection.
+    #transactionActive = false;
 
     /**
      * @template T
@@ -133,11 +180,168 @@ export class SQLiteBridge extends BaseDataManager {
         return result;
     }
 
+    /**
+     * Cache up to 32 recent reads, including misses. Check inside the database queue
+     * so reads cannot skip earlier writes. Never share cached objects with callers.
+     * @template T
+     * @param {any[]} key
+     * @param {(id: string) => Promise<T>} operation
+     * @param {boolean} [requireTransaction=false] Fail unless the engine's transaction is active.
+     * @returns {Promise<T>}
+     */
+    withCachedRead(key, operation, requireTransaction = false) {
+        return this.withDatabase(async (id) => {
+            if (requireTransaction && !this.#transactionActive) {
+                throw new Error("A transaction must be active before reading the database.");
+            }
+            const cacheKey = JSON.stringify([id, ...key]);
+            if (this.#readCache.has(cacheKey)) {
+                const value = this.#readCache.get(cacheKey);
+                // Refresh insertion order to evict the least recently used entry.
+                this.#readCache.delete(cacheKey);
+                this.#readCache.set(cacheKey, value);
+                return structuredClone(value);
+            }
+            const value = await operation(id);
+            // Keep the query result private, including on the first read.
+            const result = structuredClone(value);
+            this.#readCache.set(cacheKey, value);
+            if (this.#readCache.size > 32) {
+                const oldest = this.#readCache.keys().next();
+                if (!oldest.done) this.#readCache.delete(oldest.value);
+            }
+            return result;
+        });
+    }
+
+    /**
+     * A cached read that, for consistency with writes, requires the engine's single
+     * transaction to be active even though it performs no modification. The requirement
+     * is enforced inside the database queue, so reads always observe the in-progress
+     * transaction and never the realtime database.
+     * @template T
+     * @param {any[]} key
+     * @param {(id: string) => Promise<T>} operation
+     * @returns {Promise<T>}
+     */
+    withTransactionalRead(key, operation) {
+        return this.withCachedRead(key, operation, true);
+    }
+
+    /**
+     * Invalidate even on failure, since a nontransactional write may have succeeded
+     * before an error reached the client.
+     * @template T
+     * @param {(id: string) => Promise<T>} operation
+     * @returns {Promise<T>}
+     */
+    withWrite(operation) {
+        return this.withDatabase(async (id) => {
+            try {
+                return await operation(id);
+            } finally {
+                this.#readCache.clear();
+            }
+        });
+    }
+
+    /**
+     * Run a modification inside the caller's open transaction, failing if none is active.
+     * The change is not persisted until commitTransaction; rollbackTransaction discards it.
+     * @template T
+     * @param {(id: string) => Promise<T>} operation
+     * @returns {Promise<T>}
+     */
+    withTransactionalWrite(operation) {
+        return this.withDatabase(async (id) => {
+            if (!this.#transactionActive) {
+                throw new Error("A transaction must be active before modifying the database.");
+            }
+            try {
+                return await operation(id);
+            } finally {
+                // Uncommitted reads may now be stale; drop them so later reads re-query.
+                this.#readCache.clear();
+            }
+        });
+    }
+
+    /**
+     * Begin the single user-facing transaction. Modifications are only allowed while it is open.
+     * @returns {Promise<void>}
+     */
+    async newTransaction() {
+        return this.withDatabase(async (id) => {
+            if (this.#transactionActive) {
+                throw new Error("A transaction is already active.");
+            }
+            await this.databaseController.runQuery(id, "BEGIN TRANSACTION");
+            this.#transactionActive = true;
+        });
+    }
+
+    /**
+     * Commit the active transaction, persisting every modification made since it began.
+     * @returns {Promise<void>}
+     */
+    async commitTransaction() {
+        return this.withDatabase(async (id) => {
+            if (!this.#transactionActive) {
+                throw new Error("No transaction is active to commit.");
+            }
+            try {
+                await this.databaseController.runQuery(id, "COMMIT");
+            } finally {
+                this.#transactionActive = false;
+                this.#readCache.clear();
+            }
+        });
+    }
+
+    /**
+     * Roll back the active transaction, discarding every modification made since it began.
+     * @returns {Promise<void>}
+     */
+    async rollbackTransaction() {
+        return this.withDatabase(async (id) => {
+            if (!this.#transactionActive) {
+                throw new Error("No transaction is active to roll back.");
+            }
+            try {
+                await this.databaseController.runQuery(id, "ROLLBACK");
+            } finally {
+                this.#transactionActive = false;
+                this.#readCache.clear();
+            }
+        });
+    }
+
+    /**
+     * @returns {boolean}
+     */
+    hasActiveTransaction() {
+        return this.#transactionActive;
+    }
+
+    async closeCurrentDatabase() {
+        if (!this.currentDatabaseId) {
+            this.#readCache.clear();
+            this.#transactionActive = false;
+            return;
+        }
+        return this.withWrite(async () => {
+            // Closing abandons any open transaction; clear the flag for the next database.
+            await super.closeCurrentDatabase();
+            this.#transactionActive = false;
+        });
+    }
+
     /** Create every table and index before engine operations begin. */
     async newDatabase() {
         await super.newDatabase();
+        this.#readCache.clear();
         try {
-            await this.withTransaction(async (id) => {
+            await this.withInitializationTransaction(async (id) => {
                 const statements = [
                     `CREATE TABLE IF NOT EXISTS engine_data (
                         key TEXT PRIMARY KEY NOT NULL,
@@ -167,37 +371,15 @@ export class SQLiteBridge extends BaseDataManager {
                     )`,
                     `CREATE INDEX IF NOT EXISTS engine_conversations_by_participant
                         ON engine_conversation_participants (participant_id, conversation_id)`,
-                    `CREATE TABLE IF NOT EXISTS engine_historic_states (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        charId TEXT NOT NULL,
-                        ${columnDefinitions(historicStateFields)}
-                    )`,
-                    `CREATE INDEX IF NOT EXISTS engine_history_by_character
-                        ON engine_historic_states (charId, id)`,
                     `CREATE TABLE IF NOT EXISTS engine_perspectives (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         document TEXT NOT NULL CHECK (json_valid(document))
                     )`,
                 ];
-                for (const [table, column] of [
-                    ["engine_historic_seen_characters", "character_id"],
-                    ["engine_historic_seen_items", "item_id"],
-                    ["engine_historic_applied_states", "state"],
-                ]) {
-                    statements.push(
-                        `CREATE TABLE IF NOT EXISTS ${table} (
-                            historic_state_id INTEGER NOT NULL REFERENCES engine_historic_states(id),
-                            ${column} TEXT NOT NULL,
-                            name TEXT,
-                            search_name TEXT
-                        )`,
-                        `CREATE INDEX IF NOT EXISTS ${table}_lookup
-                            ON ${table} (historic_state_id, ${column})`,
-                    );
-                }
                 for (const sql of statements) {
                     await this.databaseController.runQuery(id, sql);
                 }
+                await this.ensurePerspectiveSchema(id);
             });
         } catch (error) {
             await this.closeCurrentDatabase();
@@ -208,14 +390,16 @@ export class SQLiteBridge extends BaseDataManager {
     /** @param {string} loadName */
     async loadDatabase(loadName) {
         await super.loadDatabase(loadName);
+        this.#readCache.clear();
         try {
-            await this.withTransaction(async (id) => {
+            await this.withInitializationTransaction(async (id) => {
                 await this.databaseController.runQuery(id, `
                     CREATE TABLE IF NOT EXISTS engine_perspectives (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         document TEXT NOT NULL CHECK (json_valid(document))
                     )
                 `);
+                await this.ensurePerspectiveSchema(id);
                 const additions = [
                     ["engine_conversations", "nextConversationIdsPerParticipant",
                         "TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(nextConversationIdsPerParticipant))"],
@@ -255,13 +439,14 @@ export class SQLiteBridge extends BaseDataManager {
     }
 
     /**
-     * Serialize a transaction together with other database operations.
+     * Self-contained BEGIN/COMMIT used only for schema setup during initialization,
+     * before the engine opens its single runtime transaction. Not for runtime writes.
      * @template T
      * @param {(id: string) => Promise<T>} operation
      * @returns {Promise<T>}
      */
-    withTransaction(operation) {
-        return this.withDatabase(async (id) => {
+    withInitializationTransaction(operation) {
+        return this.withWrite(async (id) => {
             await this.databaseController.runQuery(id, "BEGIN TRANSACTION");
             try {
                 const result = await operation(id);
@@ -274,113 +459,6 @@ export class SQLiteBridge extends BaseDataManager {
         });
     }
 
-    /** @param {string} charId @param {DEStateForCharacter} state @returns {Promise<void>} */
-    async storeHistoricState(charId, state) {
-        // Capture both the snapshot and its lookup values before any asynchronous work.
-        const values = fieldValues(historicStateFields, state);
-        const characters = state.seenCharacters.map(character =>
-            [character.id, character.name, normalizeHistoricName(character.name)]);
-        const items = state.seenItems.map(item => [item.id, item.name, normalizeHistoricName(item.name)]);
-        const states = state.states.map(applied => [applied.state, null, null]);
-        return this.withTransaction(async (id) => {
-            const rows = await this.databaseController.runQuery(id, `
-                INSERT INTO engine_historic_states (charId, ${Object.keys(historicStateFields).join(", ")})
-                VALUES (?, ${values.map(() => "?").join(", ")}) RETURNING id
-            `, [charId, ...values]);
-            for (const [table, column, entries] of [
-                ["engine_historic_seen_characters", "character_id", characters],
-                ["engine_historic_seen_items", "item_id", items],
-                ["engine_historic_applied_states", "state", states],
-            ]) {
-                await this.databaseController.runQuery(id, `
-                    INSERT INTO ${table} (historic_state_id, ${column}, name, search_name)
-                    SELECT ?, json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]')
-                    FROM json_each(?)
-                `, [rows[0].id, JSON.stringify(entries)]);
-            }
-        });
-    }
-
-    /**
-     * Search indexed snapshot contents, never the current character/item names.
-     * @param {string} charId
-     * @param {number} matches
-     * @param {"character" | "item" | "state"} kind
-     * @param {string} value
-     * @param {boolean} [byName=false]
-     * @returns {Promise<DEStateForCharacter[]>}
-     */
-    async findHistoricStates(charId, matches, kind, value, byName = false) {
-        if (!Number.isSafeInteger(matches) || matches < 0) {
-            throw new Error("Historic state match count must be a non-negative safe integer.");
-        }
-        const [table, column] = {
-            character: ["engine_historic_seen_characters", "character_id"],
-            item: ["engine_historic_seen_items", "item_id"],
-            state: ["engine_historic_applied_states", "state"],
-        }[kind];
-        const search = byName ? normalizeHistoricName(value) : value;
-        return this.withDatabase(async (id) => {
-            if (matches === 0 || (byName && !search)) return [];
-            const rows = await this.databaseController.runQuery(id, `
-                SELECT history.* FROM engine_historic_states AS history
-                WHERE history.charId = ? AND EXISTS (
-                    SELECT 1 FROM ${table} AS seen WHERE seen.historic_state_id = history.id
-                    AND ${byName ? "instr(seen.search_name, ?) > 0" : `seen.${column} = ?`}
-                )
-                ORDER BY history.id DESC LIMIT ?
-            `, [charId, search, matches]);
-            return rows.map(row => readFields(historicStateFields, row));
-        });
-    }
-
-    /** @param {string} charId @param {string} state @returns {Promise<number>} */
-    async getHistoricStateActivationCyclesAgo(charId, state) {
-        return this.withDatabase(async (id) => {
-            const rows = await this.databaseController.runQuery(id, `
-                WITH latest AS (
-                    SELECT history.id, history.states FROM engine_historic_states AS history
-                    WHERE history.charId = ? AND EXISTS (
-                        SELECT 1 FROM engine_historic_applied_states AS applied
-                        WHERE applied.historic_state_id = history.id AND applied.state = ?
-                    )
-                    ORDER BY history.id DESC LIMIT 1
-                )
-                SELECT COALESCE(json_extract(applied.value, '$.contiguousStartActivationCyclesAgo'), 0)
-                    + (SELECT COUNT(*) FROM engine_historic_states AS newer
-                       WHERE newer.charId = ? AND newer.id >= latest.id) AS cycles
-                FROM latest, json_each(latest.states) AS applied
-                WHERE json_extract(applied.value, '$.state') = ? LIMIT 1
-            `, [charId, state, charId, state]);
-            return rows.length ? rows[0].cycles : -1;
-        });
-    }
-
-    /** @param {string} charId @param {string} otherCharId @returns {Promise<DEStateForCharacter | null>} */
-    async getFirstHistoricStateWithCharacter(charId, otherCharId) {
-        return (await this.findHistoricStates(charId, 1, "character", otherCharId))[0] ?? null;
-    }
-
-    /** @param {string} charId @param {number} matches @param {string} name @returns {Promise<DEStateForCharacter[]>} */
-    async getFirstNHistoricStatesWithCharacterName(charId, matches, name) {
-        return this.findHistoricStates(charId, matches, "character", name, true);
-    }
-
-    /** @param {string} charId @param {string} state @returns {Promise<DEStateForCharacter | null>} */
-    async getFirstHistoricStateWithState(charId, state) {
-        return (await this.findHistoricStates(charId, 1, "state", state))[0] ?? null;
-    }
-
-    /** @param {string} charId @param {string} itemId @returns {Promise<DEStateForCharacter | null>} */
-    async getFirstHistoricStateWithItem(charId, itemId) {
-        return (await this.findHistoricStates(charId, 1, "item", itemId))[0] ?? null;
-    }
-
-    /** @param {string} charId @param {number} matches @param {string} name @returns {Promise<DEStateForCharacter[]>} */
-    async getFirstNHistoricStatesWithItemName(charId, matches, name) {
-        return this.findHistoricStates(charId, matches, "item", name, true);
-    }
-
     /**
      * Return location snapshots from any participant in this character's conversations.
      * Search names recorded at the time, including locations visited only by other participants.
@@ -389,8 +467,8 @@ export class SQLiteBridge extends BaseDataManager {
      * @returns {Promise<DEConversationLocationMatch[]>}
      */
     async getPossibleLocationsCharKnowsAlikeTo(charId, locationOrSlotName) {
-        const search = normalizeHistoricName(locationOrSlotName);
-        return this.withDatabase(async (id) => {
+        const search = normalizeSearchName(locationOrSlotName);
+        return this.withTransactionalRead(["knownLocations", charId, search], async (id) => {
             if (!search) return [];
             return this.databaseController.runQuery(id, `
                 SELECT 'C' || place.conversation_id AS conversationId,
@@ -425,8 +503,8 @@ export class SQLiteBridge extends BaseDataManager {
                 location?.locationNameAtTheTime ?? null,
                 location?.locationSlotId ?? null,
                 location?.locationSlotNameAtTheTime ?? null,
-                location ? normalizeHistoricName(location.locationNameAtTheTime) : null,
-                location ? normalizeHistoricName(location.locationSlotNameAtTheTime) : null,
+                location ? normalizeSearchName(location.locationNameAtTheTime) : null,
+                location ? normalizeSearchName(location.locationSlotNameAtTheTime) : null,
             ];
         });
         await this.databaseController.runQuery(databaseId,
@@ -445,7 +523,7 @@ export class SQLiteBridge extends BaseDataManager {
 
     /** @param {string} conversationId @returns {Promise<DEConversation | null>} */
     async getConversation(conversationId) {
-        return this.withDatabase(async (id) => {
+        return this.withTransactionalRead(["conversation", conversationId], async (id) => {
             const rows = await this.databaseController.runQuery(id,
                 "SELECT * FROM engine_conversations WHERE id = ?", [numericId(conversationId, "C")]);
             if (!rows.length) return null;
@@ -462,7 +540,7 @@ export class SQLiteBridge extends BaseDataManager {
 
     /** @param {string} messageId @returns {Promise<DEConversationMessage | null>} */
     async getConversationMessage(messageId) {
-        return this.withDatabase(async (id) => {
+        return this.withTransactionalRead(["message", messageId], async (id) => {
             const rows = await this.databaseController.runQuery(id,
                 "SELECT * FROM engine_conversation_messages WHERE id = ?", [numericId(messageId, "M")]);
             return rows.length ? readFields(messageFields, rows[0], "M") : null;
@@ -477,7 +555,7 @@ export class SQLiteBridge extends BaseDataManager {
     async newConversation(conversation) {
         const values = fieldValues(conversationFields, conversation);
         const initialMessages = conversation.messages.map(message => fieldValues(messageFields, message));
-        return this.withTransaction(async (id) => {
+        return this.withTransactionalWrite(async (id) => {
             const rows = await this.databaseController.runQuery(id, `
                 INSERT INTO engine_conversations (${Object.keys(conversationFields).join(", ")})
                 VALUES (${values.map(() => "?").join(", ")}) RETURNING *
@@ -500,7 +578,7 @@ export class SQLiteBridge extends BaseDataManager {
      */
     async newConversationMessage(conversationId, message) {
         const values = fieldValues(messageFields, { ...message, isProcessingSideEffects: true });
-        return this.withDatabase(id =>
+        return this.withTransactionalWrite(id =>
             this.insertMessage(id, numericId(conversationId, "C"), values));
     }
 
@@ -530,7 +608,7 @@ export class SQLiteBridge extends BaseDataManager {
             .filter(([name, value]) => Object.prototype.hasOwnProperty.call(conversationFields, name) && value !== undefined)
             .map(([name]) => [name, conversationFields[name]]));
         const values = fieldValues(fields, conversation);
-        return this.withTransaction(async (id) => {
+        return this.withTransactionalWrite(async (id) => {
             const query = values.length ? `
                 UPDATE engine_conversations
                 SET ${Object.keys(fields).map(name => `${name} = ?`).join(", ")}
@@ -566,7 +644,7 @@ export class SQLiteBridge extends BaseDataManager {
             .filter(([name, value]) => Object.prototype.hasOwnProperty.call(messageFields, name) && value !== undefined)
             .map(([name]) => [name, messageFields[name]]));
         const values = fieldValues(fields, message);
-        return this.withDatabase(async (id) => {
+        return this.withTransactionalWrite(async (id) => {
             const query = values.length ? `
                 UPDATE engine_conversation_messages
                 SET ${Object.keys(fields).map(name => `${name} = ?`).join(", ")}
@@ -579,16 +657,197 @@ export class SQLiteBridge extends BaseDataManager {
     }
 
     /**
-     * Serialize a character perspective snapshot as a JSON document and return its new ID.
+     * Add queryable snapshot fields and indexed membership tables to old and new databases.
+     * The original wall-clock snapshot time is unknown for legacy rows and stays NULL.
+     * @param {string} databaseId
+     */
+    async ensurePerspectiveSchema(databaseId) {
+        const columns = await this.databaseController.runQuery(databaseId, "PRAGMA table_info(engine_perspectives)");
+        let backfill = false;
+        for (const [name, definition] of [
+            ["ownId", "TEXT"],
+            ["locationId", "TEXT"],
+            ["locationSlotId", "TEXT"],
+            ["snapshotTime", "INTEGER"],
+            ["timeOfPerspective", "TEXT CHECK (timeOfPerspective IS NULL OR json_valid(timeOfPerspective))"],
+            ["perspectiveTime", "REAL"],
+        ]) {
+            if (!columns.some(column => column.name === name)) {
+                await this.databaseController.runQuery(databaseId,
+                    `ALTER TABLE engine_perspectives ADD COLUMN ${name} ${definition}`);
+                backfill = true;
+            }
+        }
+        for (const column of ["ownId", "locationId", "locationSlotId", "snapshotTime", "perspectiveTime"]) {
+            await this.databaseController.runQuery(databaseId,
+                `CREATE INDEX IF NOT EXISTS engine_perspectives_by_${column} ON engine_perspectives (${column}, id)`);
+        }
+        await this.databaseController.runQuery(databaseId, `
+            CREATE INDEX IF NOT EXISTS engine_perspectives_by_observer_time
+            ON engine_perspectives (ownId, perspectiveTime DESC, id DESC)
+        `);
+        for (const [table, column] of [
+            ["engine_perspective_items", "item_id"],
+            ["engine_perspective_open_containers", "item_id"],
+            ["engine_perspective_characters", "character_id"],
+        ]) {
+            await this.databaseController.runQuery(databaseId, `
+                CREATE TABLE IF NOT EXISTS ${table} (
+                    perspective_id INTEGER NOT NULL REFERENCES engine_perspectives(id) ON DELETE CASCADE,
+                    ${column} TEXT NOT NULL,
+                    memoryLevel INTEGER NOT NULL DEFAULT 0 CHECK (memoryLevel BETWEEN 0 AND 5),
+                    memorySoftLevel REAL NOT NULL DEFAULT 0,
+                    PRIMARY KEY (perspective_id, ${column})
+                )
+            `);
+            const membershipColumns = await this.databaseController.runQuery(databaseId, `PRAGMA table_info(${table})`);
+            if (!membershipColumns.some(column => column.name === "memoryLevel")) {
+                await this.databaseController.runQuery(databaseId,
+                    `ALTER TABLE ${table} ADD COLUMN memoryLevel INTEGER NOT NULL DEFAULT 0 CHECK (memoryLevel BETWEEN 0 AND 5)`);
+                backfill = true;
+            }
+            if (!membershipColumns.some(column => column.name === "memorySoftLevel")) {
+                await this.databaseController.runQuery(databaseId,
+                    `ALTER TABLE ${table} ADD COLUMN memorySoftLevel REAL NOT NULL DEFAULT 0`);
+                backfill = true;
+            }
+            await this.databaseController.runQuery(databaseId,
+                `CREATE INDEX IF NOT EXISTS ${table}_lookup ON ${table} (${column}, perspective_id)`);
+            await this.databaseController.runQuery(databaseId,
+                `CREATE INDEX IF NOT EXISTS ${table}_memory_lookup ON ${table} (${column}, memoryLevel, perspective_id)`);
+        }
+        if (backfill) {
+            const rows = await this.databaseController.runQuery(databaseId, "SELECT id, document FROM engine_perspectives");
+            for (const row of rows) {
+                const perspective = JSON.parse(row.document);
+                await this.databaseController.runQuery(databaseId, `
+                    UPDATE engine_perspectives SET ownId = ?, locationId = ?, locationSlotId = ?,
+                        timeOfPerspective = ?, perspectiveTime = ? WHERE id = ?
+                `, [perspective.ownId, perspective.ownLocationId, perspective.ownLocationSlotId,
+                    JSON.stringify(perspective.timeOfPerspective), perspective.timeOfPerspective.time, row.id]);
+                await this.indexPerspectiveMembership(databaseId, row.id, perspectiveMembership(perspective));
+            }
+        }
+    }
+
+    /**
+     * @param {string} databaseId
+     * @param {number} perspectiveId
+     * @param {ReturnType<typeof perspectiveMembership>} membership
+     */
+    async indexPerspectiveMembership(databaseId, perspectiveId, membership) {
+        for (const [table, column, entries] of [
+            ["engine_perspective_items", "item_id", membership.items],
+            ["engine_perspective_open_containers", "item_id", membership.openContainers],
+            ["engine_perspective_characters", "character_id", membership.characters],
+        ]) {
+            await this.databaseController.runQuery(databaseId, `
+                INSERT INTO ${table} (perspective_id, ${column}, memoryLevel, memorySoftLevel)
+                SELECT ?, json_extract(value, '$[0]'), json_extract(value, '$[1].level'),
+                    json_extract(value, '$[1].softLevel') FROM json_each(?)
+                WHERE true
+                ON CONFLICT (perspective_id, ${column}) DO UPDATE SET
+                    memoryLevel = excluded.memoryLevel, memorySoftLevel = excluded.memorySoftLevel
+            `, [perspectiveId, JSON.stringify([...entries])]);
+        }
+    }
+
+    /**
+     * Store a snapshot with queryable location, times, and deduplicated entity IDs.
+     * snapshotTime is real-world Unix milliseconds at capture; perspectiveTime is story Unix milliseconds.
      * @param {DECharacterPerspective} perspective
      * @returns {Promise<string>}
      */
     async storePerspective(perspective) {
+        const snapshotTime = Date.now();
         const document = JSON.stringify(perspective);
-        return this.withDatabase(async (id) => {
-            const rows = await this.databaseController.runQuery(id,
-                "INSERT INTO engine_perspectives (document) VALUES (?) RETURNING id", [document]);
+        const membership = perspectiveMembership(perspective);
+        const values = [document, perspective.ownId, perspective.ownLocationId, perspective.ownLocationSlotId,
+            snapshotTime, JSON.stringify(perspective.timeOfPerspective), perspective.timeOfPerspective.time];
+        return this.withTransactionalWrite(async (id) => {
+            const rows = await this.databaseController.runQuery(id, `
+                INSERT INTO engine_perspectives
+                    (document, ownId, locationId, locationSlotId, snapshotTime, timeOfPerspective, perspectiveTime)
+                VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id
+            `, values);
+            await this.indexPerspectiveMembership(id, rows[0].id, membership);
             return "P" + rows[0].id;
+        });
+    }
+
+    /**
+     * Return the latest sighting still remembered at the supplied story time.
+     * @param {string} charId
+     * @param {string} otherCharId
+     * @param {number} useMemoryFromTime Story Unix milliseconds, never wall-clock time.
+     * @returns {Promise<DECharacterPerspective | null>}
+     */
+    async getLatestPerspectiveWithCharacter(charId, otherCharId, useMemoryFromTime) {
+        return this.findLatestRememberedPerspective(charId, otherCharId, useMemoryFromTime, "character");
+    }
+
+    /**
+     * @param {string} charId
+     * @param {string} itemId
+     * @param {number} useMemoryFromTime Story Unix milliseconds.
+     * @param {boolean} [openContainerOnly=false] Match only sightings of this container while open.
+     * @returns {Promise<DECharacterPerspective | null>}
+     */
+    async getLatestPerspectiveWithItem(charId, itemId, useMemoryFromTime, openContainerOnly = false) {
+        return this.findLatestRememberedPerspective(charId, itemId, useMemoryFromTime,
+            openContainerOnly ? "openContainer" : "item");
+    }
+
+    /**
+     * Level 0: same instant; 1: five minutes; 2: one day; 3: seven days;
+     * 4: thirty days; 5: permanent. Expiration boundaries are inclusive.
+     * @param {string} charId
+     * @param {string} entityId
+     * @param {number} useMemoryFromTime
+     * @param {"character" | "item" | "openContainer"} kind
+     * @returns {Promise<DECharacterPerspective | null>}
+     */
+    async findLatestRememberedPerspective(charId, entityId, useMemoryFromTime, kind) {
+        if (!Number.isFinite(useMemoryFromTime)) {
+            throw new Error("useMemoryFromTime must be a finite story Unix timestamp in milliseconds.");
+        }
+        const [table, column] = {
+            character: ["engine_perspective_characters", "character_id"],
+            item: ["engine_perspective_items", "item_id"],
+            openContainer: ["engine_perspective_open_containers", "item_id"],
+        }[kind];
+        return this.withTransactionalRead(["rememberedPerspective", charId, entityId, useMemoryFromTime, kind], async (id) => {
+            const rows = await this.databaseController.runQuery(id, `
+                SELECT perspective.document FROM engine_perspectives AS perspective
+                JOIN ${table} AS seen ON seen.perspective_id = perspective.id
+                WHERE perspective.ownId = ? AND seen.${column} = ?
+                    AND perspective.perspectiveTime <= ?
+                    AND (seen.memoryLevel = 5 OR ? - perspective.perspectiveTime <=
+                        CASE seen.memoryLevel
+                            WHEN 0 THEN 0
+                            WHEN 1 THEN 300000
+                            WHEN 2 THEN 86400000
+                            WHEN 3 THEN 604800000
+                            WHEN 4 THEN 2592000000
+                        END)
+                ORDER BY perspective.perspectiveTime DESC, perspective.id DESC LIMIT 1
+            `, [charId, entityId, useMemoryFromTime, useMemoryFromTime]);
+            return rows.length ? JSON.parse(rows[0].document) : null;
+        });
+    }
+
+    /**
+     * Return this observer's most recently stored snapshot, regardless of memory retention.
+     * @param {string} charId
+     * @returns {Promise<DECharacterPerspective | null>}
+     */
+    async getLastPerspectiveOfCharacter(charId) {
+        return this.withTransactionalRead(["lastPerspective", charId], async (id) => {
+            const rows = await this.databaseController.runQuery(id, `
+                SELECT document FROM engine_perspectives
+                WHERE ownId = ? ORDER BY id DESC LIMIT 1
+            `, [charId]);
+            return rows.length ? JSON.parse(rows[0].document) : null;
         });
     }
 
@@ -598,7 +857,7 @@ export class SQLiteBridge extends BaseDataManager {
      * @returns {Promise<DECharacterPerspective | null>}
      */
     async getPerspectiveById(perspectiveId) {
-        return this.withDatabase(async (id) => {
+        return this.withTransactionalRead(["perspective", perspectiveId], async (id) => {
             const rows = await this.databaseController.runQuery(id,
                 "SELECT document FROM engine_perspectives WHERE id = ?", [numericId(perspectiveId, "P")]);
             return rows.length ? JSON.parse(rows[0].document) : null;
@@ -612,7 +871,7 @@ export class SQLiteBridge extends BaseDataManager {
      */
     async setJSONValue(key, value) {
         const json = JSON.stringify(value);
-        await this.withDatabase(id => this.databaseController.runQuery(id, `
+        await this.withWrite(id => this.databaseController.runQuery(id, `
             INSERT INTO engine_data (key, value) VALUES (?, ?)
             ON CONFLICT(key) DO UPDATE SET value = excluded.value
         `, [key, json]));
@@ -623,7 +882,7 @@ export class SQLiteBridge extends BaseDataManager {
      * @returns {Promise<any>}
      */
     async getJSONValue(key) {
-        return this.withDatabase(async (id) => {
+        return this.withCachedRead(["json", key], async (id) => {
             const rows = await this.databaseController.runQuery(id,
                 "SELECT value FROM engine_data WHERE key = ?", [key]);
             return rows.length ? JSON.parse(rows[0].value) : null;

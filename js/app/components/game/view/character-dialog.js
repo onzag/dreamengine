@@ -13,9 +13,14 @@ export class CharacterDialog extends IdentifierDetail {
         if (!character) throw new Error('Character is not available in this perspective.');
         const context = getItemTreeContext(perspective);
         const content = createItemTree(loadCharacterItemGroups(id, context), context);
-        return { name: character.characterNameComplex, description: character.characterExternalDescription, states: character.states,
+        return {
+            name: character.characterNameComplex,
+            description: character.characterExternalDescription,
+            states: character.states,
             portrait: character.characterMetadata.assets?.neutral || '',
-            banner: character.characterMetadata.banner || '', content };
+            banner: character.characterMetadata.banner || '',
+            content,
+        };
     }
 
     /** @param {DECharacterPerspective} perspective */

@@ -1,6 +1,6 @@
 import { debug } from "../debug.js";
 import { DEngine } from "../index.js";
-import { getCharacterCanSee, getSysPromptForCharacter } from "../util/character-info.js";
+import { getCharacterSurroundingInformation, getSysPromptForCharacter } from "../util/character-info.js";
 import { emotions } from "../util/emotions.js";
 import { createGrammarFromList, generateGrammarForVoice, parseListFromGrammarResponse } from "../util/grammar.js";
 import { convertContentToSimpleList, convertMessagesToSimpleList, getHistoryFragmentForCharacter, getNameIdentificationForOneCharacterTowardsAnother } from "../util/messages.js";

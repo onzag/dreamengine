@@ -1,5 +1,5 @@
 import { DEngine } from "./index.js";
-import { getCharacterCanSee, getExternalDescriptionOfCharacter, getFamilyBondRelation, getInternalDescriptionOfCharacter, getSysPromptForCharacter, isCharacterShelteredFromWeather, whatIsWeatherLikeForCharacter } from "./util/character-info.js";
+import { getCharacterSurroundingInformation, getExternalDescriptionOfCharacter, getFamilyBondRelation, getInternalDescriptionOfCharacter, getSysPromptForCharacter, isCharacterShelteredFromWeather, whatIsWeatherLikeForCharacter } from "./util/character-info.js";
 import { makeTimestamp } from "./util/messages.js";
 import { getWeatherSystemForLocationAndWeather } from "./util/world.js";
 
@@ -177,7 +177,7 @@ export const commands = {
         cheat: true,
         args: ["<character id>"],
     },
-    "whatcanisee": {
+    "whatissurroundingme": {
         run: async (engine, args) => {
             if (!engine.deObject) {
                 throw new Error("DEngine not initialized");
@@ -185,7 +185,7 @@ export const commands = {
             if (!engine.deObject.user) {
                 throw new Error("DEngine has no user character defined");
             }
-            const info = await getCharacterCanSee(engine.deObject, engine.deObject.user);
+            const info = await getCharacterSurroundingInformation(engine.deObject, engine.deObject.user);
             return info.everything;
         },
         help: "Lists the objects you can see in your current location.",

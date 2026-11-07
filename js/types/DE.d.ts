@@ -119,6 +119,15 @@ declare interface DEMinimalCharacterReference {
     perception: number;
 
     /**
+     * A number from 0 to 1 that represents how likely is the character to pay attention to their surroundings and remember things
+     * a number from 0.3 to 0.5 is recommended for a standard human character
+     * 1 will be perfect attention
+     * 0.1 or less will cause ADHD like behaviour, but only on forgetfulness of things; it does not replace
+     * specifying the character as ADHD, because this establishes their internal memory system
+     */
+    attention: number;
+
+    /**
      * Whether the character can read thoughts, this is useful for characters that are telepathic or have psychic abilities
      */
     canReadThoughts?: boolean;
@@ -3934,6 +3943,8 @@ declare interface DEItemPerception {
 }
 
 declare interface DECharacterPerspectiveCharacter {
+    /** Memory retention of this sighting, using the same levels as items. */
+    memory: DEItemInPerspective["memory"];
     /**
      * Metadata of the character that is in perspective at that moment in time, this includes all the character's attributes, states, and other properties
      */
@@ -4127,6 +4138,24 @@ declare interface DEItemInPerspective extends Omit<DEItem, "id"> {
      * Whether the items on top of this item are clear of not, if not clear, a string describing why they are unclear
      */
     ontopIsUnclear: false | string;
+
+    /**
+     * Memory storage of the item, this is used to rationalize how the character remembers the item
+     * and is affected by their attention
+     */
+    memory: {
+        /**
+         * Level 0, the item is forgotten immediately, the character has no memory of it
+         * Level 1, the item is remembered for five minutes
+         * Level 2, the item is remembered for a day
+         * Level 3, the item is remembered for a week
+         * Level 4, the item is remembered for thirty days
+         * Level 5, the item is never forgotten
+         */
+        level: 0 | 1 | 2 | 3 | 4 | 5;
+        /** The unrounded memory score. */
+        softLevel: number;
+    }
 }
 
 /**
@@ -4752,24 +4781,6 @@ declare interface DEUtils {
         removeCausantFromState(character: string | DECompleteCharacterReference | null, stateName: string, causant: DECompleteCharacterReference | DEItem | string, causantType: "character" | "object"): void;
 
         /**
-         * TODO does this work?
-         * The name of the characters/users/objects that activated the state last
-         * @returns eg. ["Aria", "Thalon", "Player", "The Ancient Sword"]
-         */
-        getLastStateCausants(char: DECompleteCharacterReference | string, stateName: string): Promise<string[]>;
-        /**
-         * TODO does this work?
-         * The name of the characters only that activated the state last
-         * @returns eg. ["Aria", "Thalon", "Player"]
-         */
-        getLastStateCharacterCausants(char: DECompleteCharacterReference | string, stateName: string): Promise<string[]>;
-        /**
-         * TODO does this work?
-         * The name of the characters only that activated the state last
-         * @returns eg. ["Aria", "Thalon", "Player"]
-         */
-        getLastStateObjectCausants(char: DECompleteCharacterReference | string, stateName: string): Promise<string[]>;
-        /**
          * Get the list of active states for the current character
          * @returns eg. [ANGRY, TIRED, HAPPY]
          */
@@ -4789,11 +4800,6 @@ declare interface DEUtils {
          * @returns eg. true or false
          */
         stateHasJustActivated(char: DECompleteCharacterReference | string, stateName: string): boolean;
-        /**
-         * Get how many inference cycles ago the state was activated for the provided character
-         * @returns eg. 3, it will return -1 if the state is not found ever
-         */
-        getStateActivationCyclesAgo(char: DECompleteCharacterReference | string, stateName: string): Promise<number>;
     },
     triggersAndAccumulators: {
         /**
@@ -5176,6 +5182,13 @@ declare type DEConversationLocationMatch = DEConversation["locations"][string] &
     participantId: string;
 };
 
+declare interface DETransactionFns {
+    newTransaction(): Promise<void>;
+    commitTransaction(): Promise<void>;
+    rollbackTransaction(): Promise<void>;
+    hasActiveTransaction(): boolean;
+}
+
 declare interface DEDatabaseConversationFns {
     getConversation(conversationId: string): Promise<DEConversation | null>;
     /**
@@ -5193,27 +5206,20 @@ declare interface DEDatabaseConversationFns {
     updateConversationMessage(messageId: string, message: Partial<Omit<DEConversationMessage, "id">>): Promise<DEConversationMessage | null>;
 }
 
-declare interface DEDatabaseHistoricStateFns {
-    /** Stored activation age plus snapshots since that state, counting the matching snapshot; -1 if absent. */
-    getHistoricStateActivationCyclesAgo(charId: string, state: string): Promise<number>;
-    storeHistoricState(charId: string, state: DEStateForCharacter): Promise<void>;
-    getFirstHistoricStateWithCharacter(charId: string, otherCharId: string): Promise<DEStateForCharacter | null>;
-    /** Newest first; partial name matching ignores case, accents, punctuation and spacing. */
-    getFirstNHistoricStatesWithCharacterName(charId: string, matches: number, otherCharacterName: string): Promise<DEStateForCharacter[]>;
-    getFirstHistoricStateWithState(charId: string, state: string): Promise<DEStateForCharacter | null>;
-    getFirstHistoricStateWithItem(charId: string, itemId: string): Promise<DEStateForCharacter | null>;
-    /** Newest first; partial name matching ignores case, accents, punctuation and spacing. */
-    getFirstNHistoricStatesWithItemName(charId: string, matches: number, itemName: string): Promise<DEStateForCharacter[]>;
-}
-
 declare interface DEDatabasePerspectiveFns {
     /** Serialize a character perspective snapshot as a JSON document and return its new storage id. */
     storePerspective(perspective: DECharacterPerspective): Promise<string>;
     /** Retrieve a stored character perspective snapshot by its id, or null if absent. */
     getPerspectiveById(perspectiveId: string): Promise<DECharacterPerspective | null>;
+    /** This observer's most recently stored snapshot, without memory filtering; null if absent. */
+    getLastPerspectiveOfCharacter(charId: string): Promise<DECharacterPerspective | null>;
+    /** Latest sighting remembered at useMemoryFromTime (story Unix milliseconds); excludes future snapshots. */
+    getLatestPerspectiveWithCharacter(charId: string, otherCharId: string, useMemoryFromTime: number): Promise<DECharacterPerspective | null>;
+    /** Same memory/time filtering for items, optionally requiring an open-container sighting. */
+    getLatestPerspectiveWithItem(charId: string, itemId: string, useMemoryFromTime: number, openContainerOnly?: boolean): Promise<DECharacterPerspective | null>;
 }
 
-declare interface DEDatabase extends DEDatabaseConversationFns, DEDatabaseHistoricStateFns, DEDatabasePerspectiveFns {
+declare interface DEDatabase extends DEDatabaseConversationFns, DEDatabasePerspectiveFns, DETransactionFns {
 }
 
 declare type DE = DEObject;

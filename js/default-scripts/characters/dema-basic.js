@@ -117,6 +117,7 @@ engine.exports = {
                 sounds: {},
             }),
             script: engine.script,
+            attention: 1,
             clothing: "custom",
             name: "Dema",
             unknownName: "Robot",

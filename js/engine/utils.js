@@ -266,22 +266,6 @@ function getPronounHelperLocal(DE, charsOrig, they, he, she, theySingular) {
 }
 
 /**
- * @param {string[]} list
- * @returns {string[]}
- */
-function removeDuplicatesHelper(list) {
-    if (!list || !Array.isArray(list)) return [];
-    const seen = new Set();
-    return list.filter(item => {
-        if (seen.has(item)) {
-            return false;
-        }
-        seen.add(item);
-        return true;
-    });
-}
-
-/**
  * Groups structurally identical items, ignoring ids, in first-seen order.
  * @param {DEItem[]} items
  * @returns {Array<{ item: DEItem, amount: number }>}
@@ -298,38 +282,6 @@ function getRepresentativeItems(items) {
         }
     }
     return representatives;
-}
-
-/**
- * @param {DEObject} DE
- * @param {DECompleteCharacterReference | string} character
- * @param {string} stateName
- * @returns {Promise<Array<DEStateCauseCausantCharacter | DEStateCauseCausantObject>>}
- */
-async function getCausantsHelperLocal(DE, character, stateName) {
-    character = requireCharacter(DE, character);
-    const actualStateName = stateName.trim().toUpperCase().replace(/\s+/g, "_");
-    // Keys in stateFor are character ids
-
-    const stateForCharacter = DE.stateFor[character.id];
-    if (!stateForCharacter) {
-        throw new Error(`Character with id ${character.id} not found in DE.stateFor`);
-    }
-
-    let stateEntry = stateForCharacter.states.find(s => s.state === actualStateName);
-    if (!stateEntry) {
-        const historicState = await DE.database.getFirstHistoricStateWithState(character.id, actualStateName);
-        stateEntry = historicState?.states.find(s => s.state === actualStateName);
-    }
-    if (!stateEntry) return [];
-    if (!stateEntry.causes?.length) {
-        console.warn(`State ${actualStateName} does not have causants because there are no causes.`);
-        return [];
-    }
-
-    const causants = stateEntry.causes.map(c => c.causant).filter(c => typeof c !== "undefined");
-
-    return causants || [];
 }
 
 /**
@@ -1425,7 +1377,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 }
 
                 const heardIdentifiers = DE.stateFor[participantId].heardIdentifiers;
-                const perspective = await getPerspective(DE, participantChar);
+                const perspective = await getPerspective(DE, participantChar, newMessage);
                 const savedPerspective = await DE.database.storePerspective(perspective);
                 newMessage.perspectiveByCharacterId[participantId] = {
                     before: savedPerspective,
@@ -1484,7 +1436,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                             // must be a ghost participant, skip perspective generation
                             continue;
                         }
-                        const perspective = await getPerspective(DE, participantChar);
+                        const perspective = await getPerspective(DE, participantChar, addedMessage);
                         const savedPerspective = await DE.database.storePerspective(perspective);
                         addedMessage.perspectiveByCharacterId[participantId].after = savedPerspective;
                     }
@@ -2098,8 +2050,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (currentState.seenCharacters.some(seen => seen.id === charRef.id)) {
                 return currentState.location;
             }
-            const historicState = await DE.database.getFirstHistoricStateWithCharacter(povRef.id, charRef.id);
-            return historicState?.location ?? "";
+            const perspective = await DE.database.getLatestPerspectiveWithCharacter(povRef.id, charRef.id, DE.currentTime.time);
+            return perspective?.ownLocationId ?? "";
         },
         async hasNoIdeaWhereIs(povChar, char) {
             const povRef = resolveCharacter(DE, povChar);
@@ -2741,15 +2693,6 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 activeState.causes = activeState.causes.filter(c => !(c.causant && c.causant.id === causant && c.causant.type === causantType));
             }
         },
-        async getLastStateCausants(char, stateName) {
-            return removeDuplicatesHelper((await getCausantsHelperLocal(DE, char, stateName)).map(c => c.id));
-        },
-        async getLastStateCharacterCausants(char, stateName) {
-            return removeDuplicatesHelper((await getCausantsHelperLocal(DE, char, stateName)).filter(c => c.type === "character").map(c => c.id));
-        },
-        async getLastStateObjectCausants(char, stateName) {
-            return (await getCausantsHelperLocal(DE, char, stateName)).filter(c => c.type === "object").map(c => c.id);
-        },
         getStates(char) {
             char = requireCharacter(DE, char);
             return DE.stateFor[char.id].states.map(s => s.state);
@@ -2768,14 +2711,6 @@ export const deEngineUtilsFn = (DE, engine) => ({
             const stateObject = DE.stateFor[char.id].states.find(s => s.state === stateName);
             if (!stateObject) return false;
             return stateObject.contiguousStartActivationCyclesAgo === 0;
-        },
-        async getStateActivationCyclesAgo(char, stateName) {
-            char = requireCharacter(DE, char);
-            const stateObject = DE.stateFor[char.id].states.find(s => s.state === stateName);
-            if (!stateObject) {
-                return DE.database.getHistoricStateActivationCyclesAgo(char.id, stateName);
-            }
-            return stateObject.contiguousStartActivationCyclesAgo;
         },
     },
 

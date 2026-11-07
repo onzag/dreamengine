@@ -122,6 +122,7 @@ export function repairPotentialUserWithDefaults(character) {
         script: character.script || "",
         unknownName: character.unknownName || "Unknown Creature",
         scriptGivenId: character.scriptGivenId || "",
+        attention: typeof character.attention === "number" ? character.attention : 0,
 
         ageYears: character.ageYears || 30,
         attractiveness: typeof character.attractiveness === "number" ? character.attractiveness : 0.5,
@@ -177,6 +178,7 @@ export function createCharacterFromUser(user) {
         id: user.id,
         script: user.script,
         scriptGivenId: user.scriptGivenId,
+        attention: user.attention || 0,
         unknownName: user.species === "human" ? "Stranger" : "Unknown Creature",
         adventurousness: 0,
         antagonism: 0,
@@ -211,6 +213,7 @@ export function createCharacterFromUser(user) {
         rangeMeters: user.rangeMeters,
         generalCharacterDescriptionInjection: {},
         bonds: {
+            totalStrangersBondDescription: "",
             system: "UNKNOWN",
             declarations: [],
             bondChangeFineTune: 1.0,
@@ -388,7 +391,6 @@ export class DEngine {
             throw new Error("DEngine not initialized");
         }
         this.deObject.characters[this.deObject.user].schizophrenia = 1;
-        this.backupDEObject();
     }
 
     /**
@@ -447,8 +449,6 @@ export class DEngine {
             await this.jsEngine.importScript(script.split("/")[0] || '', script.split("/")[1] || '');
         }
 
-        this.backupDEObject();
-
         await this.runInitializationScripts();
 
         const hasStartedClock = !!this.deObject.world.selectedScene;
@@ -473,12 +473,17 @@ export class DEngine {
     async saveCurrentState(saveName, metadata) {
         if (!this.dataManager) {
             throw new Error("Data manager not set, cannot save current state");
-        } else if (!this.deObjectSafeBackup) {
-            throw new Error("DEngine safe state not found");
         } else if (!this.jsEngine) {
             throw new Error("JS Engine not set, cannot get last safe state");
+        } else if (!this.deObject) {
+            throw new Error("DEngine not initialized, cannot save current state");
         }
-        const lastSafe = removeUnnecessaryPropertiesFromDE(this.deObjectSafeBackup);
+
+        if (this.hasActiveBackup()) {
+            throw new Error("Cannot save current state. Changes are occurring and the state is not stable.");
+        }
+
+        const lastSafe = removeUnnecessaryPropertiesFromDE(this.deObject);
         const scriptOrder = this.jsEngine.scriptOrder;
 
         await this.dataManager.setDEObject(lastSafe);
@@ -558,8 +563,6 @@ export class DEngine {
 
         this.deObject.utils = deEngineUtilsFn(this.deObject, this);
 
-        this.backupDEObject();
-
         const userValue = user ? repairPotentialUserWithDefaults(user) : repairPotentialUserWithDefaults({ name: "Player" });
         const actualUserId = this.deObject.utils.id.characterIdGenerator(userValue.name);
         this.deObject.user = actualUserId;
@@ -612,8 +615,6 @@ export class DEngine {
         this.deObject.user = characterId;
         this.deObject.world.currentLocation = this.deObject.stateFor[characterId].location;
         this.deObject.world.currentLocationSlot = this.deObject.stateFor[characterId].locationSlot;
-
-        this.backupDEObject();
     }
 
     /**
@@ -632,14 +633,52 @@ export class DEngine {
         this.assumeCharacterIdentity(characterId);
     }
 
-    backupDEObject() {
+    hasActiveBackup() {
+        return !!this.deObjectSafeBackup;
+    }
+
+    async backupDEObject() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         } else if (!this.jsEngine) {
             throw new Error("JS Engine not set, cannot backup DEObject");
+        } else if (!this.dataManager) {
+            throw new Error("Data manager not set, cannot backup DEObject");
         }
 
+        if (this.deObjectSafeBackup) {
+            throw new Error("DEngine safe state already exists, cannot backup DEObject again without restoring first");
+        }
+        
         this.deObjectSafeBackup = deepCopy(this.deObject);
+        await this.dataManager.newTransaction();
+    }
+
+    async restoreDEObjectFromBackup() {
+        if (!this.deObjectSafeBackup) {
+            throw new Error("DEngine safe state not found");
+        } else if (!this.jsEngine) {
+            throw new Error("JS Engine not set, cannot restore DEObject from backup");
+        } else if (!this.dataManager) {
+            throw new Error("Data manager not set, cannot restore DEObject from backup");
+        }
+
+        this.deObject = this.deObjectSafeBackup;
+        this.deObjectSafeBackup = null;
+        await this.dataManager.rollbackTransaction();
+    }
+
+    async clearBackupDEObject() {
+        if (!this.deObjectSafeBackup) {
+            throw new Error("DEngine safe state not found");
+        } else if (!this.jsEngine) {
+            throw new Error("JS Engine not set, cannot clear DEObject backup");
+        } else if (!this.dataManager) {
+            throw new Error("Data manager not set, cannot clear DEObject backup");
+        }
+
+        this.deObjectSafeBackup = null;
+        await this.dataManager.commitTransaction();
     }
 
     /**
@@ -798,7 +837,6 @@ export class DEngine {
             }
         }
 
-        this.backupDEObject();
         this.initialized = true;
     }
 
@@ -988,6 +1026,14 @@ export class DEngine {
             throw new Error("Inference adapter not set");
         } else if (!this.jsEngine) {
             throw new Error("JS Engine not set, cannot run initialization scripts");
+        } else if (!this.dataManager) {
+            throw new Error("Data manager not set, cannot start scene");
+        }
+
+        let ownsBackup = false;
+        if (!this.hasActiveBackup()) {
+            await this.backupDEObject();
+            ownsBackup = true;
         }
 
         try {
@@ -1332,11 +1378,17 @@ export class DEngine {
 
             await this.callFunctionInScripts(allScripts, (script) => `Running onSceneReady for script ${script.scriptKey} at the end of scene ${sceneId}`, "onSceneReady", { untilTrue: false }, this.deObject, scene);
 
-            this.backupDEObject();
+            if (ownsBackup) {
+                await this.clearBackupDEObject();
+            }
 
             // Game on :)
         } catch (error) {
             console.error("Error during scene initialization:", error);
+            if (ownsBackup) {
+                await this.restoreDEObjectFromBackup();
+                await this.informDEObjectUpdated();
+            }
             throw error;
         } finally {
             this.informThinking(false, null, true);

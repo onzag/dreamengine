@@ -15,15 +15,37 @@ import {
 import { getPerceivedItemLabel } from './visibility.js';
 
 /**
+ * Count explicit identifier mentions in message content, including nested dialogue.
+ * Each identifier fragment counts once for an ID, even if it names several entities.
+ * @param {Omit<DEConversationMessage, "id"> | undefined} message
+ * @param {string} id
+ * @returns {number}
+ */
+function countIdentifierMentions(message, id) {
+    if (!message) return 0;
+    /**
+     * @param {DEConversationMessage["content"][number] | DEConversationMessageNarrationFragment | DEConversationMessageDialogueFragment} fragment
+     * @returns {number}
+     */
+    function count(fragment) {
+        if (typeof fragment === "string" || fragment.type === "sound") return 0;
+        if (fragment.type === "identifier") return fragment.identifiers.includes(id) ? 1 : 0;
+        return fragment.fragments.reduce((total, child) => total + count(child), 0);
+    }
+    return message.content.reduce((total, fragment) => total + count(fragment), 0);
+}
+
+/**
  * Builds a snapshot of the world from a single character's point of view, mirroring
  * exactly what the UI surfaces (scene characters, carried/worn/slot items, and what the
  * observer can or cannot make out) through the same engine utilities the views consume.
  *
  * @param {DEObject} DE
  * @param {DECompleteCharacterReference | string} character
+ * @param {Omit<DEConversationMessage, "id">} [relatedConversationMessage]
  * @returns {Promise<DECharacterPerspective>}
  */
-export async function getPerspective(DE, character) {
+export async function getPerspective(DE, character, relatedConversationMessage) {
     const ownId = typeof character === 'string' ? character : character.id;
     const ownChar = DE.characters[ownId];
     if (!ownChar) {
@@ -42,8 +64,8 @@ export async function getPerspective(DE, character) {
     const slotId = ownState.locationSlot;
     const slot = location.slots[slotId] || null;
 
-    const self = await buildPerspectiveCharacter(DE, ownId, ownId, 'visible');
-    const ownLocation = await buildPerspectiveLocation(DE, locationId, ownId);
+    const self = await buildPerspectiveCharacter(DE, ownId, ownId, 'visible', relatedConversationMessage);
+    const ownLocation = await buildPerspectiveLocation(DE, locationId, ownId, relatedConversationMessage);
 
     const allConversationsAtLocation = await DE.utils.conversations.getAllConversationsAtLocation(locationId);
 
@@ -68,7 +90,7 @@ export async function getPerspective(DE, character) {
         if (soloCharId === ownId) continue;
         const canSeeThem = DE.utils.characterInfo.canSeeCharacter(soloCharId, ownId);
         if (canSeeThem !== "invisible") {
-            result.soloCharacters.push(await buildPerspectiveCharacter(DE, soloCharId, ownId, canSeeThem));
+            result.soloCharacters.push(await buildPerspectiveCharacter(DE, soloCharId, ownId, canSeeThem, relatedConversationMessage));
         }
     }
     for (const conversation of allConversationsAtLocation.conversations) {
@@ -95,15 +117,15 @@ export async function getPerspective(DE, character) {
 
         if (actualIdsOfVisibleParticipants.length > 0) {
             if (isOwnGroup) {
-                for (const {id: participantId, visibility} of actualIdsOfVisibleParticipants) {
-                    result.ownGroup.push(await buildPerspectiveCharacter(DE, participantId, ownId, visibility));
+                for (const { id: participantId, visibility } of actualIdsOfVisibleParticipants) {
+                    result.ownGroup.push(await buildPerspectiveCharacter(DE, participantId, ownId, visibility, relatedConversationMessage));
                 }
             } else if (actualIdsOfVisibleParticipants.length === 1) {
-                result.soloCharacters.push(await buildPerspectiveCharacter(DE, actualIdsOfVisibleParticipants[0].id, ownId, actualIdsOfVisibleParticipants[0].visibility));
+                result.soloCharacters.push(await buildPerspectiveCharacter(DE, actualIdsOfVisibleParticipants[0].id, ownId, actualIdsOfVisibleParticipants[0].visibility, relatedConversationMessage));
             } else {
                 const otherGroup = [];
-                for (const {id: participantId, visibility} of actualIdsOfVisibleParticipants) {
-                    otherGroup.push(await buildPerspectiveCharacter(DE, participantId, ownId, visibility));
+                for (const { id: participantId, visibility } of actualIdsOfVisibleParticipants) {
+                    otherGroup.push(await buildPerspectiveCharacter(DE, participantId, ownId, visibility, relatedConversationMessage));
                 }
                 result.otherGroups.push(otherGroup);
             }
@@ -122,7 +144,7 @@ export async function getPerspective(DE, character) {
         ownLocation,
         ownCharacterBlindness: ownChar.blindness || 'no',
         socialGroups: result,
-        timeOfPerspective: {...DE.currentTime},
+        timeOfPerspective: { ...DE.currentTime },
     };
 }
 
@@ -131,8 +153,9 @@ export async function getPerspective(DE, character) {
  * @param {string} locationId
  * @param {string} observerId
  * @returns {Promise<DECharacterPerspectiveLocation>}
+ * @param {Omit<DEConversationMessage, "id">} [relatedConversationMessage]
  */
-async function buildPerspectiveLocation(DE, locationId, observerId) {
+async function buildPerspectiveLocation(DE, locationId, observerId, relatedConversationMessage) {
     const location = DE.world.locations[locationId];
     if (!location) {
         throw new Error(`Location ${locationId} not found.`);
@@ -140,7 +163,7 @@ async function buildPerspectiveLocation(DE, locationId, observerId) {
 
     const slots = [];
     for (const slotId of Object.keys(location.slots)) {
-        slots.push(await buildPerspectiveLocationSlot(DE, locationId, slotId, observerId));
+        slots.push(await buildPerspectiveLocationSlot(DE, locationId, slotId, observerId, relatedConversationMessage));
     }
 
     const whatCanTheyMakeOfLocation = DE.utils.world.whatCanTheyMakeOfALocation(locationId, observerId);
@@ -174,8 +197,9 @@ async function buildPerspectiveLocation(DE, locationId, observerId) {
  * @param {string} slotId
  * @param {string} observerId
  * @returns {Promise<DECharacterPerspectiveLocationSlot>}
+ * @param {Omit<DEConversationMessage, "id">} [relatedConversationMessage]
  */
-async function buildPerspectiveLocationSlot(DE, locationId, slotId, observerId) {
+async function buildPerspectiveLocationSlot(DE, locationId, slotId, observerId, relatedConversationMessage) {
     const location = DE.world.locations[locationId];
     const slot = location.slots[slotId];
     if (!slot) {
@@ -189,7 +213,7 @@ async function buildPerspectiveLocationSlot(DE, locationId, slotId, observerId) 
     });
     const locationPerception = DE.utils.world.whatCanTheyMakeOfALocation(slotId, observerId);
 
-    const items = await buildItemsInPerspective(DE, null, slot.items || [], observerId, locationId);
+    const items = await buildPerspectiveItems(DE, null, slot.items || [], observerId, locationId, slotId, relatedConversationMessage);
 
     // Characters at this slot, excluding the observer, that the observer can at least perceive.
     /** @type {DECharacterPerspectiveCharacter[]} */
@@ -199,7 +223,7 @@ async function buildPerspectiveLocationSlot(DE, locationId, slotId, observerId) 
         if (charId === observerId) continue;
         const visibility = DE.utils.characterInfo.canSeeCharacter(charId, observerId);
         if (visibility === 'invisible') continue;
-        characters.push(await buildPerspectiveCharacter(DE, charId, observerId, visibility));
+        characters.push(await buildPerspectiveCharacter(DE, charId, observerId, visibility, relatedConversationMessage));
     }
 
     const canSeeItems = !locationPerception.cantSee;
@@ -251,8 +275,9 @@ function unclearReason(perception, observerName, kind) {
  * @param {string} observerId
  * @param {'visible' | 'perceived'} perceptionForm
  * @returns {Promise<DECharacterPerspectiveCharacter>}
+ * @param {Omit<DEConversationMessage, "id">} [relatedConversationMessage]
  */
-async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionForm) {
+async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionForm, relatedConversationMessage) {
     const target = DE.characters[targetId];
     if (!target) {
         throw new Error(`Character ${targetId} not found.`);
@@ -264,6 +289,10 @@ async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionFor
     const targetState = DE.stateFor[targetId];
     if (!targetState) {
         throw new Error(`Character state for ${targetId} not found.`);
+    }
+    const observerState = DE.stateFor[observerId];
+    if (!observerState) {
+        throw new Error(`Character state for ${observerId} not found.`);
     }
 
     const isSelf = targetId === observerId;
@@ -295,8 +324,8 @@ async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionFor
     const characterExternalDescription = await getExternalDescriptionOfCharacter(DE, targetId, observerId, false, false);
     const characterPlaceAndPostureDescription = getExternalDescriptionOfCharacterPostureOnly(DE, targetId, observerId);
 
-    const characterCarryingItems = perception.canTellDetailsOfClothingOrCarriedItems ? await buildItemsInPerspective(DE, null, targetState.carrying || [], observerId, targetState.location) : [];
-    const characterWearingItems = perception.canTellDetailsOfClothingOrCarriedItems ? await buildItemsInPerspective(DE, null, targetState.wearing || [], observerId, targetState.location) : [];
+    const characterCarryingItems = perception.canTellDetailsOfClothingOrCarriedItems ? await buildPerspectiveItems(DE, null, targetState.carrying || [], observerId, targetState.location, targetState.locationSlot, relatedConversationMessage) : [];
+    const characterWearingItems = perception.canTellDetailsOfClothingOrCarriedItems ? await buildPerspectiveItems(DE, null, targetState.wearing || [], observerId, targetState.location, targetState.locationSlot, relatedConversationMessage) : [];
 
     const carriedCharacters = getListOfCarriedCharactersByCharacter(DE, targetId)
         .map(c => c.carriedId)
@@ -542,8 +571,83 @@ async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionFor
         }
     }
 
+    // factors that affect memory scoring
+
+    // conversation gives 2 point
+    let max = 0;
+    const isCharacterInConversationWithObserver = (targetState.conversationId && observerState.conversationId && targetState.conversationId === observerState.conversationId) ? 2 : 0;
+    max += 2;
+    // bond level (positive or negative) gives 1 point depending on how powerful it is
+    const bondLevelAbsolute = (Math.abs(bond ? bond.bond : 0) / 100) * 2;
+    max += 2;
+    // non stranger factor adds another point
+    const strangerFactor = bond ? (bond.stranger ? 0 : 1) : 0;
+    max += 1;
+    // being in the same exact slot gives a point too
+    const sameSlot = (targetState.location === observerState.location && targetState.locationSlot === observerState.locationSlot) ? 1 : 0;
+    max += 1;
+    // them being attractive gives a point
+    const isAttractive = (DE.utils.bonds.isAttractedToWithLevelAsNumber(observer, target) / 3);
+    max += 1;
+
+    // memorability score from 0 to 2, the range allows itself to be exceeded by double the max
+    // these half points added by the message count do not count towards the max, they are just a bonus for being mentioned in the conversation
+    const memorability = (isCharacterInConversationWithObserver + bondLevelAbsolute + strangerFactor +
+        sameSlot + isAttractive + (countIdentifierMentions(relatedConversationMessage, targetId) * 0.5)) / max;
+
+    // 0 no memory
+    // 1 minute memory
+    // 2 day memory
+    // 3 week memory
+    // 4 month memory
+    // 5 forever memory (more or less)
+
+    // now we need to apply attention, this will indeed cause a rather small number
+    // eg for same location with observer, in conversation and a good bond they could get 0.6 or something akin
+    // with attention applied they get 0.35 further memory per hour (for a normal person)
+    // eg2 for same location slot with a stranger, they could get 0.14 at most
+    const attentionAffectedMemorability = memorability * (observer.attention ?? 0);
+
+    // the attention baseline is the baseline imprinting effect of the memory
+    // we will double the value, eg. this very memorable friend meetup will have a baseline of 0.7 * 10, which is 7 and then halving it gives 3.5
+    // after rounding this means they will remember for a month
+    // the stranger with 0.14 * 10 = 1.4, halving gives 0.7, rounding gives 1, which is a minute memory, which is correct for a stranger just passing by
+    let attentionBaseLine = Math.round((memorability * 10) * (observer.attention ?? 0));
+    if (attentionBaseLine > 5) {
+        attentionBaseLine = 5;
+    }
+
+    // now we need to figure out the actual value by fetching our previous, so ironically we need to fetch the previous perspective and see how many hours have passed
+    // since that previous perspective and this one, provided the character was there too, if it was, then we will increase the memory score by
+    // attentionAffectedMemorability per hour of the last perspective, therefore it increases the memory score, unless it is lower than attentionBaseLine, in which case we will set it to attentionBaseLine
+    const lastPerspectiveOfObserver = await DE.database.getLastPerspectiveOfCharacter(observerId);
+
+    let expectedLevel = /** @type {0 | 1 | 2 | 3 | 4 | 5} */ (attentionBaseLine);
+    let expectedSoftLevel = attentionBaseLine;
+
+    if (lastPerspectiveOfObserver) {
+        const characterInfo = lastPerspectiveOfObserver.socialGroups.soloCharacters.find(c => c.characterId === targetId) ||
+            lastPerspectiveOfObserver.socialGroups.ownGroup.find(c => c.characterId === targetId) ||
+            lastPerspectiveOfObserver.socialGroups.otherGroups.flat().find(c => c.characterId === targetId);
+
+        const diffTimeInHours = (DE.currentTime.time - lastPerspectiveOfObserver.timeOfPerspective.time) / (1000 * 60 * 60);
+
+        if (characterInfo) {
+            expectedSoftLevel = characterInfo.memory.softLevel + (attentionAffectedMemorability * diffTimeInHours);
+            if (expectedSoftLevel > 5) {
+                expectedSoftLevel = 5;
+            }
+            if (expectedSoftLevel < attentionBaseLine) {
+                expectedSoftLevel = attentionBaseLine;
+            }
+            // @ts-ignore
+            expectedLevel = Math.round(expectedSoftLevel);
+        }
+    }
+
     return {
         characterMetadata: target.metadata || {},
+        memory: { level: expectedLevel, softLevel: expectedSoftLevel },
         characterId: targetId,
         characterNameComplex,
         characterNameSimple,
@@ -614,15 +718,6 @@ async function buildBondDescription(DE, observer, target) {
         let result = typeof bondDeclaration.description === 'string'
             ? bondDeclaration.description
             : (await bondDeclaration.description(templateInfo)).trim();
-
-        if (bondDeclaration.bondAdditionalDescription) {
-            if (!result.endsWith('. ') && !result.endsWith(' ')) {
-                result += ' ';
-            }
-            result += typeof bondDeclaration.bondAdditionalDescription === 'string'
-                ? bondDeclaration.bondAdditionalDescription
-                : (await bondDeclaration.bondAdditionalDescription(templateInfo)).trim();
-        }
 
         const selfRef = getNameIdentificationForOneCharacterTowardsAnother(DE, observer, observer);
         const otherRef = getNameIdentificationForOneCharacterTowardsAnother(DE, observer, target);
@@ -776,6 +871,44 @@ function mergeIdenticalItemsInPerspective(items) {
 }
 
 /**
+ * Find an item by its concrete ID in a snapshot, including stacks and nested items.
+ * @param {DECharacterPerspective} perspective
+ * @param {string} itemId
+ * @returns {DEItemInPerspective | null}
+ */
+function findItemInPerspective(perspective, itemId) {
+    /** @param {DEItemInPerspective[]} items @returns {DEItemInPerspective | null} */
+    function findInItems(items) {
+        for (const item of items) {
+            if (item.ids.some(entry => entry.id === itemId)) return item;
+            const nested = findInItems(item.containing) || findInItems(item.ontop);
+            if (nested) return nested;
+        }
+        return null;
+    }
+    /** @param {DECharacterPerspectiveCharacter} character @returns {DEItemInPerspective | null} */
+    function findOnCharacter(character) {
+        return findInItems(character.characterCarryingItems) || findInItems(character.characterWearingItems);
+    }
+    const ownItem = findOnCharacter(perspective.self);
+    if (ownItem) return ownItem;
+    for (const slot of perspective.ownLocation.slots) {
+        const item = findInItems(slot.items);
+        if (item) return item;
+        for (const character of slot.characters) {
+            const carriedItem = findOnCharacter(character);
+            if (carriedItem) return carriedItem;
+        }
+    }
+    const groups = perspective.socialGroups;
+    for (const character of [...groups.soloCharacters, ...groups.ownGroup, ...groups.otherGroups.flat()]) {
+        const item = findOnCharacter(character);
+        if (item) return item;
+    }
+    return null;
+}
+
+/**
  * Recursively builds the items an observer can make out from a raw item list, dropping anything
  * invisible to them and honouring whether they can peer inside or on top of each container.
  * @param {DEObject} DE
@@ -783,13 +916,26 @@ function mergeIdenticalItemsInPerspective(items) {
  * @param {DEItem[]} items
  * @param {string} observerId
  * @param {string} locationId
+ * @param {string} locationSlotId
  * @returns {Promise<DEItemInPerspective[]>}
+ * @param {Omit<DEConversationMessage, "id">} [relatedConversationMessage]
  */
-async function buildItemsInPerspective(DE, parentItemId, items, observerId, locationId) {
+async function buildPerspectiveItems(DE, parentItemId, items, observerId, locationId, locationSlotId, relatedConversationMessage) {
     const observer = DE.characters[observerId];
-    
+    if (!observer) {
+        throw new Error(`Character ${observerId} not found.`);
+    }
+
+    const observerState = DE.stateFor[observerId];
+    if (!observerState) {
+        throw new Error(`Character state for ${observerId} not found.`);
+    }
+    if (!items.length) return [];
+
     /** @type {DEItemInPerspective[]} */
     const result = [];
+
+    const lastPerspectiveOfObserver = await DE.database.getLastPerspectiveOfCharacter(observerId);
 
     for (const item of items) {
         const visibility = DE.utils.items.canSeeItem(item, observerId);
@@ -800,8 +946,72 @@ async function buildItemsInPerspective(DE, parentItemId, items, observerId, loca
         const canSeeContents = perception.canSeeContents === 'YES';
         const canSeeOntop = perception.canSeeOntop === 'YES';
 
+        // factors that affect memory scoring
+
+        // A unique item contributes two points.
+        let max = 0;
+        const isItemNonCommon = item.oneOfAKind ? 2 : 0;
+        max += 2;
+        // Owning the item contributes two points.
+        const ownItem = item.owner === observerId ? 2 : 0;
+        max += 2;
+        // being in the same exact slot gives a point too
+        const sameSlot = (locationId === observerState.location && observerState.locationSlot === locationSlotId) ? 1 : 0;
+        max += 1;
+
+        // these half points added by the message count do not count towards the max, they are just a bonus for being mentioned in the conversation
+        const memorability = (isItemNonCommon + ownItem + sameSlot + (countIdentifierMentions(relatedConversationMessage, item.id) * 0.5)) / max;
+
+        // 0 no memory
+        // 1 minute memory
+        // 2 day memory
+        // 3 week memory
+        // 4 month memory
+        // 5 forever memory (more or less)
+
+        // now we need to apply attention, this will indeed cause a rather small number
+        // eg for same location with observer, in conversation and a good bond they could get 0.6 or something akin
+        // with attention applied they get 0.35 further memory per hour (for a normal person)
+        // eg2 for same location slot with a stranger, they could get 0.14 at most
+        const attentionAffectedMemorability = memorability * (observer.attention ?? 0);
+
+        // the attention baseline is the baseline imprinting effect of the memory
+        // we will double the value, eg. this very memorable friend meetup will have a baseline of 0.7 * 10, which is 7 and then halving it gives 3.5
+        // after rounding this means they will remember for a month
+        // the stranger with 0.14 * 10 = 1.4, halving gives 0.7, rounding gives 1, which is a minute memory, which is correct for a stranger just passing by
+        let attentionBaseLine = Math.round((memorability * 10) * (observer.attention ?? 0));
+        if (attentionBaseLine > 5) {
+            attentionBaseLine = 5;
+        }
+
+        // now we need to figure out the actual value by fetching our previous, so ironically we need to fetch the previous perspective and see how many hours have passed
+        // since that previous perspective and this one, provided the character was there too, if it was, then we will increase the memory score by
+        // attentionAffectedMemorability per hour of the last perspective, therefore it increases the memory score, unless it is lower than attentionBaseLine, in which case we will set it to attentionBaseLine
+
+        let expectedLevel = /** @type {0 | 1 | 2 | 3 | 4 | 5} */ (attentionBaseLine);
+        let expectedSoftLevel = attentionBaseLine;
+
+        if (lastPerspectiveOfObserver) {
+            const itemInfo = findItemInPerspective(lastPerspectiveOfObserver, item.id);
+
+            const diffTimeInHours = (DE.currentTime.time - lastPerspectiveOfObserver.timeOfPerspective.time) / (1000 * 60 * 60);
+
+            if (itemInfo) {
+                expectedSoftLevel = itemInfo.memory.softLevel + (attentionAffectedMemorability * diffTimeInHours);
+                if (expectedSoftLevel > 5) {
+                    expectedSoftLevel = 5;
+                }
+                if (expectedSoftLevel < attentionBaseLine) {
+                    expectedSoftLevel = attentionBaseLine;
+                }
+                // @ts-ignore
+                expectedLevel = Math.round(expectedSoftLevel);
+            }
+        }
+
         /** @type {DEItemInPerspective} */
         const node = {
+            memory: { level: expectedLevel, softLevel: expectedSoftLevel },
             description: item.description,
             maxVolumeOnTopLiters: item.maxVolumeOnTopLiters,
             volumeLiters: item.volumeLiters,
@@ -849,11 +1059,11 @@ async function buildItemsInPerspective(DE, parentItemId, items, observerId, loca
         if (!perception.canTellTheirWeight) node.weightKg = 0;
 
         if (canSeeContents) {
-            node.containing = await buildItemsInPerspective(DE, item.id, item.containing || [], observerId, locationId);
+            node.containing = await buildPerspectiveItems(DE, item.id, item.containing || [], observerId, locationId, locationSlotId, relatedConversationMessage);
             node.containingCharacters = visibleCharacterIds(DE, item.containingCharacters, observerId);
         }
         if (canSeeOntop) {
-            node.ontop = await buildItemsInPerspective(DE, item.id, item.ontop || [], observerId, locationId);
+            node.ontop = await buildPerspectiveItems(DE, item.id, item.ontop || [], observerId, locationId, locationSlotId, relatedConversationMessage);
             node.ontopCharacters = visibleCharacterIds(DE, item.ontopCharacters, observerId);
         }
 
