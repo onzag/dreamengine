@@ -111,7 +111,6 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
  */
 export function repairPotentialUserWithDefaults(character) {
     const speciesType = character.speciesType || "humanoid";
-    const gender = character.gender || "ambiguous";
     const sex = character.sex || "intersex";
     return ({
         ...character,
@@ -129,7 +128,9 @@ export function repairPotentialUserWithDefaults(character) {
         carryingCapacityKg: typeof character.carryingCapacityKg === "number" ? character.carryingCapacityKg : 20,
         carryingCapacityLiters: typeof character.carryingCapacityLiters === "number" ? character.carryingCapacityLiters : 20,
         charisma: typeof character.charisma === "number" ? character.charisma : 0.5,
-        gender: character.gender || "ambiguous",
+        genderAppearance: typeof character.genderAppearance === "number" ? character.genderAppearance : 0.5,
+        genderAppearanceByExternals: typeof character.genderAppearanceByExternals === "number" ? character.genderAppearanceByExternals : (typeof character.genderAppearance === "number" ? character.genderAppearance : 0.5),
+        pronouns: character.pronouns || (sex === "male" ? "male" : (sex === "female" ? "female" : "ambiguous")),
         groupBelonging: character.groupBelonging || [],
         heightCm: character.heightCm || 170,
         locomotionSpeedMetersPerSecond: typeof character.locomotionSpeedMetersPerSecond === "number" ? character.locomotionSpeedMetersPerSecond : 1.4,
@@ -151,11 +152,11 @@ export function repairPotentialUserWithDefaults(character) {
                 )
         ),
         shortDescriptionTopNakedAdd: character.shortDescriptionTopNakedAdd || (
-            gender === "male" && speciesType === "humanoid" ? "showing a flat toned male chest" :
-                (gender === "female" && speciesType === "humanoid" ? "showing small breasts" :
+            character.sex === "male" && speciesType === "humanoid" ? "showing a flat toned male chest" :
+                (character.sex === "female" && speciesType === "humanoid" ? "showing small breasts" :
                     (speciesType === "humanoid" ? "showing no male or female characteristics" : (
-                        gender === "male" ? "showing male characteristics" :
-                            gender === "female" ? "showing female characteristics" :
+                        character.sex === "male" ? "showing male characteristics" :
+                            character.sex === "female" ? "showing female characteristics" :
                                 "showing no male or female characteristics"
                     )))
         ),
@@ -199,7 +200,9 @@ export function createCharacterFromUser(user) {
         apparentTierValue: user.apparentTierValue,
         name: user.name,
         autism: 0,
-        gender: user.gender,
+        genderAppearance: user.genderAppearance,
+        genderAppearanceByExternals: user.genderAppearanceByExternals,
+        pronouns: user.pronouns,
         heightCm: user.heightCm,
         weightKg: user.weightKg,
         ageYears: user.ageYears,
@@ -494,7 +497,7 @@ export class DEngine {
     /**
      * @param {Omit<DEMinimalCharacterReference, "id" | "scriptGivenId" | "script"> | null} user
      * @param {"player" | "narrator" | "voice-in-the-head"} playMode
-     * @param {"standard" | "debug"} userMode
+     * @param {"standard" | "debug" | "disembodied"} userMode
      */
     async initialize(user, playMode = "player", userMode = "standard") {
         if (this.initialized) {
@@ -615,6 +618,8 @@ export class DEngine {
         this.deObject.user = characterId;
         this.deObject.world.currentLocation = this.deObject.stateFor[characterId].location;
         this.deObject.world.currentLocationSlot = this.deObject.stateFor[characterId].locationSlot;
+
+        this.informDEObjectUpdated();
     }
 
     /**
@@ -697,6 +702,8 @@ export class DEngine {
             return; // already in party
         }
         this.deObject.party.push(characterId);
+
+        this.informDEObjectUpdated();
     }
 
     /**

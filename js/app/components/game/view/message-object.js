@@ -71,7 +71,7 @@ app-game-tooltip, app-world-image { display: block; width: 14vh; height: 14vh; }
         const speaker = {
             visible: content.type !== 'narration', id: character?.characterId || '',
             name: character?.characterNameSimple || 'Unknown speaker',
-            description: character?.characterExternalDescription || '',
+            description: character?.characterExternalDescriptionForUser || '',
             image,
         };
         const speakerKey = JSON.stringify(speaker);

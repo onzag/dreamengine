@@ -516,6 +516,9 @@ export async function putNarrationInPerspective(DE, message, resolvedEmitter, re
                     let characterAAddedAttribute = "";
                     let characterBAddedAttribute = "";
 
+                    const characterAPerceivedGender = characterA.genderAppearance === 0 ? "male" : (characterA.genderAppearance === 1 ? "female" : "non-binary");
+                    const characterBPerceivedGender = characterB.genderAppearance === 0 ? "male" : (characterB.genderAppearance === 1 ? "female" : "non-binary");
+
                     // a gap of 10 years is enough to consider them "older" and "younger"
                     if (Math.abs(characterA.ageYears - characterB.ageYears) >= 10) {
                         const olderCharacter = characterA.ageYears > characterB.ageYears ? characterA : characterB;
@@ -534,9 +537,10 @@ export async function putNarrationInPerspective(DE, message, resolvedEmitter, re
 
                         characterAAddedAttribute = heavierCharacter.id === characterA.id ? "bigger" : "smaller";
                         characterBAddedAttribute = heavierCharacter.id === characterB.id ? "bigger" : "smaller";
-                    } else if (characterA.gender !== characterB.gender) {
-                        characterAAddedAttribute = characterA.gender === "male" ? "male" : (characterA.gender === "female" ? "female" : "non-binary");
-                        characterBAddedAttribute = characterB.gender === "male" ? "male" : (characterB.gender === "female" ? "female" : "non-binary");
+                    // clearcut opposite traits when perceived gender is different, and neither is non-binary, we can use "male" and "female" as opposite traits
+                    } else if (characterAPerceivedGender !== characterBPerceivedGender && characterAPerceivedGender !== "non-binary" && characterBPerceivedGender !== "non-binary") {
+                        characterAAddedAttribute = characterAPerceivedGender;
+                        characterBAddedAttribute = characterBPerceivedGender;
                     } else {
                         // okay so we cannot use opposite traits, we will use "first" and "second" instead
                         characterAAddedAttribute = "first";

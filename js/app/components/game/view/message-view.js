@@ -104,6 +104,20 @@ kbd { opacity: .7; margin-left: 1vh; }
 
     disconnectedCallback() { this.controller?.abort(); }
 
+    /** Clear controls and drafts when the engine switches the player character. */
+    resetUser() {
+        this.messageObject.pause();
+        this.currentPerspective = null;
+        this.messageKey = this.selectionKey = this.frozenKey = '';
+        this.hasCurrent = this.hasPrev = this.hasNext = false;
+        this.processing = this.isInputMode = false;
+        this.input.drafts.clear();
+        this.input.draftKey = '';
+        this.input.textarea.value = '';
+        this.input.updateUser(null, '');
+        this.renderControls();
+    }
+
     /**
      * @param {DECharacterPerspective | null} perspective
      * @param {DEConversation | null} conversation

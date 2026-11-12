@@ -14,7 +14,7 @@ export function buildSurroundingGroups(perspective) {
             id: character.characterId,
             name: character.characterNameComplex,
             image: character.characterMetadata.assets?.neutral || '',
-            externalDescription: character.characterExternalDescription,
+            externalDescription: character.characterExternalDescriptionForUser,
             positionDescription: character.characterPlaceAndPostureDescription,
             states: character.states,
             locationSlot: perspective.ownLocation.slots.find(slot =>

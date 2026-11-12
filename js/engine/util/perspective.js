@@ -6,6 +6,7 @@ import {
     getFamilyBondRelation,
     getRelationship,
     getExternalDescriptionOfCharacterPostureOnly,
+    getPerceivedGenderOfCharacterFromPerspective,
 } from './character-info.js';
 import { utilItemCount } from './items.js';
 import {
@@ -302,6 +303,7 @@ async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionFor
     const bond = activeBond || exBond;
 
     const perception = DE.utils.characterInfo.whatCanTheyMakeOfAnotherCharacter(targetId, observerId);
+    const genderStuffs = getPerceivedGenderOfCharacterFromPerspective(DE, target, observer);
 
     const characterNameComplex = getNameIdentificationForOneCharacterTowardsAnotherOnlyName(DE, observer, target);
     const characterNameSimple = DE.utils.templates.formatCharacterName(target, observer, { justName: true, capitalize: true });
@@ -414,12 +416,23 @@ async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionFor
                 });
             }
 
-            if (target.sex !== "none" && target.sex !== "intersex" && target.sex !== target.gender) {
-                states.push({
-                    type: "INTERNAL",
-                    stateName: "Transgender",
-                    dominant: true,
-                });
+            const targetPerceivedGender = target.genderAppearance <= 0.25 ? "male" : target.genderAppearance >= 0.75 ? "female" : "ambiguous";
+            if (target.sex !== "none" && target.sex !== "intersex" && target.sex !== targetPerceivedGender) {
+                if (targetPerceivedGender !== "ambiguous") {
+                    // basically must be MtF or FtM
+                    states.push({
+                        type: "INTERNAL",
+                        stateName: "Transgender",
+                        dominant: true,
+                    });
+                } else {
+                    // The sex could be either but the presentation is unclear, so we will just say non-binary
+                    states.push({
+                        type: "INTERNAL",
+                        stateName: "Non-Binary",
+                        dominant: true,
+                    });
+                }
             }
 
             if (target.perception >= 0.75) {
@@ -657,14 +670,17 @@ async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionFor
         bond: isSelf ? 0 : (bond ? bond.bond : 0),
         bond2: isSelf ? 0 : (bond ? bond.bond2 : 0),
         stranger: isSelf ? false : (bond ? bond.stranger : true),
-        perceivedGender: perception.canTellGender ? target.gender : 'unknown',
+        perceivedGender: perception.canTellGender ? (genderStuffs?.genderAppearance || "unknown") : 'unknown',
+        perceivedSex: perception.canTellGender ? (genderStuffs?.sex || "unknown") : 'unknown',
+        pronouns: perception.canTellGender ? (genderStuffs?.pronouns || "unknown") : 'unknown',
         familyRelation,
         bondDescription,
         canTellHeight: perception.canTellHeight,
         canTellWeight: perception.canTellWeight,
         characterHeightCm: perception.canTellHeight ? target.heightCm : 0,
         characterWeightKg: perception.canTellWeight ? target.weightKg : 0,
-        characterExternalDescription,
+        characterExternalDescription: characterExternalDescription.description,
+        characterExternalDescriptionForUser: characterExternalDescription.descriptionForUser,
         characterPlaceAndPostureDescription,
         perceptionForm,
         canTellDetailsOfClothingOrCarriedItems: perception.canTellDetailsOfClothingOrCarriedItems,
@@ -696,6 +712,7 @@ async function buildBondDescription(DE, observer, target) {
                 bond2: 0,
                 knowsAs: [],
                 createdAt: DE.currentTime,
+                seesAs: getPerceivedGenderOfCharacterFromPerspective(DE, observer, target),
                 believesDead: false,
                 undoableShifts: {},
             });
@@ -1114,4 +1131,17 @@ function containerUnclearReason(containerProperties, itemState, perception, kind
     if (permission === 'NO') return `Cannot see ${where}.`;
     // NOT_A_CONTAINER
     return false;
+}
+
+/**
+ * @param {DEObject} DE
+ * @param {DECompleteCharacterReference} character
+ */
+async function getInformationAboutEnvironmentDeepPerspectiveWithMemories(DE, character) {
+    const charState = DE.stateFor[character.id];
+    if (!charState) {
+        throw new Error(`Character state for ${character.id} not found.`);
+    }
+
+
 }

@@ -60,7 +60,7 @@ export async function talk(engine, character, options) {
     let hasDied = false;
 
     const characterSystemPrompt = await getSysPromptForCharacter(engine, character.id);
-    const characterCanSee = await getCharacterCanSee(engine.deObject, character.id);
+    const characterCanSee = await getCharacterSurroundingInformation(engine.deObject, character.id);
 
     let actions = (await Promise.all(characterSystemPrompt.internalDescription.actions.map(async (action) => {
         if (action.action.action) {

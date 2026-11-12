@@ -212,15 +212,17 @@ export const commands = {
                 return answer + "No one is currently interacting with you.";
             }
 
-            const conversationId = engine.deObject.conversations[userState.conversationId];
-            for (const participantName of conversationId.participants) {
-                if (participantName === engine.deObject.user) {
+            const conversation = await engine.dataManager?.getConversation(userState.conversationId);
+            if (!conversation) {
+                return answer + "No one is currently interacting with you.";
+            }
+            for (const participantId of conversation.participants) {
+                if (participantId === engine.deObject.user) {
                     continue;
                 }
-                const characterInfo = engine.deObject.characters[participantName];
-                const characterState = engine.deObject.stateFor[participantName];
+                const characterInfo = engine.deObject.characters[participantId];
                 if (characterInfo) {
-                    answer += `- ${participantName}: ${await getExternalDescriptionOfCharacter(engine.deObject, participantName, true)}\n`;
+                    answer += `- ${characterInfo.name} (${characterInfo.id}): ${(await getExternalDescriptionOfCharacter(engine.deObject, participantId, participantId, false, false)).descriptionForUser}\n`;
                 }
             }
             return answer;
@@ -269,9 +271,9 @@ export const commands = {
             }
             const characterId = args.join(" ");
 
-            return await getExternalDescriptionOfCharacter(engine.deObject, characterId, true);
+            return (await getExternalDescriptionOfCharacter(engine.deObject, characterId, characterId, false, false)).descriptionForUser;
         },
-        help: "Displays the current external description for a given character (by id), which is the description that other characters would see of them.",
+        help: "Displays the current external description for a given character (by id), which is the description of them by their own perspective.",
         cheat: true,
         args: ["<character id>"],
     },
@@ -288,22 +290,6 @@ export const commands = {
             return (await getInternalDescriptionOfCharacter(engine.deObject, characterId)).general;
         },
         help: "Displays the current internal description for a given character (by id), which is the description that they themselves would have of themself.",
-        cheat: true,
-        args: ["<character id>"],
-    },
-    "expressivestatesfor": {
-        run: async (engine, args) => {
-            if (!engine.deObject) {
-                throw new Error("DEngine not initialized");
-            }
-            if (args.length === 0) {
-                return "Usage: /expressivestatesfor <character id>";
-            }
-            const characterId = args.join(" ");
-            const result = (await getInternalDescriptionOfCharacter(engine.deObject, characterId)).expressiveStates.join("\n\n");
-            return result || `No expressive states found for character "${characterId}".`;
-        },
-        help: "Displays the current expressive states for a given character (by id), which are the states that they themselves would have of themself that are relevant to how they express themselves to others.",
         cheat: true,
         args: ["<character id>"],
     },
@@ -416,6 +402,12 @@ export const commands = {
                     stranger: true,
                     createdAt: engine.deObject.currentTime,
                     knowsAs: [],
+                    seesAs: {
+                        sex: otherCharacter.sex,
+                        genderAppearance: otherCharacter.genderAppearance <= 0.25 ? "male" : (otherCharacter.genderAppearance >= 0.75 ? "female" : "ambiguous"),
+                        origin: "knowledge",
+                        pronouns: otherCharacter.pronouns,
+                    },
                     believesDead: false,
                     undoableShifts: {},
                 });
@@ -460,6 +452,12 @@ export const commands = {
                     stranger: true,
                     createdAt: engine.deObject.currentTime,
                     knowsAs: [],
+                    seesAs: {
+                        sex: otherCharacter.sex,
+                        genderAppearance: otherCharacter.genderAppearance <= 0.25 ? "male" : (otherCharacter.genderAppearance >= 0.75 ? "female" : "ambiguous"),
+                        origin: "knowledge",
+                        pronouns: otherCharacter.pronouns,
+                    },
                     believesDead: false,
                     undoableShifts: {},
                 });
@@ -504,6 +502,12 @@ export const commands = {
                     stranger: strangerValue,
                     createdAt: engine.deObject.currentTime,
                     knowsAs: [],
+                    seesAs: {
+                        sex: otherCharacter.sex,
+                        genderAppearance: otherCharacter.genderAppearance <= 0.25 ? "male" : (otherCharacter.genderAppearance >= 0.75 ? "female" : "ambiguous"),
+                        origin: "knowledge",
+                        pronouns: otherCharacter.pronouns,
+                    },
                     believesDead: false,
                     undoableShifts: {},
                 });
@@ -558,6 +562,12 @@ export const commands = {
                         nickname: isNicknameValue,
                         primary: isPrimaryNameValue,
                     }],
+                    seesAs: {
+                        sex: otherCharacter.sex,
+                        genderAppearance: otherCharacter.genderAppearance <= 0.25 ? "male" : (otherCharacter.genderAppearance >= 0.75 ? "female" : "ambiguous"),
+                        origin: "knowledge",
+                        pronouns: otherCharacter.pronouns,
+                    },
                     believesDead: false,
                     undoableShifts: {},
                 });

@@ -4,6 +4,7 @@ import { getItemsContiguousDescription } from "./items.js";
 import { getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage } from "./weight-and-volume.js";
 import { getWeatherSystemForLocationAndWeather } from "./world.js";
 import { getSizeVisibility } from "./visibility.js";
+import { generateIntSeedFromString, weightedRandom } from "../../util/random.js";
 
 /**
  * @param {DEObject} deObject 
@@ -633,6 +634,7 @@ export function whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharac
     let canTellNakedness = true;
     let canTellDetailsOfClothingOrCarriedItems = true;
     let canTellSpecies = true;
+
     let canTellGender = true;
     let canTellHeight = true;
     let canTellWeight = true;
@@ -793,11 +795,103 @@ export function whatCanTheyMakeOfAnItem(deObject, item, inPerspectiveCharacter) 
 
 /**
  * @param {DEObject} deObject 
+ * @param {DECompleteCharacterReference} character 
+ * @param {DECompleteCharacterReference} inPerspectiveCharacter
+ * @returns {DEPerceivedGender | null}
+ */
+export function getPerceivedGenderOfCharacterFromPerspective(deObject, character, inPerspectiveCharacter) {
+    const bond = deObject.bonds[inPerspectiveCharacter.id].active.find(b => b.towards === character.id) || deObject.bonds[inPerspectiveCharacter.id].ex.find(b => b.towards === character.id);
+
+    if (bond && bond.seesAs) {
+        return bond.seesAs;
+    }
+
+    if (character.id === inPerspectiveCharacter.id) {
+        return {
+            origin: "knowledge",
+            genderAppearance: character.genderAppearance <= 0.25 ? "male" : (character.genderAppearance >= 0.75 ? "female" : "ambiguous"),
+            pronouns: character.pronouns,
+            sex: character.sex,
+        };
+    }
+
+    const whatCanTheyMakeOf = whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharacter);
+
+    if (whatCanTheyMakeOf.canTellGender) {
+        let genderAppearanceToUse = character.genderAppearance;
+
+        if (character.speciesType === "humanoid" && inPerspectiveCharacter.speciesType === "humanoid") {
+            // If both characters are humanoid, use the genderAppearance of the character for the check
+        } else if (character.species !== inPerspectiveCharacter.species) {
+            // If the species are different, use the genderAppearanceByExternals of the character for the check
+            genderAppearanceToUse = character.genderAppearanceByExternals ?? 0.5; // default to 0.5 if undefined
+        }
+
+        // first impression total stranger
+        const alwaysMale = genderAppearanceToUse <= 0.25;
+        const alwaysFemale = genderAppearanceToUse >= 0.75;
+
+        const perfectlyMale = genderAppearanceToUse === 0;
+        const perfectlyFemale = genderAppearanceToUse === 1;
+        const canTellActualSex = whatCanTheyMakeOf.hasPerfectPerception ? true : (whatCanTheyMakeOf.hasHighPerception && !perfectlyMale && character.sex !== "male") || (whatCanTheyMakeOf.hasHighPerception && !perfectlyFemale && character.sex !== "female");
+        const perceivedSex = canTellActualSex ? character.sex : (genderAppearanceToUse <= 0.5 ? "male" : "female");
+
+        if (alwaysMale) {
+            return {
+                origin: "perception",
+                genderAppearance: "male",
+                pronouns: "male",
+                sex: perceivedSex,
+            };
+        }
+        if (alwaysFemale) {
+            return {
+                origin: "perception",
+                genderAppearance: "female",
+                pronouns: "female",
+                sex: perceivedSex,
+            };
+        }
+
+        /**
+         * @type {"male" | "female" | "ambiguous" | null}
+         */
+        const rolledDice = weightedRandom(
+            ["male", "female", "ambiguous"],
+            (item) => {
+                if (item === "male") {
+                    return 1 + (genderAppearanceToUse < 0.4 ? 1 : 0);
+                }
+                if (item === "female") {
+                    return 1 + (genderAppearanceToUse > 0.6 ? 1 : 0);
+                }
+                return 1;
+            },
+            generateIntSeedFromString(1, character.id + inPerspectiveCharacter.id + "genderAppearance")
+        );
+
+        if (rolledDice) {
+            return {
+                origin: "perception",
+                genderAppearance: rolledDice,
+                pronouns: rolledDice,
+                sex: perceivedSex,
+            };
+        }
+    }
+    return null;
+}
+
+/**
+ * @param {DEObject} deObject 
  * @param {string} characterId
  * @param {string} inPerspectiveOfCharacterId
  * @param {boolean} onlyBasics
  * @param {boolean} hideCurrentPosture
- * @returns {Promise<string>}
+ * @returns {Promise<{
+ *    description: string,
+ *    descriptionForUser: string,
+ * }>}
  */
 export async function getExternalDescriptionOfCharacter(deObject, characterId, inPerspectiveOfCharacterId, onlyBasics = false, hideCurrentPosture = false) {
     const character = deObject.characters[characterId];
@@ -811,6 +905,11 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
 
     const inPerspectiveCharacter = deObject.characters[inPerspectiveOfCharacterId];
 
+    /**
+     * @type {Array<[number, number]>}
+     */
+    const finalDescriptionForUserRanges = [];
+
     if (!inPerspectiveCharacter) {
         throw new Error(`Character ${inPerspectiveOfCharacterId} not found.`);
     }
@@ -822,8 +921,11 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
     }
 
     const inPerspectiveCharacterName = getNameIdentificationForOneCharacterTowardsAnother(deObject, inPerspectiveCharacter, inPerspectiveCharacter);
+    const selfCharacterName = deObject.utils.templates.formatCharacterName(character, inPerspectiveCharacter, {
+        capitalize: true,
+        type: "definite",
+    });
 
-    const characterGender = character.gender;
     const characterSpecies = character.species;
     let characterSpeciesType = character.speciesType;
 
@@ -847,18 +949,12 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
     if (inPerspectiveCharacterBlindness === "full") {
         if (whatCanTheyMakeOf.hasLowPerception) {
             finalDescription = inPerspectiveCharacterName + " is completely blind and cannot see them.";
-        } else if (whatCanTheyMakeOf.hasMediumPerception && !sameSpeciesAsPerspective) {
+        } else {
             // If the character is partially perceptive and the character is not the same species, they can sense the species but not the gender or type.
             if (characterSpecies === "human") {
                 finalDescription = inPerspectiveCharacterName + " is completely blind, but senses they are a " + characterSpeciesFromPerspective + ".";
             } else {
                 finalDescription = inPerspectiveCharacterName + " is completely blind, but senses they are a " + characterSpeciesFromPerspective + ", " + (descriptionsOfSpeciesType[characterSpeciesType] || "") + ".";
-            }
-        } else {
-            if (characterSpecies === "human") {
-                finalDescription = inPerspectiveCharacterName + " is completely blind, but senses they are a " + characterSpeciesFromPerspective + " of " + characterGender + " gender.";
-            } else {
-                finalDescription = inPerspectiveCharacterName + " is completely blind, but senses they are a " + characterSpeciesFromPerspective + ", " + (descriptionsOfSpeciesType[characterSpeciesType] || "") + " of " + characterGender + " gender.";
             }
         }
     } else if (inPerspectiveCharacterBlindness === "partial-bad") {
@@ -866,9 +962,9 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
             finalDescription = inPerspectiveCharacterName + "'s vision is severely impaired and cannot see them clearly only figuring out they are a " + characterSpeciesFromPerspective + ".";
         } else if (whatCanTheyMakeOf.hasMediumPerception) {
             if (characterSpecies === "human") {
-                finalDescription = inPerspectiveCharacterName + "'s vision is severely impaired, but they can make out some details, figuring out they are a " + characterSpeciesFromPerspective + " of " + characterGender + " gender.";
+                finalDescription = inPerspectiveCharacterName + "'s vision is severely impaired, but they can make out some details, figuring out they are a " + characterSpeciesFromPerspective + ".";
             } else {
-                finalDescription = inPerspectiveCharacterName + "'s vision is severely impaired, but they can make out some details, figuring out they are a " + characterSpeciesFromPerspective + ", " + (descriptionsOfSpeciesType[characterSpeciesType] || "") + " of " + characterGender + " gender.";
+                finalDescription = inPerspectiveCharacterName + "'s vision is severely impaired, but they can make out some details, figuring out they are a " + characterSpeciesFromPerspective + ", " + (descriptionsOfSpeciesType[characterSpeciesType] || "") + ".";
             }
         } else {
             // their perception is high enough that they can make out the standard short description of the character in all details, even if they are partially blind.
@@ -884,6 +980,33 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
         if (!finalDescription.endsWith(".")) {
             finalDescription += ".";
         }
+    }
+
+    const perceivedGenderStuffs = getPerceivedGenderOfCharacterFromPerspective(deObject, character, inPerspectiveCharacter);
+    if (perceivedGenderStuffs) {
+        const verb = perceivedGenderStuffs.origin === "knowledge" ? "is known to be" : "appears to be";
+        const verb2 = perceivedGenderStuffs.origin === "knowledge" ? "is actually" : "appears to be";
+        const verb3 = perceivedGenderStuffs.origin === "knowledge" ? "has" : "appears to have";
+        if (perceivedGenderStuffs.genderAppearance === perceivedGenderStuffs.sex) {
+            finalDescription += ` ${selfCharacterName} ${verb} of ${perceivedGenderStuffs.genderAppearance} gender and sex.`;
+        } else {
+            if (perceivedGenderStuffs.sex !== "none" && perceivedGenderStuffs.sex !== "intersex") {
+                finalDescription += ` ${selfCharacterName} ${verb} of ${perceivedGenderStuffs.genderAppearance} gender, but ${verb2} of ${perceivedGenderStuffs.sex} sex.`;
+            } else if (perceivedGenderStuffs.sex === "intersex") {
+                finalDescription += ` ${selfCharacterName} ${verb} of ${perceivedGenderStuffs.genderAppearance} gender, but ${verb2} intersex.`;
+            } else if (perceivedGenderStuffs.sex === "none") {
+                finalDescription += ` ${selfCharacterName} ${verb} of ${perceivedGenderStuffs.genderAppearance} gender, and ${verb3} no biological sex.`;
+            }
+        }
+
+        const pronounInfo = ` Use ${perceivedGenderStuffs.pronouns === "male" ? "he/him" : (
+            perceivedGenderStuffs.pronouns === "female" ? "she/her" : (
+                perceivedGenderStuffs.pronouns === "ambiguous" ? "they/them" : "it/its"
+            ))} pronouns.`;
+
+        finalDescriptionForUserRanges.push([finalDescription.length, pronounInfo.length]);
+
+        finalDescription += pronounInfo;
     }
 
     if (whatCanTheyMakeOf.canTellStates) {
@@ -1043,7 +1166,25 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
 
     finalDescription += " " + getExternalDescriptionOfCharacterPostureOnly(deObject, characterId, inPerspectiveOfCharacterId, hideCurrentPosture);
 
-    return finalDescription;
+    return {
+        description: finalDescription,
+        descriptionForUser: removeRanges(finalDescription, finalDescriptionForUserRanges),
+    };
+}
+
+/**
+ * Removes the ranges by index, length, from the string. The ranges are expected to be sorted in ascending order and non-overlapping.
+ * @param {string} str 
+ * @param {Array<[number, number]>} ranges
+ */
+function removeRanges(str, ranges) {
+    let result = "";
+    let cursor = 0;
+    for (const [index, length] of ranges) {
+        result += str.slice(cursor, index);
+        cursor = index + length;
+    }
+    return result + str.slice(cursor);
 }
 
 /**
@@ -1608,7 +1749,7 @@ export async function getCharacterSurroundingInformation(deObject, characterId) 
                 }
             }
 
-            const externalDescription = await getExternalDescriptionOfCharacter(deObject, otherCharId, characterId, true, false);
+            const externalDescription = (await getExternalDescriptionOfCharacter(deObject, otherCharId, characterId, true, false)).description;
             if (externalDescription) {
                 finalDescription += `## ${otherRef} Appearance:\n\n${externalDescription}\n\n`;
             }
@@ -2303,7 +2444,7 @@ export async function getSysPromptForCharacter(engine, characterId) {
         throw new Error(`No state found for character "${characterId}".`);
     }
 
-    const externalDescription = await getExternalDescriptionOfCharacter(engine.deObject, characterId, characterId, true);
+    const externalDescription = (await getExternalDescriptionOfCharacter(engine.deObject, characterId, characterId, true)).description;
     const internalDescription = await getInternalDescriptionOfCharacter(engine.deObject, characterId);
 
     /**

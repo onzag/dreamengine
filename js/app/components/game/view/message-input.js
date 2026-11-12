@@ -58,7 +58,7 @@ textarea { display: block; resize: vertical; width: 100%; min-height: 10vh; max-
         const name = perspective?.ownName || perspective?.self.characterNameSimple || 'Player';
         const image = perspective?.self.characterMetadata.assets?.neutral || '';
         const id = perspective?.self.characterId || '';
-        const description = perspective?.self.characterExternalDescription || '';
+        const description = perspective?.self.characterExternalDescriptionForUser || '';
         const key = JSON.stringify([name, image, id, description]);
         if (key === this.userKey) return;
         this.userKey = key;

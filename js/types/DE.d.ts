@@ -39,9 +39,24 @@ declare interface DEMinimalCharacterReference {
      */
     sex: "male" | "female" | "intersex" | "none";
     /**
-     * Gender identity of the character
+     * Gender perception of the character, specify
+     * what the character is perceived as, this affects other characters perception of the character
+     * 
+     * A number, 0.0 is male, 1.0 is female, and 0.5 is ambiguous
      */
-    gender: "male" | "female" | "ambiguous";
+    genderAppearance: number;
+    /**
+     * Gender perception of the character, but only for other species than our character
+     * humanoid nevertheless is treated as the same group
+     * 
+     * Eg. if your character is a human and the other character is a cat, then the genderAppearanceByExternals will be used to determine how the cat perceives the human's gender
+     * if your character is a human and the other is an elf (both humanoid) then the genderAppearance will be used to determine how the elf perceives the human's gender
+     */
+    genderAppearanceByExternals: number;
+    /**
+     * Pronouns of the character, this will be respected only by narrators
+     */
+    pronouns: "male" | "female" | "ambiguous" | "object";
     /**
      * Clothing of the character, "auto" and variants means the world will automatically handle clothing
      */
@@ -1433,7 +1448,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * just have bond between -100 to 0 (for stranger that give negative interactions) and 0 to 100 (for strangers that give positive interactions)
      * you can refer to bonds in the state conditions
      */
-    bonds: null | {
+    bonds: {
         /**
          * The bond system type, an arbitrary string to identify the bond system
          * by default DE engine will provide "DEFAULT" and "DEFAULT_WITH_ROMANCE"
@@ -2204,6 +2219,13 @@ declare interface DECharacterBondIdentity {
     primary?: boolean;
 }
 
+declare interface DEPerceivedGender {
+    origin: "perception" | "knowledge";
+    genderAppearance: "male" | "female" | "ambiguous";
+    sex: "male" | "female" | "intersex" | "none";
+    pronouns: "object" | "male" | "female" | "ambiguous";
+}
+
 declare interface DESingleBondDescription {
     /**
      * The character id that this bond is towards
@@ -2225,6 +2247,11 @@ declare interface DESingleBondDescription {
      * The names that the character knows the other character as, depends on introduction and how they introduce themselves
      */
     knowsAs: DECharacterBondIdentity[];
+    /**
+     * The gender that the characters sees the other character as, this is used to determine how the character perceives the other character's gender and how they refer to them
+     * and what pronouns they might use to refer to them, this is not necessarily the same as the other character's actual gender, as it is based on the character's perception and understanding of the other character's gender
+     */
+    seesAs: DEPerceivedGender | null;
     /**
      * Whether the character knows (or believes) that the other character is dead
      */
@@ -3991,6 +4018,16 @@ declare interface DECharacterPerspectiveCharacter {
      */
     perceivedGender: "male" | "female" | "ambiguous" | "unknown";
     /**
+     * The perceived sex of the character as known by the perspective character at the time, this includes male, female, intersex, and unknown.
+     * unknown is often due to bad perception
+     */
+    perceivedSex: "male" | "female" | "intersex" | "none" | "unknown";
+    /**
+     * The pronouns of the character as known by the perspective character at the time, this includes object, male, female, ambiguous, and unknown.
+     * unknown is often due to bad perception
+     */
+    pronouns: "object" | "male" | "female" | "ambiguous" | "unknown";
+    /**
      * stranger bond value for self it is false
      */
     stranger: boolean;
@@ -4025,6 +4062,14 @@ declare interface DECharacterPerspectiveCharacter {
      * if their perception is not good enough, this will be a generic description of the character, such as "a person" or "a stranger"
      */
     characterExternalDescription: string;
+    /**
+     * The external description of the character for the user, this is a simplified description that misses LLM specific instructions and is meant to be fed to the user
+     * instead of the LLM, this is used to avoid giving the user too much information that the LLM might use to infer things about the world that the user should not be given
+     * 
+     * Initially created because characterExternalDescription contains the pronouns and perceived gender, but "user" does not track bonds and relationships and keeps
+     * everything in the perceived state
+     */
+    characterExternalDescriptionForUser: string;
     /**
      * Description of the character as seen or perceived by the perspective character at the time
      */
@@ -5162,8 +5207,12 @@ declare interface DEObject {
      * 1. user can read all the thoughts and internal dialogue of the characters
      * 2. user perception is beyond perfect, they can see everything and know everything about the world
      * 3. user can see all the states of the characters, including their internal states and hidden states
+     * 4. all of disembodied perks
+     * 
+     * Disembodied mode enables the following in the engine
+     * 1. Taking over other characters and taking their bodies, leaving the previous body behind to continue by itself
      */
-    userMode: "standard" | "debug";
+    userMode: "standard" | "debug" | "disembodied";
 
 
     /**

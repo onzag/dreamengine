@@ -15,7 +15,7 @@ export class CharacterDialog extends IdentifierDetail {
         const content = createItemTree(loadCharacterItemGroups(id, context), context);
         return {
             name: character.characterNameComplex,
-            description: character.characterExternalDescription,
+            description: character.characterExternalDescriptionForUser,
             states: character.states,
             portrait: character.characterMetadata.assets?.neutral || '',
             banner: character.characterMetadata.banner || '',

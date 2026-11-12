@@ -728,6 +728,7 @@ class OverlayInputSelect extends HTMLElement {
             // @ts-expect-error
             this.originalValue = this.root.querySelector('select').value;
         }
+        this.updateDescription();
 
         const dataLocation = this.getAttribute('input-data-location');
         if (!dataLocation) {
@@ -743,6 +744,7 @@ class OverlayInputSelect extends HTMLElement {
             selectElement.value = dataValue.toString();
             this.originalValue = dataValue.toString();
         }
+        this.updateDescription();
 
         // @ts-ignore
         this._resolveReady();
@@ -770,6 +772,13 @@ class OverlayInputSelect extends HTMLElement {
         // @ts-expect-error
         const currentValue = this.root.querySelector('select').value;
         return currentValue.trim() !== this.originalValue.trim();
+    }
+
+    updateDescription() {
+        const select = /** @type {HTMLSelectElement} */ (this.root.querySelector('select'));
+        const description = /** @type {HTMLElement} */ (this.root.querySelector('.option-description'));
+        description.textContent = select.selectedOptions[0]?.title || '';
+        description.hidden = !description.textContent;
     }
 
     render() {
@@ -815,6 +824,13 @@ class OverlayInputSelect extends HTMLElement {
   border: 1px solid #ccc;
   cursor: pointer;
         }
+        .option-description {
+            font-size: 2vh;
+            line-height: 1.5;
+            margin-top: 1vh;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
   .error-message {
             font-size: 2vh;
             height: 4vh;
@@ -827,12 +843,20 @@ class OverlayInputSelect extends HTMLElement {
       </style>
       <div class="overlay-input">
         <label>${label}</label>
-        <select value="" tabindex="0" aria-label="${label}" data-de-aria-key="p">
-            ${options.map((opt, index) => `<option value="${opt}" title="${optionsDescriptions[index] || ''}">${optionsLabels[index] || opt.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")}</option>`).join('')}
+        <select value="" tabindex="0" aria-label="${label}" aria-describedby="option-description" data-de-aria-key="p">
+            ${options.map((opt, index) => `<option value="${opt}">${optionsLabels[index] || opt.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")}</option>`).join('')}
         </select>
+        <div id="option-description" class="option-description" aria-live="polite" data-de-aria-text="true" hidden></div>
         <div class="error-message"></div>
       </div>
     `;
+        const select = /** @type {HTMLSelectElement} */ (this.root.querySelector('select'));
+        Array.from(select.options).forEach((option, index) => {
+            option.title = optionsDescriptions[index] || '';
+        });
+        select.addEventListener('input', () => this.updateDescription());
+        select.addEventListener('change', () => this.updateDescription());
+        this.updateDescription();
     }
 }
 

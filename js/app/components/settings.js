@@ -367,18 +367,19 @@ class Settings extends HTMLElement {
         } else if (this.currentSectionIndex === 1 && tabsContainer) {
             const debug_desc = "Debug mode is not meant for playing, allows you to hear the voices of schizophrenic characters, see the system inference reasoning, rolling chances, you get debug commands, and more. Only use this mode for testing and debugging purposes.";
             const standard_desc = "Standard mode is the default mode for playing, it provides a balanced experience with normal difficulty and standard features.";
-            const diff_array = [debug_desc, standard_desc];
+            const disembodied_desc = "Disembodied mode allows you to interact with the simulation by taking over other characters' bodies.";
+            const diff_array = [debug_desc, disembodied_desc, standard_desc];
 
             tabsContainer.innerHTML = `<app-overlay-section section-title="Simulation">
                 <app-overlay-select
                     label="Simulation Type"
-                    input-options='["debug", "standard"]'
+                    input-options='["debug", "disembodied", "standard"]'
                     input-default-value="standard"
-                    input-options-descriptions='${JSON.stringify(diff_array)}'
+                    input-options-descriptions='${JSON.stringify(diff_array).replace(/&/g, "&amp;").replace(/'/g, "&#39;")}'
                     title="The simulation type will affect how the AI interacts with your character in-game"
                     input-data-location="simulationType"
                 ></app-overlay-select>
-                <div role="alert" data-de-aria-text="true" tabindex="0" style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The change in simulation will affect new campaigns, not old ones</div>
+                <div role="alert" data-de-aria-text="true" tabindex="0" style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The change in simulation type will affect new campaigns, not old ones</div>
             </app-overlay-section>`;
         } else if (this.currentSectionIndex === 2 && tabsContainer) {
             const langOptions = JSON.stringify(["auto"].concat(supportedLanguages));

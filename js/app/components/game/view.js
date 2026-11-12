@@ -22,6 +22,8 @@ export class GameView extends HTMLElement {
          * @type {DECharacterPerspective | null}
          */
         this.currentPerspective = null;
+        this.identityVersion = 0;
+        this.pendingUserSelection = false;
         this.loadedPerspectiveId = '';
         this.lifecycle = 0;
         this.perspectiveVersion = 0;
@@ -86,6 +88,9 @@ export class GameView extends HTMLElement {
     async recalculateMessageView(recalculatePrev = true, recalculateCurrent = true, recalculateNext = true) {
         // can't do without this
         if (!this.currentUserId) return;
+        const identityVersion = this.identityVersion;
+        const lifecycle = this.lifecycle;
+        const isCurrent = () => identityVersion === this.identityVersion && lifecycle === this.lifecycle && this.isConnected;
 
         if (!this.currentConversationId || !this.currentMessageId) {
             /**
@@ -93,6 +98,7 @@ export class GameView extends HTMLElement {
              */
             const firstValue =
                 await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'conversations', 'getFirstConversationAndMessageForCharacter'], call: [this.currentUserId] });
+            if (!isCurrent()) return;
 
             if (firstValue) {
                 this.currentConversationId = firstValue.conversation?.id || '';
@@ -109,7 +115,9 @@ export class GameView extends HTMLElement {
 
         if (this.currentConversationId && this.currentMessageId) {
             if (recalculateCurrent) {
-                this.currentConversation = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'conversations', 'getConversation'], call: [this.currentConversationId] });
+                const conversation = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'conversations', 'getConversation'], call: [this.currentConversationId] });
+                if (!isCurrent()) return;
+                this.currentConversation = conversation;
                 this.currentConversationMessage = this.currentConversation?.messages?.find(m => m.id === this.currentMessageId) || null;
                 const contents = this.currentConversationMessage?.perspectiveMessageByCharacterId?.[this.currentUserId] || [];
                 this.currentConversationMessageContentIndex = contents.length
@@ -133,6 +141,7 @@ export class GameView extends HTMLElement {
                      */
                     const nextValue =
                         await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'conversations', 'getNextConversationAndMessageForCharacter'], call: [this.currentUserId, this.currentConversationId, this.currentMessageId] });
+                    if (!isCurrent()) return;
 
                     this.nextConversation = nextValue?.conversation || null;
                     this.nextConversationMessage = nextValue?.message || null;
@@ -155,6 +164,7 @@ export class GameView extends HTMLElement {
                      */
                     const prevValue =
                         await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['utils', 'conversations', 'getPreviousConversationAndMessageForCharacter'], call: [this.currentUserId, this.currentConversationId, this.currentMessageId] });
+                    if (!isCurrent()) return;
 
                     this.prevConversation = prevValue?.conversation || null;
                     this.prevConversationMessage = prevValue?.message || null;
@@ -315,6 +325,48 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
         void this.updatePerspective();
     }
 
+    /** Follow the engine's active identity without carrying history or input across characters. */
+    async synchronizeUser() {
+        const lifecycle = this.lifecycle;
+        const userId = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['user'] }) || '';
+        if (!this.isConnected || lifecycle !== this.lifecycle) return;
+        if (userId !== this.currentUserId) {
+            const previousUserId = this.currentUserId;
+            this.currentUserId = userId;
+            this.identityVersion++;
+            this.perspectiveVersion++;
+            this.pendingUserSelection = true;
+            this.currentConversationId = '';
+            this.currentMessageId = '';
+            this.currentPerspectiveId = '';
+            this.loadedPerspectiveId = '';
+            this.currentPerspective = null;
+            this.currentConversation = this.nextConversation = this.prevConversation = null;
+            this.currentConversationMessage = this.nextConversationMessage = this.prevConversationMessage = null;
+            this.currentConversationMessageContent = this.nextConversationMessageContent = this.prevConversationMessageContent = null;
+            this.currentConversationMessageContentIndex = this.nextConversationMessageContentIndex = this.prevConversationMessageContentIndex = -1;
+            const messageView = /** @type {import('./view/message-view.js').MessageView | null} */ (this.root.querySelector('app-game-message-view'));
+            messageView?.resetUser();
+            for (const dialog of document.querySelectorAll('app-game-identifier-dialog')) {
+                if (/** @type {import('./view/identifier-dialog.js').IdentifierDialog} */ (dialog).currentPerspective?.ownId === previousUserId) dialog.remove();
+            }
+            await this.renderCurrentPerspective();
+        }
+        if (!userId || !this.pendingUserSelection || !this.isConnected || lifecycle !== this.lifecycle) return;
+        const identityVersion = this.identityVersion;
+        const latest = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+            path: ['utils', 'conversations', 'getLastConversationAndMessageForCharacter'], call: [userId],
+        });
+        if (!this.isConnected || lifecycle !== this.lifecycle || identityVersion !== this.identityVersion) return;
+        // Keep retrying on updates when the new character has no messages yet.
+        if (!latest?.conversation || !latest.message) return;
+        this.currentConversationId = latest.conversation.id;
+        this.currentMessageId = latest.message.id;
+        const contents = latest.message.perspectiveMessageByCharacterId?.[userId] || [];
+        this.currentConversationMessageContentIndex = contents.length ? contents.length - 1 : -1;
+        this.pendingUserSelection = false;
+    }
+
     /** Serialize engine notifications so an older message query cannot win a race. */
     async updatePerspective() {
         console.log("Updating perspective...");
@@ -328,7 +380,9 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
             while (this.perspectiveUpdateQueued && this.isConnected && lifecycle === this.lifecycle) {
                 this.perspectiveUpdateQueued = false;
                 try {
-                    await this.recalculateMessageView(true, true, true);
+                    await this.synchronizeUser();
+                    if (!this.isConnected || lifecycle !== this.lifecycle) return;
+                    if (!this.pendingUserSelection) await this.recalculateMessageView(true, true, true);
                     if (!this.isConnected || lifecycle !== this.lifecycle) return;
                     if (!this.perspectiveUpdateQueued) await this.renderCurrentPerspective();
                 } catch (error) {

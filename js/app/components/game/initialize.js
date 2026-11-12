@@ -65,7 +65,8 @@ export async function initializeNewGame(game) {
             ? 'voice-in-the-head'
             : 'player';
 
-    const userMode = (await window.API.getConfigValue('simulationType')).toLowerCase() === 'debug' ? 'debug' : 'standard';
+    const simulationType = (await window.API.getConfigValue('simulationType')).toLowerCase();
+    const userMode = simulationType === 'debug' || simulationType === 'disembodied' ? simulationType : 'standard';
 
     /** @type {DEMinimalCharacterReference | null} */
     let user = null;
@@ -102,6 +103,9 @@ export async function initializeNewGame(game) {
         const actualInitialClothing = initialClothing || "auto";
         const actualInitialClothingFitment = initialClothingFitment || "normal";
 
+        const genderSrc = gender || sex || "male";
+        const genderValue = genderSrc === "male" ? 0.0 : (genderSrc === "female" ? 1.0 : 0.5);
+
         user = {
             id: "character-0",
             script: "",
@@ -116,7 +120,9 @@ export async function initializeNewGame(game) {
             },
             clothing: actualInitialClothing !== "auto" ? "custom" : (actualInitialClothingFitment === "tight" ? "auto-tight" : (actualInitialClothingFitment === "loose" ? "auto-loose" : "auto")),
             sex: sex || "male",
-            gender: gender || sex || "male",
+            genderAppearance: genderValue,
+            genderAppearanceByExternals: 0.5,
+            pronouns: genderValue === 0.0 ? "male" : (genderValue === 1.0 ? "female" : "ambiguous"),
             heightCm: typeof heightCm === "number" ? Number(heightCm) : 175,
             weightKg: typeof weightKg === "number" ? Number(weightKg) : 70,
             ageYears: typeof ageYears === "number" ? Number(ageYears) : 25,
@@ -173,6 +179,8 @@ export async function initializeNewGame(game) {
     }
 
     const userId = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ["user"]});
+    // add ourselves to the party
+    await window.ENGINE_WORKER_CLIENT.addCharacterToParty({ charId: userId });
     const lastConversationAndMessageInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ["utils", "conversations", "getLastConversationAndMessageForCharacter"], call: [userId]});
 
     return {

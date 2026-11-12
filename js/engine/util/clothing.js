@@ -219,8 +219,9 @@ export function giveCharacterRandomClothing(utils, character, charState, world, 
     let isNotWearingBottomClothes = !charState.wearing.some(item => item.wearableProperties?.coversBottomNakedness && !item.wearableProperties.underwear);
     let isNotWearingBottomUnderwear = !charState.wearing.some(item => item.wearableProperties?.coversBottomNakedness && item.wearableProperties.underwear);
     let isNotWearingTopClothes = !charState.wearing.some(item => item.wearableProperties?.coversTopNakedness && !item.wearableProperties.underwear);
-    // we don't want to give a male character top underwear so it defaults to true for male
-    let isNotWearingTopUnderwear = character.gender === "male" ? false : !charState.wearing.some(item => item.wearableProperties?.coversTopNakedness && item.wearableProperties.underwear);
+
+    // we don't want to give a male or ambiguous character top underwear so it defaults to true for male
+    let isNotWearingTopUnderwear = character.genderAppearance <= 0.75 ? false : !charState.wearing.some(item => item.wearableProperties?.coversTopNakedness && item.wearableProperties.underwear);
 
     /**
      * Returns true when the item's preferred gender is compatible with this character.
@@ -232,8 +233,8 @@ export function giveCharacterRandomClothing(utils, character, charState, world, 
     const isGenderCompatible = (item) => {
         const preferred = item.wearableProperties?.preferredGender;
         if (preferred === "any") return true;
-        if (character.gender === "ambiguous") return true;
-        return preferred === character.gender;
+        if (character.genderAppearance > 0.25 && character.genderAppearance < 0.75) return true;
+        return preferred === "male" ? character.genderAppearance <= 0.25 : preferred === "female" ? character.genderAppearance >= 0.75 : true;
     };
 
     const searchOrder = buildClothingSearchOrder(world, charState.location);
@@ -306,7 +307,7 @@ export function giveCharacterRandomClothing(utils, character, charState, world, 
     // Top underwear (e.g. bras) is only relevant for non-male characters.
     // isNotWearingTopUnderwear is always true for males (see above), so the
     // extra gender guard here is what actually prevents males from receiving it.
-    if (character.gender !== "male" && isNotWearingTopUnderwear) {
+    if (isNotWearingTopUnderwear) {
         const item = findClothingItem(world, searchOrder, (item) =>
             !!item.wearableProperties &&
             item.wearableProperties.coversTopNakedness &&

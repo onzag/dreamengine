@@ -1,4 +1,4 @@
-import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter, whatCanTheyMakeOfALocation, whatCanTheyMakeOfAnotherCharacter, whatCanTheyMakeOfAnItem, getCharacterExactLocation, getExternalDescriptionOfCharacterPostureOnly, getInternalDescriptionOfCharacter } from "./util/character-info.js";
+import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter, whatCanTheyMakeOfALocation, whatCanTheyMakeOfAnotherCharacter, whatCanTheyMakeOfAnItem, getCharacterExactLocation, getExternalDescriptionOfCharacterPostureOnly, getInternalDescriptionOfCharacter, getPerceivedGenderOfCharacterFromPerspective } from "./util/character-info.js";
 import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/random.js";
 import { getCharacterVolume, getCharacterWeight } from "./util/weight-and-volume.js";
 import { emotions } from "./util/emotions.js";
@@ -259,9 +259,9 @@ function getPronounHelperLocal(DE, charsOrig, they, he, she, theySingular) {
     if (chars.length > 1) return they;
     const charRef = chars[0];
     if (!charRef) return theySingular;
-    const gender = charRef.gender.toLowerCase();
-    if (gender === "male") return he;
-    if (gender === "female") return she;
+    const pronouns = charRef.pronouns.toLowerCase();
+    if (pronouns === "male") return he;
+    if (pronouns === "female") return she;
     return theySingular;
 }
 
@@ -864,7 +864,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         break;
                     case "uncle":
                     case "aunt":
-                        inverseRelation = character1.gender === "male" || character1.gender === "ambiguous" ? "nephew" : "niece";
+                        inverseRelation = character1.genderAppearance <= 0.75 ? "nephew" : "niece";
                         break;
                     case "grandparent":
                         inverseRelation = "grandchild";
@@ -874,7 +874,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         break;
                     case "niece":
                     case "nephew":
-                        inverseRelation = character1.gender === "male" || character1.gender === "ambiguous" ? "uncle" : "aunt";
+                        inverseRelation = character1.genderAppearance <= 0.75 ? "uncle" : "aunt";
                         break;
                     case "half sibling":
                         inverseRelation = "half sibling";
@@ -1741,10 +1741,10 @@ export const deEngineUtilsFn = (DE, engine) => ({
 
             return sizeVisibility;
         },
-        getExternalDescriptionOfCharacter(char, inPerspectiveOf, onlyBasics, hideCurrentPosture) {
+        async getExternalDescriptionOfCharacter(char, inPerspectiveOf, onlyBasics, hideCurrentPosture) {
             const target = requireCharacter(DE, char);
             const observer = requireCharacter(DE, inPerspectiveOf);
-            return getExternalDescriptionOfCharacter(DE, target.id, observer.id, onlyBasics, hideCurrentPosture);
+            return (await getExternalDescriptionOfCharacter(DE, target.id, observer.id, onlyBasics, hideCurrentPosture)).description;
         },
         getExternalDescriptionOfCharacterLocationSpecifics(char, inPerspectiveOf, hideCurrentPosture, noName) {
             const target = requireCharacter(DE, char);
@@ -1770,7 +1770,25 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 return false;
             }
 
-            if (char2Ref.gender !== opt) {
+            let genderAppearanceToUse = char1Ref.genderAppearance ?? 0.5; // default to 0.5 if undefined
+            const genderAppearanceToUseExternals = char2Ref.genderAppearanceByExternals ?? 0.5; // default to 0.5 if undefined
+
+            if (char1Ref.speciesType === "humanoid" && char2Ref.speciesType === "humanoid") {
+                // If both characters are humanoid, use the genderAppearance of char2 for the check
+            } else {
+                if (char1Ref.species !== char2Ref.species) {
+                    // If the species are different, use the genderAppearanceByExternals of char2 for the check
+                    genderAppearanceToUse = genderAppearanceToUseExternals;
+                }
+            }
+
+            const considerMale = genderAppearanceToUse <= 0.25;
+            const considerFemale = genderAppearanceToUse >= 0.75;
+            const considerAmbiguous = genderAppearanceToUse > 0.25 && genderAppearanceToUse < 0.75;
+
+            const textValue = considerMale ? "male" : considerFemale ? "female" : considerAmbiguous ? "ambiguous" : "unknown";
+
+            if (textValue !== opt) {
                 return false;
             }
 
@@ -2171,13 +2189,27 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 }
             }
 
-            char1Attractions = char1Attractions.filter(a => !a.towards || a.towards.includes(char2Ref.gender));
+            let genderAppearanceToUse = char2Ref.genderAppearance ?? 0.5; // default to 0.5 if undefined
+            const genderAppearanceToUseExternals = char2Ref.genderAppearanceByExternals ?? 0.5; // default to 0.5 if undefined
+
+            if (char1Ref.speciesType === "humanoid" && char2Ref.speciesType === "humanoid") {
+                // If both characters are humanoid, use the genderAppearance of char2 for the check
+            } else {
+                if (char1Ref.species !== char2Ref.species) {
+                    // If the species are different, use the genderAppearanceByExternals of char2 for the check
+                    genderAppearanceToUse = genderAppearanceToUseExternals;
+                }
+            }
+
+            const char2Gender = genderAppearanceToUse <= 0.25 ? "male" : genderAppearanceToUse >= 0.75 ? "female" : "ambiguous";
+
+            char1Attractions = char1Attractions.filter(a => !a.towards || (a.towards === "any" || a.towards === char2Gender));
 
             if (char1Attractions.length === 0) {
                 if (actuallyFeelsAttractionRegardless) {
-                    return { level, attracted: true, reasoning: `Despite ${char1Ref.name} not being attracted to ${char2Ref.name}'s gender being ${char2Ref.gender}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+                    return { level, attracted: true, reasoning: `Despite ${char1Ref.name} not being attracted to ${char2Ref.name}'s gender appearing to be ${char2Gender}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
                 }
-                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char1Ref.name} is not attracted to ${char2Ref.name} gender being ${char2Ref.gender}` };
+                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char1Ref.name} is not attracted to ${char2Ref.name} gender being ${char2Gender}` };
             }
 
             char1Attractions = char1Attractions.filter(a => !a.sex || a.sex.includes(char2Ref.sex));
@@ -2315,6 +2347,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     bond2: 0,
                     createdAt: DE.currentTime,
                     knowsAs: [],
+                    seesAs: getPerceivedGenderOfCharacterFromPerspective(DE, towardsRef, char1Ref),
                     stranger: true,
                     believesDead: false,
                     undoableShifts: {},

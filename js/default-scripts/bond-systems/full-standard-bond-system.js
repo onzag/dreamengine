@@ -277,128 +277,180 @@ const SECOND_RANGES = [
     ["deepInLove_50_100", 50, 100],
 ];
 
+/**
+ * @param {DEObject} DE
+ * @param {Omit<DECompleteCharacterReference, "id" | "scriptGivenId">} character
+ * @param {FSS4DOptions | FSS4DCreepyOptions} options
+ * @returns {Omit<DECompleteCharacterReference, "id" | "scriptGivenId">}
+ */
+function setup(DE, character, options) {
+    character.bonds = {
+        system: "STANDARD_FULL",
+        bond2DoesNotTrackAttraction: options.type === "4d_creepy",
+        // @ts-ignore
+        bond2DoesNotTrackAttractionForFamily: options.type === "4d_creepy" || (options.familyCreepy === true),
+        bondChangeFineTune: valueOrDefault(options.bondChangeFineTune, 1), // Multiplier for bond changes
+        bondChangeNegativityBias: valueOrDefault(options.bondChangeNegativityBias, 1.5),
+        declarations: [],
+        strangerBreakawayBondWeightAbsolute: valueOrDefault(options.strangerBreakawayBondWeightAbsolute, 10),
+        strangerBreakawayInteractionsCount: valueOrDefault(options.strangerBreakawayInteractionsCount, 30),
+        strangerBreakawayTimeMinutes: valueOrDefault(options.strangerBreakawayTimeMinutes, 30),
+        strangerNegativeMultiplier: valueOrDefault(options.strangerNegativeMultiplier, 1.5),
+        strangerPositiveMultiplier: valueOrDefault(options.strangerPositiveMultiplier, 1.0),
+        descriptionGeneralInjection: null,
+        bond2Graduation: {
+            slight: 10,
+            moderate: 20,
+            strong: 35,
+        },
+        bondGraduation: {
+            foe: -100,
+            hostile: -50,
+            antagonistic: -35,
+            unfriendly: -20,
+            unpleasant: -10,
+            acquaintance: 0,
+            friend: 10,
+            goodFriend: 20,
+            closeFriend: 35,
+            bestFriend: 50,
+        },
+        totalStrangersBondDescription: options.totalStrangersBondDescription,
+        neutralInteractionBondChange: valueOrDefault(options.neutralInteractionBondChange, 0.5), // number to add on a bond on a neutral interaction, does not apply to anything above bond graduation of unfriendly or friend, it maxes there
+    };
+
+    {
+        const standardForm = options.type === "4d_creepy" ? convertCreepyOptionsToStandardOptions(options) : options;
+
+        for (const [bondName, min, max, isStranger] of RANGES) {
+            for (const [secondaryBondName, secondaryMin, secondaryMax] of SECOND_RANGES) {
+
+                /**
+                 * @type {FSSByFamilyTie}
+                 */
+                const secondRangeRule =
+                    // @ts-ignore
+                    standardForm[bondName][secondaryBondName]
+
+                for (const familyStatus of (isStranger ? ["nonFamily"] : ["nonFamily", "family"])) {
+                    /**
+                     * @type {FSSBase}
+                     */
+                    const baseRule = isStranger ?
+                        // Strangers have no family sub-layer: the romantic-interest
+                        // level is itself the rule. A romantic-interest level the
+                        // character is not capable of is emitted as an empty object,
+                        // which we treat as missing so the fallback below extends the
+                        // previous (lower) level to cover it — the same way missing
+                        // non-family relationship levels are handled.
+                        // @ts-ignore
+                        (secondRangeRule && Object.keys(secondRangeRule).length > 0 ? secondRangeRule : null) :
+                        // @ts-ignore
+                        secondRangeRule && secondRangeRule[familyStatus];
+
+                    if (!baseRule) {
+                        const lastSameFamilyRuleAddedArray = character.bonds.declarations.filter(d => d.familyBond === (familyStatus === "family") && d.minBondLevel === min && d.maxBondLevel === max && d.strangerBond === isStranger);
+                        const lastSameFamilyRuleAdded = lastSameFamilyRuleAddedArray.length > 0 ? lastSameFamilyRuleAddedArray[lastSameFamilyRuleAddedArray.length - 1] : null;
+
+                        if (lastSameFamilyRuleAdded) {
+                            lastSameFamilyRuleAdded.max2BondLevel = Math.max(lastSameFamilyRuleAdded.max2BondLevel, secondaryMax);
+                        } else {
+                            throw new Error(`Missing bond definition for ${bondName} ${secondaryBondName} ${familyStatus}, and could not find a previous rule to copy from`);
+                        }
+
+                        continue;
+                    }
+
+                    character.bonds.declarations.push({
+                        name: `${options.type}_${bondName}_${secondaryBondName}_${isStranger ? "stranger" : "non_stranger"}_${familyStatus}`,
+                        description: baseRule.description,
+                        relationshipName: baseRule.relationshipName,
+                        minBondLevel: min,
+                        maxBondLevel: max,
+                        min2BondLevel: secondaryMin,
+                        max2BondLevel: secondaryMax,
+                        strangerBond: isStranger,
+                        familyBond: familyStatus === "family",
+                        generalCharacterDescriptionInjection: baseRule.generalCharacterDescriptionInjection,
+                        descriptionSurroundingNonConversing: baseRule.descriptionSurroundingNonConversing,
+                        descriptionNotSurrounding: baseRule.descriptionNotSurrounding,
+                        descriptionSurroundingDead: baseRule.descriptionSurroundingDead,
+                        descriptionNonSurroundingDead: baseRule.descriptionNonSurroundingDead,
+                        intimacy: {
+                            openToAffection: baseRule.openToAffection,
+                            openToIntimateAffection: baseRule.openToIntimateAffection,
+                            openToSex: baseRule.openToSex,
+                            proneToInitiatingAffection: baseRule.proneToInitiatingAffection,
+                            proneToInitiatingIntimateAffection: baseRule.proneToInitiatingIntimateAffection,
+                            proneToInitiatingSex: baseRule.proneToInitiatingSex,
+                            openToAffectionResponses: baseRule.openToAffectionResponses,
+                            openToIntimateAffectionResponses: baseRule.openToIntimateAffectionResponses,
+                            openToSexResponses: baseRule.openToSexResponses,
+                        },
+                    });
+                }
+            }
+        }
+    }
+
+    return character;
+}
+
 engine.exports = {
     type: "misc",
     description: "A complex 4 dimensional bond system with a lot of fine tuning, designed for SFW and NSFW characters alike.",
     exposeProperties: {},
     language: "*",
 
-    /**
-     * @param {DEObject} DE
-     * @param {Omit<DECompleteCharacterReference, "id" | "scriptGivenId">} character
-     * @param {FSS4DOptions | FSS4DCreepyOptions} options
-     * @returns {Omit<DECompleteCharacterReference, "id" | "scriptGivenId">}
-     */
-    setup(DE, character, options) {
-        character.bonds = {
-            system: "STANDARD_FULL",
-            bond2DoesNotTrackAttraction: options.type === "4d_creepy",
-            // @ts-ignore
-            bond2DoesNotTrackAttractionForFamily: options.type === "4d_creepy" || (options.familyCreepy === true),
-            bondChangeFineTune: valueOrDefault(options.bondChangeFineTune, 1), // Multiplier for bond changes
-            bondChangeNegativityBias: valueOrDefault(options.bondChangeNegativityBias, 1.5),
-            declarations: [],
-            strangerBreakawayBondWeightAbsolute: valueOrDefault(options.strangerBreakawayBondWeightAbsolute, 10),
-            strangerBreakawayInteractionsCount: valueOrDefault(options.strangerBreakawayInteractionsCount, 30),
-            strangerBreakawayTimeMinutes: valueOrDefault(options.strangerBreakawayTimeMinutes, 30),
-            strangerNegativeMultiplier: valueOrDefault(options.strangerNegativeMultiplier, 1.5),
-            strangerPositiveMultiplier: valueOrDefault(options.strangerPositiveMultiplier, 1.0),
-            descriptionGeneralInjection: null,
-            bond2Graduation: {
-                slight: 10,
-                moderate: 20,
-                strong: 35,
-            },
-            bondGraduation: {
-                foe: -100,
-                hostile: -50,
-                antagonistic: -35,
-                unfriendly: -20,
-                unpleasant: -10,
-                acquaintance: 0,
-                friend: 10,
-                goodFriend: 20,
-                closeFriend: 35,
-                bestFriend: 50,
-            },
-            totalStrangersBondDescription: options.totalStrangersBondDescription,
-            neutralInteractionBondChange: valueOrDefault(options.neutralInteractionBondChange, 0.5), // number to add on a bond on a neutral interaction, does not apply to anything above bond graduation of unfriendly or friend, it maxes there
-        };
+    onWorldInitialized(DE) {
+        const deUserCharacter = DE.user && DE.characters[DE.user];
+        if (!deUserCharacter || deUserCharacter.bonds.system !== "UNKNOWN") return;
 
-        {
-            const standardForm = options.type === "4d_creepy" ? convertCreepyOptionsToStandardOptions(options) : options;
+        // Track relationships without assigning the player's feelings, labels or actions.
+        /** @returns {DEOpenToIntimacyResponse} */
+        const noAutomaticIntimacy = () => ({
+            value: "not",
+            reason: "",
+            bondChangeEngaged: { primary: 0, secondary: 0 },
+        });
+        /** @returns {FSSBase} */
+        const neutralRule = () => ({
+            description: "",
+            relationshipName: "",
+            openToAffection: noAutomaticIntimacy,
+            openToIntimateAffection: noAutomaticIntimacy,
+            openToSex: noAutomaticIntimacy,
+            proneToInitiatingAffection: { probability: () => 0, actions: [] },
+            proneToInitiatingIntimateAffection: { probability: () => 0, actions: [] },
+            proneToInitiatingSex: { probability: () => 0, actions: [] },
+            openToAffectionResponses: [],
+            openToIntimateAffectionResponses: [],
+            openToSexResponses: [],
+        });
 
-            for (const [bondName, min, max, isStranger] of RANGES) {
-                for (const [secondaryBondName, secondaryMin, secondaryMax] of SECOND_RANGES) {
+        const definitions = Object.fromEntries(RANGES.map(([name, , , isStranger]) => [
+            name,
+            Object.fromEntries(SECOND_RANGES.map(([secondaryName]) => [
+                secondaryName,
+                isStranger ? neutralRule() : { family: neutralRule(), nonFamily: neutralRule() },
+            ])),
+        ]));
 
-                    /**
-                     * @type {FSSByFamilyTie}
-                     */
-                    const secondRangeRule =
-                        // @ts-ignore
-                        standardForm[bondName][secondaryBondName]
+        setup(DE, deUserCharacter, /** @type {FSS4DOptions} */ ({
+            ...definitions,
+            type: "4d_standard",
+            familyCreepy: true,
+            bondChangeFineTune: 1,
+            bondChangeNegativityBias: 1,
+            strangerBreakawayBondWeightAbsolute: 10,
+            strangerBreakawayInteractionsCount: 30,
+            strangerBreakawayTimeMinutes: 30,
+            strangerNegativeMultiplier: 1,
+            strangerPositiveMultiplier: 1,
+            neutralInteractionBondChange: 0,
+            totalStrangersBondDescription: "",
+        }));
+    },
 
-                    for (const familyStatus of (isStranger ? ["family", "nonFamily"] : ["nonFamily"])) {
-                        /**
-                         * @type {FSSBase}
-                         */
-                        const baseRule = isStranger ?
-                            // Strangers have no family sub-layer: the romantic-interest
-                            // level is itself the rule. A romantic-interest level the
-                            // character is not capable of is emitted as an empty object,
-                            // which we treat as missing so the fallback below extends the
-                            // previous (lower) level to cover it — the same way missing
-                            // non-family relationship levels are handled.
-                            // @ts-ignore
-                            (secondRangeRule && Object.keys(secondRangeRule).length > 0 ? secondRangeRule : null) :
-                            // @ts-ignore
-                            secondRangeRule && secondRangeRule[familyStatus];
-
-                        if (!baseRule) {
-                            const lastSameFamilyRuleAddedArray = character.bonds.declarations.filter(d => d.familyBond === (familyStatus === "family") && d.minBondLevel === min && d.maxBondLevel === max && d.strangerBond === isStranger);
-                            const lastSameFamilyRuleAdded = lastSameFamilyRuleAddedArray.length > 0 ? lastSameFamilyRuleAddedArray[lastSameFamilyRuleAddedArray.length - 1] : null;
-
-                            if (lastSameFamilyRuleAdded) {
-                                lastSameFamilyRuleAdded.max2BondLevel = Math.max(lastSameFamilyRuleAdded.max2BondLevel, secondaryMax);
-                            } else {
-                                throw new Error(`Missing bond definition for ${bondName} ${secondaryBondName} ${familyStatus}, and could not find a previous rule to copy from`);
-                            }
-
-                            continue;
-                        }
-
-                        character.bonds.declarations.push({
-                            name: `${options.type}_${bondName}_${secondaryBondName}_${isStranger ? "stranger" : "non_stranger"}_${familyStatus}`,
-                            description: baseRule.description,
-                            relationshipName: baseRule.relationshipName,
-                            minBondLevel: min,
-                            maxBondLevel: max,
-                            min2BondLevel: secondaryMin,
-                            max2BondLevel: secondaryMax,
-                            strangerBond: isStranger,
-                            familyBond: familyStatus === "family",
-                            generalCharacterDescriptionInjection: baseRule.generalCharacterDescriptionInjection,
-                            descriptionSurroundingNonConversing: baseRule.descriptionSurroundingNonConversing,
-                            descriptionNotSurrounding: baseRule.descriptionNotSurrounding,
-                            descriptionSurroundingDead: baseRule.descriptionSurroundingDead,
-                            descriptionNonSurroundingDead: baseRule.descriptionNonSurroundingDead,
-                            intimacy: {
-                                openToAffection: baseRule.openToAffection,
-                                openToIntimateAffection: baseRule.openToIntimateAffection,
-                                openToSex: baseRule.openToSex,
-                                proneToInitiatingAffection: baseRule.proneToInitiatingAffection,
-                                proneToInitiatingIntimateAffection: baseRule.proneToInitiatingIntimateAffection,
-                                proneToInitiatingSex: baseRule.proneToInitiatingSex,
-                                openToAffectionResponses: baseRule.openToAffectionResponses,
-                                openToIntimateAffectionResponses: baseRule.openToIntimateAffectionResponses,
-                                openToSexResponses: baseRule.openToSexResponses,
-                            },
-                        });
-                    }
-                }
-            }
-        }
-
-        return character;
-    }
+    setup,
 }
