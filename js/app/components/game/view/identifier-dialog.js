@@ -28,7 +28,7 @@ function getFocusedElement() {
 export class IdentifierDialog extends HTMLElement {
     constructor() {
         super();
-        /** @type {DECharacterPerspective | null} */
+        /** @type {DEPerspective | null} */
         this.currentPerspective = null;
         /** @type {HTMLElement|null} */
         this.previousFocus = null;
@@ -102,7 +102,7 @@ customElements.define('app-game-identifier-dialog', IdentifierDialog);
  * @param {string} identifier
  * @param {DEConversationMessageFragmentIdentifier['foundAs']} foundAs
  * @param {HTMLElement} trigger
- * @param {DECharacterPerspective | null} [perspective]
+ * @param {DEPerspective | null} [perspective]
  */
 export function openIdentifierDialog(identifier, foundAs, trigger, perspective = getPerspectiveFor(trigger)) {
     if (!identifier || !Object.hasOwn(views, foundAs)) return;

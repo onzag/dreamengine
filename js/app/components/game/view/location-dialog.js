@@ -3,7 +3,7 @@ import { IdentifierDetail } from './identifier-detail.js';
 export class LocationDialog extends IdentifierDetail {
     constructor() { super(); this.kind = 'Location'; }
 
-    /** @param {DECharacterPerspective} perspective */
+    /** @param {DEPerspective} perspective */
     getDisplayData(perspective) {
         const location = perspective.ownLocation;
         if (location.locationId !== this.getAttribute('identifier-id')) {
@@ -12,7 +12,7 @@ export class LocationDialog extends IdentifierDetail {
         return { name: location.locationName, description: location.description, banner: location.locationMetadata.asset || '' };
     }
 
-    /** @param {DECharacterPerspective} perspective */
+    /** @param {DEPerspective} perspective */
     getDebugSections(perspective) {
         return [{ title: 'Location in perspective (at the time) (User\'s perspective)', value: perspective.ownLocation }];
     }

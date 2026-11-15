@@ -1,3 +1,4 @@
+import { findItemInPerspective, isPerspectiveMemoryRetained, findCharacterInPerspective, calculatePerspectiveMemory, calculateCharacterSightingHistory, calculateLocationVisitHistory, passPerspectiveThroughMemory } from './perspective-memory.js';
 import {
     getListOfCarriedCharactersByCharacter,
     getExternalDescriptionOfCharacter,
@@ -43,10 +44,11 @@ function countIdentifierMentions(message, id) {
  *
  * @param {DEObject} DE
  * @param {DECompleteCharacterReference | string} character
+ * @param {string[]} [destroyedItemsIds]
  * @param {Omit<DEConversationMessage, "id">} [relatedConversationMessage]
- * @returns {Promise<DECharacterPerspective>}
+ * @returns {Promise<DEPerspective>}
  */
-export async function getPerspective(DE, character, relatedConversationMessage) {
+export async function getPerspective(DE, character, destroyedItemsIds = [], relatedConversationMessage) {
     const ownId = typeof character === 'string' ? character : character.id;
     const ownChar = DE.characters[ownId];
     if (!ownChar) {
@@ -57,6 +59,9 @@ export async function getPerspective(DE, character, relatedConversationMessage) 
         throw new Error(`Character state for ${ownId} not found.`);
     }
 
+    const destroyedIds = new Set(destroyedItemsIds);
+    const previousPerspective = await DE.database.getLastPerspectiveOfCharacter(ownId);
+
     const locationId = ownState.location;
     const location = DE.world.locations[locationId];
     if (!location) {
@@ -65,8 +70,8 @@ export async function getPerspective(DE, character, relatedConversationMessage) 
     const slotId = ownState.locationSlot;
     const slot = location.slots[slotId] || null;
 
-    const self = await buildPerspectiveCharacter(DE, ownId, ownId, 'visible', relatedConversationMessage);
-    const ownLocation = await buildPerspectiveLocation(DE, locationId, ownId, relatedConversationMessage);
+    const self = await buildPerspectiveCharacter(DE, ownId, ownId, 'visible', previousPerspective, relatedConversationMessage);
+    const ownLocation = await buildPerspectiveLocation(DE, locationId, ownId, previousPerspective, relatedConversationMessage);
 
     const allConversationsAtLocation = await DE.utils.conversations.getAllConversationsAtLocation(locationId);
 
@@ -76,9 +81,9 @@ export async function getPerspective(DE, character, relatedConversationMessage) 
     const observerName = DE.utils.templates.formatCharacterName(ownChar, ownChar, { capitalize: true, justName: true });
 
     /**
-     * @type {DESocialGroupInPerspective}
+     * @type {DESocialGroupsInPerspective}
      */
-    const result = {
+    const socialGroups = {
         soloCharacters: [],
         canSeeCharacters,
         characterListsAreUnclear: unclearReason(locationPerception, observerName, 'characters'),
@@ -86,15 +91,42 @@ export async function getPerspective(DE, character, relatedConversationMessage) 
         ownGroup: [],
     };
 
-    // now we need to check with each character to see if we can actually see them
-    for (const soloCharId of allConversationsAtLocation.leftoverCharacters) {
-        if (soloCharId === ownId) continue;
-        const canSeeThem = DE.utils.characterInfo.canSeeCharacter(soloCharId, ownId);
-        if (canSeeThem !== "invisible") {
-            result.soloCharacters.push(await buildPerspectiveCharacter(DE, soloCharId, ownId, canSeeThem, relatedConversationMessage));
+    /**
+     * @type {DEObjectiveSocialGroupsInPerspective}
+     */
+    const objectiveSocialGroups = {
+        soloCharacters: [],
+        otherGroups: [],
+        ownGroup: [],
+    };
+
+    /**
+     * @type {Array<DEPerspectiveCharacter>}
+     */
+    const perspectiveCharactersList = [];
+
+    // add all the characters at the location having conversations
+    for (const charId of allConversationsAtLocation.foundCharacters) {
+        if (charId === ownId) continue;
+
+        const canSeeThem = DE.utils.characterInfo.canSeeCharacter(charId, ownId);
+
+        const character = await buildPerspectiveCharacter(DE, charId, ownId, canSeeThem, previousPerspective, relatedConversationMessage);
+        perspectiveCharactersList.push(character);
+
+        const isSoloChar = allConversationsAtLocation.leftoverCharacters.includes(charId);
+        if (isSoloChar) {
+            objectiveSocialGroups.soloCharacters.push(charId);
+            if (canSeeThem !== "invisible") {
+                socialGroups.soloCharacters.push(charId);
+            }
+        } else {
+            // we will add the rest below when we process the conversations, so we don't add them here
         }
     }
+
     for (const conversation of allConversationsAtLocation.conversations) {
+
         /**
          * @type {Array<{
          *    id: string;
@@ -118,22 +150,27 @@ export async function getPerspective(DE, character, relatedConversationMessage) 
 
         if (actualIdsOfVisibleParticipants.length > 0) {
             if (isOwnGroup) {
-                for (const { id: participantId, visibility } of actualIdsOfVisibleParticipants) {
-                    result.ownGroup.push(await buildPerspectiveCharacter(DE, participantId, ownId, visibility, relatedConversationMessage));
-                }
+                socialGroups.ownGroup.push(...actualIdsOfVisibleParticipants.map(p => p.id));
             } else if (actualIdsOfVisibleParticipants.length === 1) {
-                result.soloCharacters.push(await buildPerspectiveCharacter(DE, actualIdsOfVisibleParticipants[0].id, ownId, actualIdsOfVisibleParticipants[0].visibility, relatedConversationMessage));
+                socialGroups.soloCharacters.push(actualIdsOfVisibleParticipants[0].id);
             } else {
-                const otherGroup = [];
-                for (const { id: participantId, visibility } of actualIdsOfVisibleParticipants) {
-                    otherGroup.push(await buildPerspectiveCharacter(DE, participantId, ownId, visibility, relatedConversationMessage));
-                }
-                result.otherGroups.push(otherGroup);
+                socialGroups.otherGroups.push(actualIdsOfVisibleParticipants.map(p => p.id));
             }
+        }
+
+        if (isOwnGroup) {
+            objectiveSocialGroups.ownGroup.push(...conversation.participants.filter(id => id !== ownId));
+        } else if (conversation.participants.length === 1) {
+            objectiveSocialGroups.soloCharacters.push(conversation.participants[0]);
+        } else {
+            objectiveSocialGroups.otherGroups.push(conversation.participants.filter(id => id !== ownId));
         }
     }
 
-    return {
+    /**
+     * @type {DEPerspective}
+     */
+    const activePerspective = passPerspectiveThroughMemory(DE, {
         worldMetadata: DE.world.metadata || {},
         self,
         ownId,
@@ -144,27 +181,42 @@ export async function getPerspective(DE, character, relatedConversationMessage) 
         ownLocationSlotName: slot ? slot.name : '',
         ownLocation,
         ownCharacterBlindness: ownChar.blindness || 'no',
-        socialGroups: result,
+        socialGroups,
+        objectiveSocialGroups,
+        perspectiveCharacters: perspectiveCharactersList,
+        rememberedCharacters: [],
+        rememberedLocations: [],
         timeOfPerspective: { ...DE.currentTime },
-    };
+    }, previousPerspective, DE.currentTime.time, destroyedItemsIds);
+    return activePerspective;
 }
 
 /**
  * @param {DEObject} DE
  * @param {string} locationId
  * @param {string} observerId
- * @returns {Promise<DECharacterPerspectiveLocation>}
+ * @param {DEPerspective | null | undefined} previousPerspective
  * @param {Omit<DEConversationMessage, "id">} [relatedConversationMessage]
+ * @returns {Promise<DEPerspectiveLocation>}
  */
-async function buildPerspectiveLocation(DE, locationId, observerId, relatedConversationMessage) {
+async function buildPerspectiveLocation(DE, locationId, observerId, previousPerspective, relatedConversationMessage) {
     const location = DE.world.locations[locationId];
     if (!location) {
         throw new Error(`Location ${locationId} not found.`);
     }
+    const observer = DE.characters[observerId];
+    if (!observer) {
+        throw new Error(`Character ${observerId} not found.`);
+    }
+    const lastPerspectiveOfObserver = previousPerspective === undefined
+        ? await DE.database.getLastPerspectiveOfCharacter(observerId)
+        : previousPerspective;
+    const visitHistory = calculateLocationVisitHistory(lastPerspectiveOfObserver, locationId,
+        DE.currentTime, observer.attention ?? 0, countIdentifierMentions(relatedConversationMessage, locationId));
 
     const slots = [];
     for (const slotId of Object.keys(location.slots)) {
-        slots.push(await buildPerspectiveLocationSlot(DE, locationId, slotId, observerId, relatedConversationMessage));
+        slots.push(await buildPerspectiveLocationSlot(DE, locationId, slotId, observerId, lastPerspectiveOfObserver, relatedConversationMessage));
     }
 
     const whatCanTheyMakeOfLocation = DE.utils.world.whatCanTheyMakeOfALocation(locationId, observerId);
@@ -183,6 +235,7 @@ async function buildPerspectiveLocation(DE, locationId, observerId, relatedConve
     }
 
     return {
+        ...visitHistory,
         locationMetadata: location.metadata || {},
         locationId,
         locationName: location.name,
@@ -197,10 +250,11 @@ async function buildPerspectiveLocation(DE, locationId, observerId, relatedConve
  * @param {string} locationId
  * @param {string} slotId
  * @param {string} observerId
- * @returns {Promise<DECharacterPerspectiveLocationSlot>}
+ * @param {DEPerspective | null} previousPerspective
  * @param {Omit<DEConversationMessage, "id">} [relatedConversationMessage]
+ * @returns {Promise<DEPerspectiveLocationSlot>}
  */
-async function buildPerspectiveLocationSlot(DE, locationId, slotId, observerId, relatedConversationMessage) {
+async function buildPerspectiveLocationSlot(DE, locationId, slotId, observerId, previousPerspective, relatedConversationMessage) {
     const location = DE.world.locations[locationId];
     const slot = location.slots[slotId];
     if (!slot) {
@@ -214,17 +268,28 @@ async function buildPerspectiveLocationSlot(DE, locationId, slotId, observerId, 
     });
     const locationPerception = DE.utils.world.whatCanTheyMakeOfALocation(slotId, observerId);
 
-    const items = await buildPerspectiveItems(DE, null, slot.items || [], observerId, locationId, slotId, relatedConversationMessage);
+    const {
+        items,
+        missingItems,
+    } = await buildPerspectiveItems(DE, null, slot.items || [], observerId, locationId, slotId, previousPerspective, relatedConversationMessage);
 
     // Characters at this slot, excluding the observer, that the observer can at least perceive.
-    /** @type {DECharacterPerspectiveCharacter[]} */
+    /** @type {string[]} */
     const characters = [];
+    /**
+     * Missing characters at this slot, that the observer cannot perceive at all, but that are present in the slot.
+     * @type {string[]}
+     */
+    const missingCharacters = [];
     const slotCharacterIds = DE.utils.world.getCharacterIdsAtLocationSlot(slotId);
     for (const charId of slotCharacterIds) {
         if (charId === observerId) continue;
         const visibility = DE.utils.characterInfo.canSeeCharacter(charId, observerId);
-        if (visibility === 'invisible') continue;
-        characters.push(await buildPerspectiveCharacter(DE, charId, observerId, visibility, relatedConversationMessage));
+        if (visibility === 'invisible') {
+            missingCharacters.push(charId);
+        } else {
+            characters.push(charId)
+        }
     }
 
     const canSeeItems = !locationPerception.cantSee;
@@ -244,9 +309,11 @@ async function buildPerspectiveLocationSlot(DE, locationId, slotId, observerId, 
         slotId,
         slotName: slot.name,
         items,
+        missingItems,
         canSeeItems,
         itemListsAreUnclear: unclearReason(locationPerception, observerName, 'items'),
         characters,
+        missingCharacters,
         canSeeCharacters,
         characterListsAreUnclear: unclearReason(locationPerception, observerName, 'characters'),
         description,
@@ -274,11 +341,19 @@ function unclearReason(perception, observerName, kind) {
  * @param {DEObject} DE
  * @param {string} targetId
  * @param {string} observerId
- * @param {'visible' | 'perceived'} perceptionForm
- * @returns {Promise<DECharacterPerspectiveCharacter>}
+ * @param {DEVisibility} perceptionForm
+ * @param {DEPerspective | null} previousPerspective
  * @param {Omit<DEConversationMessage, "id">} [relatedConversationMessage]
+ * @returns {Promise<DEPerspectiveCharacter>}
  */
-async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionForm, relatedConversationMessage) {
+async function buildPerspectiveCharacter(
+    DE,
+    targetId,
+    observerId,
+    perceptionForm,
+    previousPerspective,
+    relatedConversationMessage,
+) {
     const target = DE.characters[targetId];
     if (!target) {
         throw new Error(`Character ${targetId} not found.`);
@@ -326,12 +401,14 @@ async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionFor
     const characterExternalDescription = await getExternalDescriptionOfCharacter(DE, targetId, observerId, false, false);
     const characterPlaceAndPostureDescription = getExternalDescriptionOfCharacterPostureOnly(DE, targetId, observerId);
 
-    const characterCarryingItems = perception.canTellDetailsOfClothingOrCarriedItems ? await buildPerspectiveItems(DE, null, targetState.carrying || [], observerId, targetState.location, targetState.locationSlot, relatedConversationMessage) : [];
-    const characterWearingItems = perception.canTellDetailsOfClothingOrCarriedItems ? await buildPerspectiveItems(DE, null, targetState.wearing || [], observerId, targetState.location, targetState.locationSlot, relatedConversationMessage) : [];
+    const characterCarryingItems = await buildPerspectiveItems(DE, null, targetState.carrying || [], observerId, targetState.location, targetState.locationSlot, previousPerspective, relatedConversationMessage);
+    const characterWearingItems = await buildPerspectiveItems(DE, null, targetState.wearing || [], observerId, targetState.location, targetState.locationSlot, previousPerspective, relatedConversationMessage);
 
-    const carriedCharacters = getListOfCarriedCharactersByCharacter(DE, targetId)
+    const carriedCharactersBase = getListOfCarriedCharactersByCharacter(DE, targetId)
         .map(c => c.carriedId)
-        .filter(carriedId => isSelf || DE.utils.characterInfo.canSeeCharacter(carriedId, observerId) !== 'invisible');
+
+    const carriedCharacters = carriedCharactersBase.filter(carriedId => isSelf || DE.utils.characterInfo.canSeeCharacter(carriedId, observerId) !== 'invisible');
+    const missingCarriedCharacters = carriedCharactersBase.filter(carriedId => !carriedCharacters.includes(carriedId));
 
     /** @type {DECharacterStateInPerspective[]} */
     const states = [];
@@ -608,65 +685,36 @@ async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionFor
     const memorability = (isCharacterInConversationWithObserver + bondLevelAbsolute + strangerFactor +
         sameSlot + isAttractive + (countIdentifierMentions(relatedConversationMessage, targetId) * 0.5)) / max;
 
-    // 0 no memory
-    // 1 minute memory
-    // 2 day memory
-    // 3 week memory
-    // 4 month memory
-    // 5 forever memory (more or less)
+    const lastPerspectiveOfObserver = previousPerspective === undefined
+        ? await DE.database.getLastPerspectiveOfCharacter(observerId)
+        : previousPerspective;
+    const previousCharacter = findCharacterInPerspective(lastPerspectiveOfObserver, targetId);
+    const elapsed = lastPerspectiveOfObserver ? DE.currentTime.time - lastPerspectiveOfObserver.timeOfPerspective.time : 0;
 
-    // now we need to apply attention, this will indeed cause a rather small number
-    // eg for same location with observer, in conversation and a good bond they could get 0.6 or something akin
-    // with attention applied they get 0.35 further memory per hour (for a normal person)
-    // eg2 for same location slot with a stranger, they could get 0.14 at most
-    const attentionAffectedMemorability = memorability * (observer.attention ?? 0);
+    // they are being mentioned or part of the same conversation
+    const isActivelyObserved = relatedConversationMessage?.content.some((c) => {
+        return c.fragments.some((f) => {
+            return typeof f !== "string" && f.type === "identifier" && f.identifiers.some((id) => id === targetId);
+        });
+    }) || (targetState.conversationId === observerState.conversationId && targetState.conversationId !== null);
 
-    // the attention baseline is the baseline imprinting effect of the memory
-    // we will double the value, eg. this very memorable friend meetup will have a baseline of 0.7 * 10, which is 7 and then halving it gives 3.5
-    // after rounding this means they will remember for a month
-    // the stranger with 0.14 * 10 = 1.4, halving gives 0.7, rounding gives 1, which is a minute memory, which is correct for a stranger just passing by
-    let attentionBaseLine = Math.round((memorability * 10) * (observer.attention ?? 0));
-    if (attentionBaseLine > 5) {
-        attentionBaseLine = 5;
-    }
+    const memory = calculatePerspectiveMemory(memorability, observer.attention ?? 0, previousPerspective,
+        previousCharacter?.memory ?? null, elapsed, DE.currentTime.time, !isActivelyObserved);
+    const sightingHistory = calculateCharacterSightingHistory(lastPerspectiveOfObserver, targetId, DE.currentTime);
 
-    // now we need to figure out the actual value by fetching our previous, so ironically we need to fetch the previous perspective and see how many hours have passed
-    // since that previous perspective and this one, provided the character was there too, if it was, then we will increase the memory score by
-    // attentionAffectedMemorability per hour of the last perspective, therefore it increases the memory score, unless it is lower than attentionBaseLine, in which case we will set it to attentionBaseLine
-    const lastPerspectiveOfObserver = await DE.database.getLastPerspectiveOfCharacter(observerId);
-
-    let expectedLevel = /** @type {0 | 1 | 2 | 3 | 4 | 5} */ (attentionBaseLine);
-    let expectedSoftLevel = attentionBaseLine;
-
-    if (lastPerspectiveOfObserver) {
-        const characterInfo = lastPerspectiveOfObserver.socialGroups.soloCharacters.find(c => c.characterId === targetId) ||
-            lastPerspectiveOfObserver.socialGroups.ownGroup.find(c => c.characterId === targetId) ||
-            lastPerspectiveOfObserver.socialGroups.otherGroups.flat().find(c => c.characterId === targetId);
-
-        const diffTimeInHours = (DE.currentTime.time - lastPerspectiveOfObserver.timeOfPerspective.time) / (1000 * 60 * 60);
-
-        if (characterInfo) {
-            expectedSoftLevel = characterInfo.memory.softLevel + (attentionAffectedMemorability * diffTimeInHours);
-            if (expectedSoftLevel > 5) {
-                expectedSoftLevel = 5;
-            }
-            if (expectedSoftLevel < attentionBaseLine) {
-                expectedSoftLevel = attentionBaseLine;
-            }
-            // @ts-ignore
-            expectedLevel = Math.round(expectedSoftLevel);
-        }
-    }
+    const canTellDetailsOfClothingOrCarriedItems = perception.canTellDetailsOfClothingOrCarriedItems === "YES";
+    const canTellOtherCarriedCharacters = perception.canTellOtherCarriedCharacters === "YES";
 
     return {
-        characterMetadata: target.metadata || {},
-        memory: { level: expectedLevel, softLevel: expectedSoftLevel },
+        metadata: target.metadata || {},
+        memory,
+        ...sightingHistory,
         characterId: targetId,
-        characterNameComplex,
-        characterNameSimple,
-        characterNameDefinite,
-        characterNameIndefinite,
-        characterAllNames,
+        nameComplex: characterNameComplex,
+        nameSimple: characterNameSimple,
+        nameDefinite: characterNameDefinite,
+        nameIndefinite: characterNameIndefinite,
+        allNames: characterAllNames,
         bond: isSelf ? 0 : (bond ? bond.bond : 0),
         bond2: isSelf ? 0 : (bond ? bond.bond2 : 0),
         stranger: isSelf ? false : (bond ? bond.stranger : true),
@@ -677,16 +725,23 @@ async function buildPerspectiveCharacter(DE, targetId, observerId, perceptionFor
         bondDescription,
         canTellHeight: perception.canTellHeight,
         canTellWeight: perception.canTellWeight,
-        characterHeightCm: perception.canTellHeight ? target.heightCm : 0,
-        characterWeightKg: perception.canTellWeight ? target.weightKg : 0,
-        characterExternalDescription: characterExternalDescription.description,
-        characterExternalDescriptionForUser: characterExternalDescription.descriptionForUser,
-        characterPlaceAndPostureDescription,
+        heightCm: perception.canTellHeight ? target.heightCm : 0,
+        weightKg: perception.canTellWeight ? target.weightKg : 0,
+        externalDescription: characterExternalDescription.description,
+        externalDescriptionForUser: characterExternalDescription.descriptionForUser,
+        placeAndPostureDescription: characterPlaceAndPostureDescription,
         perceptionForm,
-        canTellDetailsOfClothingOrCarriedItems: perception.canTellDetailsOfClothingOrCarriedItems,
-        characterCarryingItems,
-        characterWearingItems,
-        characterCarryingOtherCharactersIds: carriedCharacters,
+        canTellDetailsOfClothingOrCarriedItems,
+        carriedItemsIsUnclear: characterUnclearReason(perception, "carrying"),
+        clothingIsUnclear: characterUnclearReason(perception, "wearing"),
+        otherCarriedCharactersIsUnclear: characterUnclearReason(perception, "carriedOtherCharacters"),
+        canTellOtherCarriedCharacters,
+        carryingItems: canTellDetailsOfClothingOrCarriedItems ? characterCarryingItems.items : [],
+        missingCarryingItems: canTellDetailsOfClothingOrCarriedItems ? characterCarryingItems.missingItems : [...characterCarryingItems.items, ...characterCarryingItems.missingItems],
+        missingWearingItems: canTellDetailsOfClothingOrCarriedItems ? characterWearingItems.missingItems : [...characterWearingItems.items, ...characterWearingItems.missingItems],
+        wearingItems: canTellDetailsOfClothingOrCarriedItems ? characterWearingItems.items : [],
+        carryingOtherCharacters: canTellOtherCarriedCharacters ? carriedCharacters : [],
+        missingCarryingOtherCharacters: canTellOtherCarriedCharacters ? [...carriedCharacters, ...missingCarriedCharacters] : [],
         states: states,
     };
 }
@@ -888,44 +943,6 @@ function mergeIdenticalItemsInPerspective(items) {
 }
 
 /**
- * Find an item by its concrete ID in a snapshot, including stacks and nested items.
- * @param {DECharacterPerspective} perspective
- * @param {string} itemId
- * @returns {DEItemInPerspective | null}
- */
-function findItemInPerspective(perspective, itemId) {
-    /** @param {DEItemInPerspective[]} items @returns {DEItemInPerspective | null} */
-    function findInItems(items) {
-        for (const item of items) {
-            if (item.ids.some(entry => entry.id === itemId)) return item;
-            const nested = findInItems(item.containing) || findInItems(item.ontop);
-            if (nested) return nested;
-        }
-        return null;
-    }
-    /** @param {DECharacterPerspectiveCharacter} character @returns {DEItemInPerspective | null} */
-    function findOnCharacter(character) {
-        return findInItems(character.characterCarryingItems) || findInItems(character.characterWearingItems);
-    }
-    const ownItem = findOnCharacter(perspective.self);
-    if (ownItem) return ownItem;
-    for (const slot of perspective.ownLocation.slots) {
-        const item = findInItems(slot.items);
-        if (item) return item;
-        for (const character of slot.characters) {
-            const carriedItem = findOnCharacter(character);
-            if (carriedItem) return carriedItem;
-        }
-    }
-    const groups = perspective.socialGroups;
-    for (const character of [...groups.soloCharacters, ...groups.ownGroup, ...groups.otherGroups.flat()]) {
-        const item = findOnCharacter(character);
-        if (item) return item;
-    }
-    return null;
-}
-
-/**
  * Recursively builds the items an observer can make out from a raw item list, dropping anything
  * invisible to them and honouring whether they can peer inside or on top of each container.
  * @param {DEObject} DE
@@ -934,10 +951,11 @@ function findItemInPerspective(perspective, itemId) {
  * @param {string} observerId
  * @param {string} locationId
  * @param {string} locationSlotId
- * @returns {Promise<DEItemInPerspective[]>}
+ * @param {DEPerspective | null} previousPerspective
  * @param {Omit<DEConversationMessage, "id">} [relatedConversationMessage]
+ * @returns {Promise<{items: DEItemInPerspective[], missingItems: DEItemInPerspective[]}>}
  */
-async function buildPerspectiveItems(DE, parentItemId, items, observerId, locationId, locationSlotId, relatedConversationMessage) {
+export async function buildPerspectiveItems(DE, parentItemId, items, observerId, locationId, locationSlotId, previousPerspective, relatedConversationMessage) {
     const observer = DE.characters[observerId];
     if (!observer) {
         throw new Error(`Character ${observerId} not found.`);
@@ -947,16 +965,19 @@ async function buildPerspectiveItems(DE, parentItemId, items, observerId, locati
     if (!observerState) {
         throw new Error(`Character state for ${observerId} not found.`);
     }
-    if (!items.length) return [];
+    if (!items.length) return { items: [], missingItems: [] };
 
     /** @type {DEItemInPerspective[]} */
-    const result = [];
+    const canSeeItems = [];
+    /** @type {DEItemInPerspective[]} */
+    const missingItems = [];
 
-    const lastPerspectiveOfObserver = await DE.database.getLastPerspectiveOfCharacter(observerId);
+    const lastPerspectiveOfObserver = previousPerspective === undefined
+        ? await DE.database.getLastPerspectiveOfCharacter(observerId)
+        : previousPerspective;
 
     for (const item of items) {
         const visibility = DE.utils.items.canSeeItem(item, observerId);
-        if (visibility === 'invisible') continue;
 
         const perception = DE.utils.items.whatCanTheyMakeOfAnItem(item, observerId);
 
@@ -977,58 +998,25 @@ async function buildPerspectiveItems(DE, parentItemId, items, observerId, locati
         max += 1;
 
         // these half points added by the message count do not count towards the max, they are just a bonus for being mentioned in the conversation
-        const memorability = (isItemNonCommon + ownItem + sameSlot + (countIdentifierMentions(relatedConversationMessage, item.id) * 0.5)) / max;
+        const memorability = Math.min((isItemNonCommon + ownItem + sameSlot + (countIdentifierMentions(relatedConversationMessage, item.id) * 0.5)) / max, 2);
 
-        // 0 no memory
-        // 1 minute memory
-        // 2 day memory
-        // 3 week memory
-        // 4 month memory
-        // 5 forever memory (more or less)
+        // memorability then goes from 0 to 2
 
-        // now we need to apply attention, this will indeed cause a rather small number
-        // eg for same location with observer, in conversation and a good bond they could get 0.6 or something akin
-        // with attention applied they get 0.35 further memory per hour (for a normal person)
-        // eg2 for same location slot with a stranger, they could get 0.14 at most
-        const attentionAffectedMemorability = memorability * (observer.attention ?? 0);
-
-        // the attention baseline is the baseline imprinting effect of the memory
-        // we will double the value, eg. this very memorable friend meetup will have a baseline of 0.7 * 10, which is 7 and then halving it gives 3.5
-        // after rounding this means they will remember for a month
-        // the stranger with 0.14 * 10 = 1.4, halving gives 0.7, rounding gives 1, which is a minute memory, which is correct for a stranger just passing by
-        let attentionBaseLine = Math.round((memorability * 10) * (observer.attention ?? 0));
-        if (attentionBaseLine > 5) {
-            attentionBaseLine = 5;
-        }
-
-        // now we need to figure out the actual value by fetching our previous, so ironically we need to fetch the previous perspective and see how many hours have passed
-        // since that previous perspective and this one, provided the character was there too, if it was, then we will increase the memory score by
-        // attentionAffectedMemorability per hour of the last perspective, therefore it increases the memory score, unless it is lower than attentionBaseLine, in which case we will set it to attentionBaseLine
-
-        let expectedLevel = /** @type {0 | 1 | 2 | 3 | 4 | 5} */ (attentionBaseLine);
-        let expectedSoftLevel = attentionBaseLine;
-
-        if (lastPerspectiveOfObserver) {
-            const itemInfo = findItemInPerspective(lastPerspectiveOfObserver, item.id);
-
-            const diffTimeInHours = (DE.currentTime.time - lastPerspectiveOfObserver.timeOfPerspective.time) / (1000 * 60 * 60);
-
-            if (itemInfo) {
-                expectedSoftLevel = itemInfo.memory.softLevel + (attentionAffectedMemorability * diffTimeInHours);
-                if (expectedSoftLevel > 5) {
-                    expectedSoftLevel = 5;
-                }
-                if (expectedSoftLevel < attentionBaseLine) {
-                    expectedSoftLevel = attentionBaseLine;
-                }
-                // @ts-ignore
-                expectedLevel = Math.round(expectedSoftLevel);
-            }
-        }
+        const previousItem = findItemInPerspective(lastPerspectiveOfObserver, item.id);
+        const retainedMemory = previousItem ? previousItem.memory : null;
+        // Only time since a direct observation counts as continued exposure.
+        const elapsed = lastPerspectiveOfObserver ? DE.currentTime.time - lastPerspectiveOfObserver.timeOfPerspective.time : 0;
+        const isActivelyObserved = relatedConversationMessage?.content.some((c) => {
+            return c.fragments.some((f) => {
+                return typeof f !== "string" && f.type === "identifier" && f.identifiers.some((id) => id === item.id);
+            });
+        }) || false;
+        const memory = calculatePerspectiveMemory(memorability, observer.attention ?? 0, previousPerspective,
+            retainedMemory, elapsed, DE.currentTime.time, !isActivelyObserved);
 
         /** @type {DEItemInPerspective} */
         const node = {
-            memory: { level: expectedLevel, softLevel: expectedSoftLevel },
+            memory,
             description: item.description,
             maxVolumeOnTopLiters: item.maxVolumeOnTopLiters,
             volumeLiters: item.volumeLiters,
@@ -1059,10 +1047,16 @@ async function buildPerspectiveItems(DE, parentItemId, items, observerId, locati
             containing: [],
             containingCharacters: [],
             ontopCharacters: [],
+            missingContaining: [],
+            missingOntop: [],
             canSeeContents,
             contentsIsUnclear: containerUnclearReason(item.containerProperties, item.state, perception, 'contents'),
             canSeeOntop,
             ontopIsUnclear: containerUnclearReason(item.containerProperties, item.state, perception, 'ontop'),
+            canTellTheirVolume: perception.canTellTheirVolume,
+            canTellTheirWeight: perception.canTellTheirWeight,
+            missingContainingCharacters: [],
+            missingOntopCharacters: [],
         };
 
         // When the observer cannot discern the exact item, obscure identifying detail the same way
@@ -1072,42 +1066,76 @@ async function buildPerspectiveItems(DE, parentItemId, items, observerId, locati
             node.name = label;
             node.description = `An indistinct ${label} whose details cannot be made out.`;
         }
-        if (!perception.canTellTheirVolume) node.volumeLiters = 0;
-        if (!perception.canTellTheirWeight) node.weightKg = 0;
+
+        const contents = await buildPerspectiveItems(DE, item.id, item.containing || [], observerId, locationId, locationSlotId, lastPerspectiveOfObserver, relatedConversationMessage);
+        const ontop = await buildPerspectiveItems(DE, item.id, item.ontop || [], observerId, locationId, locationSlotId, lastPerspectiveOfObserver, relatedConversationMessage);
+        const containingCharacters = visibleCharacterIds(DE, item.containingCharacters, observerId);
+        const ontopCharacters = visibleCharacterIds(DE, item.ontopCharacters, observerId);
 
         if (canSeeContents) {
-            node.containing = await buildPerspectiveItems(DE, item.id, item.containing || [], observerId, locationId, locationSlotId, relatedConversationMessage);
-            node.containingCharacters = visibleCharacterIds(DE, item.containingCharacters, observerId);
+            node.containing = contents.items;
+            node.missingContaining = contents.missingItems;
+            node.containingCharacters = containingCharacters.visibleCharacterIds;
+            node.missingContainingCharacters = containingCharacters.invisibleCharacterIds;
+        } else {
+            node.missingContaining = [...contents.items, ...contents.missingItems];
+            node.missingContainingCharacters = [...containingCharacters.visibleCharacterIds, ...containingCharacters.invisibleCharacterIds];
         }
         if (canSeeOntop) {
-            node.ontop = await buildPerspectiveItems(DE, item.id, item.ontop || [], observerId, locationId, locationSlotId, relatedConversationMessage);
-            node.ontopCharacters = visibleCharacterIds(DE, item.ontopCharacters, observerId);
+            node.ontop = ontop.items;
+            node.missingOntop = ontop.missingItems;
+            node.ontopCharacters = ontopCharacters.visibleCharacterIds;
+            node.missingOntopCharacters = ontopCharacters.invisibleCharacterIds;
+        } else {
+            node.missingOntop = [...ontop.items, ...ontop.missingItems];
+            node.missingOntopCharacters = [...ontopCharacters.visibleCharacterIds, ...ontopCharacters.invisibleCharacterIds];
         }
 
-        result.push(node);
+        if (visibility === 'invisible') {
+            missingItems.push(node);
+        } else {
+            canSeeItems.push(node);
+        }
     }
 
-    const mergedResult = mergeIdenticalItemsInPerspective(result);
+    const mergedMissingItems = mergeIdenticalItemsInPerspective(missingItems);
+    const mergedCanSeeItems = mergeIdenticalItemsInPerspective(canSeeItems);
 
-    for (const node of mergedResult) {
+    for (const node of mergedCanSeeItems) {
         // Build the nameInAmount for each item after all children have been built, so that the nameInAmount of children is available to the parent.
         node.nameInAmount = utilItemCount(DE, locationId, !!node.oneOfAKind && node.ids.length === 1, node.owner, node.ids.length, node.name, node.ids[0].id, true, false, true);
     }
 
-    return mergedResult;
+    for (const node of mergedMissingItems) {
+        // Build the nameInAmount for each item after all children have been built, so that the nameInAmount of children is available to the parent.
+        node.nameInAmount = utilItemCount(DE, locationId, !!node.oneOfAKind && node.ids.length === 1, node.owner, node.ids.length, node.name, node.ids[0].id, true, false, true);
+    }
+
+    return {
+        items: mergedCanSeeItems,
+        missingItems: mergedMissingItems,
+    };
 }
 
 /**
  * @param {DEObject} DE
  * @param {Array<{ id: string }> | undefined} entries
  * @param {string} observerId
- * @returns {string[]}
+ * @returns {{visibleCharacterIds: string[], invisibleCharacterIds: string[]}}
  */
 function visibleCharacterIds(DE, entries, observerId) {
-    if (!entries) return [];
-    return entries
-        .map(entry => entry.id)
-        .filter(id => DE.utils.characterInfo.canSeeCharacter(id, observerId) !== 'invisible');
+    if (!entries) return { visibleCharacterIds: [], invisibleCharacterIds: [] };
+    const visibleCharacterIds = [];
+    const invisibleCharacterIds = [];
+    for (const entry of entries) {
+        const canSee = DE.utils.characterInfo.canSeeCharacter(entry.id, observerId);
+        if (canSee !== 'invisible') {
+            visibleCharacterIds.push(entry.id);
+        } else {
+            invisibleCharacterIds.push(entry.id);
+        }
+    }
+    return { visibleCharacterIds, invisibleCharacterIds };
 }
 
 /**
@@ -1130,6 +1158,35 @@ function containerUnclearReason(containerProperties, itemState, perception, kind
     if (permission === 'NO_BECAUSE_BAD_VISION') return `Vision is not clear enough to see ${where}.`;
     if (permission === 'NO') return `Cannot see ${where}.`;
     // NOT_A_CONTAINER
+    return false;
+}
+
+/**
+ * @param {DECharacterPerception} perception
+ * @param {'carrying' | 'wearing' | 'carriedOtherCharacters'} kind
+ * @returns {false | string}
+ */
+function characterUnclearReason(perception, kind) {
+    let permission;
+    let where;
+    if (kind === 'carrying') {
+        permission = perception.canTellDetailsOfClothingOrCarriedItems;
+        where = 'carried items';
+    } else if (kind === 'wearing') {
+        permission = perception.canTellDetailsOfClothingOrCarriedItems;
+        where = 'worn items';
+    } else if (kind === 'carriedOtherCharacters') {
+        permission = perception.canTellOtherCarriedCharacters;
+        where = 'other characters they might be carrying';
+    }
+    if (permission === 'YES') {
+        return perception.hasHighPerception || perception.hasPerfectPerception
+            ? false
+            : `Perception is not sharp enough; some ${where} might be missing.`;
+    }
+
+    if (permission === 'NO_BECAUSE_BAD_VISION') return `Vision is not clear enough to see ${where}.`;
+    if (permission === 'NO') return `Cannot see ${where}.`;
     return false;
 }
 

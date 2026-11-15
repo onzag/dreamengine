@@ -615,10 +615,12 @@ export function getApparentPowerLevelFromCharacter(character) {
 }
 
 /**
+ * @param {DEObject} deObject
  * @param {DECompleteCharacterReference} character 
- * @param {DECompleteCharacterReference} inPerspectiveCharacter 
+ * @param {DECompleteCharacterReference} inPerspectiveCharacter
+ * @returns {DECharacterPerception}
  */
-export function whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharacter) {
+export function whatCanTheyMakeOfAnotherCharacter(deObject, character, inPerspectiveCharacter) {
     /**
      * number from 0 to 1, regarding how perceptive the character is
      */
@@ -632,12 +634,20 @@ export function whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharac
 
     let canTellStates = true;
     let canTellNakedness = true;
-    let canTellDetailsOfClothingOrCarriedItems = true;
+    /**
+     * @type {"YES" | "NO_BECAUSE_BAD_VISION"}
+     */
+    let canTellDetailsOfClothingOrCarriedItems = "YES";
     let canTellSpecies = true;
 
     let canTellGender = true;
     let canTellHeight = true;
     let canTellWeight = true;
+
+    /**
+     * @type {"YES" | "NO_BECAUSE_BAD_VISION"}
+     */
+    let canTellOtherCarriedCharacters = "YES";
 
     const hasPerfectPerception = inPerspectiveCharacterPerception >= 1 ||
         character.id === inPerspectiveCharacter.id ||
@@ -646,10 +656,19 @@ export function whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharac
     const hasHighPerception = (inPerspectiveCharacterPerception >= 0.75 || inPerspectiveCharacterBlindness === "partial-good" || inPerspectiveCharacterBlindness === "no") && !hasPerfectPerception;
     const hasLowPerception = inPerspectiveCharacterPerception < 0.5 && !hasPerfectPerception;
     const hasMediumPerception = inPerspectiveCharacterPerception >= 0.5 && inPerspectiveCharacterPerception < 0.75 && !hasPerfectPerception;
+
+    const stateForCharacter = deObject.stateFor[character.id];
+    if (!stateForCharacter) {
+        throw new Error(`Character ${character.id} not found in engine state.`);
+    }
+
+    const beingCarried = stateForCharacter.carryingCharactersDirectly.find(c => c.id === inPerspectiveCharacter.id);
+
     if (inPerspectiveCharacterBlindness === "full") {
         canTellStates = false;
         canTellNakedness = false;
-        canTellDetailsOfClothingOrCarriedItems = false;
+        canTellDetailsOfClothingOrCarriedItems = "NO_BECAUSE_BAD_VISION";
+        canTellOtherCarriedCharacters = "NO_BECAUSE_BAD_VISION";
         canTellSpecies = false;
         canTellGender = false;
         canTellHeight = false;
@@ -658,13 +677,14 @@ export function whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharac
         if (hasLowPerception) {
             canTellStates = false;
             canTellNakedness = false;
-            canTellDetailsOfClothingOrCarriedItems = false;
+            canTellDetailsOfClothingOrCarriedItems = "NO_BECAUSE_BAD_VISION";
+            canTellOtherCarriedCharacters = "NO_BECAUSE_BAD_VISION";
             canTellGender = false;
             canTellHeight = false;
             canTellWeight = false;
         } else if (hasMediumPerception) {
             canTellStates = false;
-            canTellDetailsOfClothingOrCarriedItems = false;
+            canTellDetailsOfClothingOrCarriedItems = "NO_BECAUSE_BAD_VISION";
         } else {
             // their perception is high enough that they can make out the standard short description of the character in all details, even if they are partially blind.
         }
@@ -674,10 +694,18 @@ export function whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharac
         // just good
     }
 
+    if (beingCarried) {
+        canTellHeight = true;
+        canTellNakedness = true;
+        canTellSpecies = true;
+        canTellOtherCarriedCharacters = "YES";
+    }
+
     return {
         canTellStates,
         canTellNakedness,
         canTellDetailsOfClothingOrCarriedItems,
+        canTellOtherCarriedCharacters,
         canTellSpecies,
         canTellGender,
         canTellHeight,
@@ -815,7 +843,7 @@ export function getPerceivedGenderOfCharacterFromPerspective(deObject, character
         };
     }
 
-    const whatCanTheyMakeOf = whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharacter);
+    const whatCanTheyMakeOf = whatCanTheyMakeOfAnotherCharacter(deObject, character, inPerspectiveCharacter);
 
     if (whatCanTheyMakeOf.canTellGender) {
         let genderAppearanceToUse = character.genderAppearance;
@@ -939,7 +967,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterId, i
         "animal": "an animal",
     }
 
-    const whatCanTheyMakeOf = whatCanTheyMakeOfAnotherCharacter(character, inPerspectiveCharacter);
+    const whatCanTheyMakeOf = whatCanTheyMakeOfAnotherCharacter(deObject, character, inPerspectiveCharacter);
 
     // we will not use this because we are assuming awareness, canSeeCharacter is used for non-aware
     // surrounding characters

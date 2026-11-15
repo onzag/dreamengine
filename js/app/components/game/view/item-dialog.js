@@ -6,7 +6,7 @@ import { createItemTags } from './item-tags.js';
 export class ItemDialog extends IdentifierDetail {
     constructor() { super(); this.kind = 'Item'; this.layout = 'item'; }
 
-    /** @param {DECharacterPerspective} perspective */
+    /** @param {DEPerspective} perspective */
     getDisplayData(perspective) {
         const id = this.getAttribute('identifier-id') || '';
         const context = getItemTreeContext(perspective);
@@ -16,7 +16,7 @@ export class ItemDialog extends IdentifierDetail {
         return { name: node.label, description: node.item.description, portrait: node.asset, content };
     }
 
-    /** @param {DECharacterPerspective} perspective */
+    /** @param {DEPerspective} perspective */
     getDebugSections(perspective) {
         const id = this.getAttribute('identifier-id') || '';
         const context = getItemTreeContext(perspective);

@@ -27,7 +27,7 @@ export class IdentifierDetail extends HTMLElement {
         super();
         this.root = this.attachShadow({ mode: 'open' });
         this.loadVersion = 0;
-        /** @type {DECharacterPerspective | null} */
+        /** @type {DEPerspective | null} */
         this.currentPerspective = null;
         this.kind = 'Details';
         this.layout = 'location';
@@ -107,11 +107,11 @@ app-asset-image::part(asset-image-container) { border-radius: .8vh; }
 
     disconnectedCallback() { this.loadVersion++; }
 
-    /** @param {DECharacterPerspective} perspective @returns {IdentifierDetailData} */
+    /** @param {DEPerspective} perspective @returns {IdentifierDetailData} */
     getDisplayData(perspective) { throw new Error('A detail view must provide its display data.'); }
 
     /** Debug-only sections to inspect the perspective data that produced this view.
-     * @param {DECharacterPerspective} perspective @returns {Promise<DebugSection[]> | DebugSection[]} */
+     * @param {DEPerspective} perspective @returns {Promise<DebugSection[]> | DebugSection[]} */
     getDebugSections(perspective) { return []; }
 
     async load() {

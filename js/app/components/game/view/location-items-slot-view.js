@@ -9,7 +9,7 @@ export class LocationItemsSlotView extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
-        /** @type {DECharacterPerspective | null} */
+        /** @type {DEPerspective | null} */
         this.currentPerspective = null;
     }
 
@@ -53,7 +53,7 @@ app-asset-image::part(asset-image-container) { border-radius: .5vh; }
         this.updatePerspective(this.currentPerspective || getPerspectiveFor(this.parentNode));
     }
 
-    /** @param {DECharacterPerspective | null} perspective */
+    /** @param {DEPerspective | null} perspective */
     updatePerspective(perspective) {
         this.currentPerspective = perspective;
         const article = this.root.querySelector('article');

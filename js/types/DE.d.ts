@@ -3969,13 +3969,28 @@ declare interface DEItemPerception {
     hasHighPerception: boolean;
 }
 
-declare interface DECharacterPerspectiveCharacter {
+declare interface DECharacterPerception {
+    canTellStates: boolean;
+    canTellNakedness: boolean;
+    canTellDetailsOfClothingOrCarriedItems: "YES" | "NO_BECAUSE_BAD_VISION";
+    canTellOtherCarriedCharacters: "YES" | "NO_BECAUSE_BAD_VISION";
+    canTellSpecies: boolean;
+    canTellGender: boolean;
+    canTellHeight: boolean;
+    canTellWeight: boolean;
+    hasLowPerception: boolean;
+    hasMediumPerception: boolean;
+    hasHighPerception: boolean;
+    hasPerfectPerception: boolean;
+}
+
+declare interface DEPerspectiveCharacter {
     /** Memory retention of this sighting, using the same levels as items. */
-    memory: DEItemInPerspective["memory"];
+    memory: DEPerspectiveMemory;
     /**
      * Metadata of the character that is in perspective at that moment in time, this includes all the character's attributes, states, and other properties
      */
-    characterMetadata: Record<string, any>;
+    metadata: Record<string, any>;
     /**
      * Id of the character that is in perspective at that moment in time, this is used to identify the character in the world and to access its properties
      */
@@ -3984,26 +3999,26 @@ declare interface DECharacterPerspectiveCharacter {
      * Name of the character as known by the perspective character at the time
      * complex form with nicknames and aliases, this is the most complete form of the character's name
      */
-    characterNameComplex: string;
+    nameComplex: string;
     /**
      * Name of the character as known by the perspective character at the time
      * simple form as how the character would usually refer to them
      */
-    characterNameSimple: string;
+    nameSimple: string;
     /**
      * Name of the character in the definite form
      * will be the same as characterName if the character is known by the perspective character at the time, otherwise it will be a generic name such as "the person" or "the stranger"
      */
-    characterNameDefinite: string;
+    nameDefinite: string;
     /**
      * Name of the character in the indefinite form
      * will be the same as characterName if the character is known by the perspective character at the time, otherwise it will be a generic name such as "a person" or "a stranger"
      */
-    characterNameIndefinite: string;
+    nameIndefinite: string;
     /**
      * All the names of the character as known by the perspective character at the time, this includes nicknames, aliases, and other names that the character might be known by
      */
-    characterAllNames: string[];
+    allNames: string[];
     /**
      * Bond level at the time, for self it is 0
      */
@@ -4049,19 +4064,17 @@ declare interface DECharacterPerspectiveCharacter {
     canTellWeight: boolean;
     /**
      * Height of the other character in centimeters, as known by the perspective character at the time
-     * this will be 0 if the character cannot tell the height of the other character
      */
-    characterHeightCm: number;
+    heightCm: number;
     /**
      * Weight of the other character in kilograms, as known by the perspective character at the time
-     * this will be 0 if the character cannot tell the weight of the other character
      */
-    characterWeightKg: number;
+    weightKg: number;
     /**
      * External description of the character as known by the perspective character at the time, this includes their appearance, clothing, and other relevant information if any
      * if their perception is not good enough, this will be a generic description of the character, such as "a person" or "a stranger"
      */
-    characterExternalDescription: string;
+    externalDescription: string;
     /**
      * The external description of the character for the user, this is a simplified description that misses LLM specific instructions and is meant to be fed to the user
      * instead of the LLM, this is used to avoid giving the user too much information that the LLM might use to infer things about the world that the user should not be given
@@ -4069,37 +4082,157 @@ declare interface DECharacterPerspectiveCharacter {
      * Initially created because characterExternalDescription contains the pronouns and perceived gender, but "user" does not track bonds and relationships and keeps
      * everything in the perceived state
      */
-    characterExternalDescriptionForUser: string;
+    externalDescriptionForUser: string;
     /**
      * Description of the character as seen or perceived by the perspective character at the time
      */
-    characterPlaceAndPostureDescription: string;
+    placeAndPostureDescription: string;
+    /**
+     * Whether the character was percieved or right away seen as visible
+     * self is always visible
+     */
+    perceptionForm: DEVisibility;
+    /**
+     * Whether the character can tell what the other character is wearing or carrying at that moment in time
+     */
+    canTellDetailsOfClothingOrCarriedItems: boolean;
+    /**
+     * Whether the clothing of the character is unclear to the perspective character at that moment in time
+     * and if so, the reason
+     */
+    clothingIsUnclear: false | string;
+    /**
+     * Whether the items that the character is carrying are unclear to the perspective character at that moment in time
+     * and if so, the reason
+     */
+    carriedItemsIsUnclear: false | string;
+    /**
+     * Whether the other characters that the character is carrying are unclear to the perspective character at that moment in time
+     * and if so, the reason
+     */
+    otherCarriedCharactersIsUnclear: false | string;
+    /**
+     * Whether the character can tell other characters that the character is carrying at that moment in time
+     */
+    canTellOtherCarriedCharacters: boolean;
+    /**
+     * Items that the character is carrying at that moment in time, this includes all the items that the character has in their inventory, pockets, bags, etc.
+     * This is a recursive structure that includes the items that are inside or on top of the items that the character is carrying, as well as the items that are being carried by other characters that are in perspective
+     */
+    carryingItems: Array<DEItemInPerspective>;
+    /**
+     * Items that the character is carrying at that moment in time but missing from the perspective character perception
+     */
+    missingCarryingItems: Array<DEItemInPerspective>;
+    /**
+     * Items that the character is wearing at that moment in time, this includes all the items that the character has on their body, such as clothing, armor, accessories, etc.
+     */
+    wearingItems: Array<DEItemInPerspective>;
+    /**
+     * Items that the character is wearing at that moment in time but missing from the perspective character perception
+     */
+    missingWearingItems: Array<DEItemInPerspective>;
+    /**
+     * Ids of other characters that the character is carrying at that moment in time, this includes all the characters that the character has in their inventory, pockets, bags, etc.
+     */
+    carryingOtherCharacters: string[];
+    missingCarryingOtherCharacters: string[];
+    /**
+     * States that the character has at that moment in time, this includes all the states that the character has, such as health, mood, status effects, etc.
+     */
+    states: Array<DECharacterStateInPerspective>;
+
+    hasSeenFor: DETimeDurationDescription;
+    hasSeenSince: DETimeDescription;
+
+    // taken from DEPerspectiveCharacterMemory, but optional because the character might not have seen this character yet before
+    lastSeen: DETimeDescription | null;
+    lastSeenDuration: DETimeDurationDescription | null;
+    lastSeenLocationId: string | null;
+    lastSeenLocationName: string | null;
+    lastSeenWithCharacters: Array<{
+        id: string;
+        name: string;
+    }> | null;
+    lastSeenOtherRememberedLocations: Array<{
+        memory: DEPerspectiveMemory;
+        locationId: string;
+        locationName: string;
+        duration: DETimeDurationDescription;
+        slotId?: string;
+        slotName?: string;
+    }> | null;
+}
+
+declare interface DEPerspectiveCharacterMemory {
+    /** Memory retention of this sighting, using the same levels as items. */
+    memory: DEPerspectiveMemory;
+    /**
+     * Id of the character that is in perspective at that moment in time, this is used to identify the character in the world and to access its properties
+     */
+    characterId: string;
+    /**
+     * Name of the character as known by the perspective character at the time
+     * complex form with nicknames and aliases, this is the most complete form of the character's name
+     */
+    characterNameComplex: string;
+    /**
+     * Name of the character as known by the perspective character at the time
+     * simple form as how the character would usually refer to them
+     */
+    characterNameSimple: string;
+    /**
+     * Name of the character in the definite form
+     * will be the same as characterName if the character is known by the perspective character at the time, otherwise it will be a generic name such as "the person" or "the stranger"
+     */
+    characterNameDefinite: string;
+    /**
+     * Name of the character in the indefinite form
+     * will be the same as characterName if the character is known by the perspective character at the time, otherwise it will be a generic name such as "a person" or "a stranger"
+     */
+    characterNameIndefinite: string;
     /**
      * Whether the character was percieved or right away seen as visible
      * self is always visible
      */
     perceptionForm: "visible" | "perceived";
     /**
-     * Whether the character can tell what the other character is wearing or carrying at that moment in time
-     */
-    canTellDetailsOfClothingOrCarriedItems: boolean;
-    /**
-     * Items that the character is carrying at that moment in time, this includes all the items that the character has in their inventory, pockets, bags, etc.
-     * This is a recursive structure that includes the items that are inside or on top of the items that the character is carrying, as well as the items that are being carried by other characters that are in perspective
-     */
-    characterCarryingItems: Array<DEItemInPerspective>;
-    /**
-     * Items that the character is wearing at that moment in time, this includes all the items that the character has on their body, such as clothing, armor, accessories, etc.
-     */
-    characterWearingItems: Array<DEItemInPerspective>;
-    /**
-     * Ids of other characters that the character is carrying at that moment in time, this includes all the characters that the character has in their inventory, pockets, bags, etc.
-     */
-    characterCarryingOtherCharactersIds: string[];
-    /**
      * States that the character has at that moment in time, this includes all the states that the character has, such as health, mood, status effects, etc.
      */
     states: Array<DECharacterStateInPerspective>;
+    /**
+     * The slot id of the location if remembered
+     */
+    slotId: string | null;
+    /**
+     * The slot name of the location if remembered
+     */
+    slotName: string | null;
+    /**
+     * last time it was seen
+     */
+    lastSeen: DETimeDescription;
+    carryingItems: Array<DEItemInPerspective>;
+    wearingItems: Array<DEItemInPerspective>;
+    carryingOtherCharacters: Array<string>;
+    /**
+     * For how long it was last seen
+     */
+    lastSeenDuration: DETimeDurationDescription;
+    lastSeenLocationId: string;
+    lastSeenLocationName: string;
+    lastSeenWithCharacters: Array<{
+        id: string;
+        name: string;
+    }>;
+    lastSeenOtherRememberedLocations: Array<{
+        memory: DEPerspectiveMemory;
+        locationId: string;
+        locationName: string;
+        duration: DETimeDurationDescription;
+        slotId?: string;
+        slotName?: string;
+    }>;
 }
 
 declare interface DECharacterStateInPerspective {
@@ -4150,17 +4283,37 @@ declare interface DEItemInPerspective extends Omit<DEItem, "id"> {
      */
     ontop: Array<DEItemInPerspective>;
     /**
+     * Missing items that are supposed to be on top but the character in perspective cannot see them
+     */
+    missingOntop: Array<DEItemInPerspective>;
+    /**
      * List of items contained in this item, if any, that are in perspective at that moment in time
      */
     containing: Array<DEItemInPerspective>;
+    /**
+     * Missing items that are supposed to be contained but the character in perspective cannot see them
+     * 
+     * check the reason of why it is unclear and why there might be something here
+     */
+    missingContaining: Array<DEItemInPerspective>;
     /**
      * List of characters that are in this item, if any, that are in perspective at that moment in time
      */
     containingCharacters: Array<string>;
     /**
+     * Missing characters that are supposed to be contained but the character in perspective cannot see them
+     * check the reason of why it is unclear and why there might be something here
+     */
+    missingContainingCharacters: Array<string>;
+    /**
      * List of characters that are on top of this item, if any, that are in perspective at that moment in time
      */
     ontopCharacters: Array<string>;
+    /**
+     * List on on top characters that are missing from the list, check the reason of why it is unclear and why there might
+     * be something here
+     */
+    missingOntopCharacters: Array<string>;
     /**
      * Whether the contents of this item can be seen by the character in perspective or not
      * this is specific canSeeContents is either true or false, if false the contentsIsUnclear will specify
@@ -4183,30 +4336,38 @@ declare interface DEItemInPerspective extends Omit<DEItem, "id"> {
      * Whether the items on top of this item are clear of not, if not clear, a string describing why they are unclear
      */
     ontopIsUnclear: false | string;
+    canTellTheirVolume: boolean;
+    canTellTheirWeight: boolean;
 
     /**
      * Memory storage of the item, this is used to rationalize how the character remembers the item
      * and is affected by their attention
      */
-    memory: {
-        /**
-         * Level 0, the item is forgotten immediately, the character has no memory of it
-         * Level 1, the item is remembered for five minutes
-         * Level 2, the item is remembered for a day
-         * Level 3, the item is remembered for a week
-         * Level 4, the item is remembered for thirty days
-         * Level 5, the item is never forgotten
-         */
-        level: 0 | 1 | 2 | 3 | 4 | 5;
-        /** The unrounded memory score. */
-        softLevel: number;
-    }
+    memory: DEPerspectiveMemory;
+}
+
+declare interface DEPerspectiveMemory {
+    /**
+     * Level 0, the item is forgotten immediately, the character has no memory of it
+     * Level 1, the item is remembered for five minutes
+     * Level 2, the item is remembered for a day
+     * Level 3, the item is remembered for a week
+     * Level 4, the item is remembered for thirty days
+     * Level 5, the item is never forgotten
+     */
+    level: 0 | 1 | 2 | 3 | 4 | 5;
+    /** The unrounded memory score. */
+    softLevel: number;
+    /**
+     * When the memory was created, this is used to determine how long the character has remembered the item
+     */
+    createdTime: number;
 }
 
 /**
  * A location slot in perspective, including the items and characters that are in it, as well as the metadata of the slot
  */
-declare interface DECharacterPerspectiveLocationSlot {
+declare interface DEPerspectiveLocationSlot {
     /**
      * the metadata of the location slot that is in perspective at that moment in time
      */
@@ -4224,6 +4385,11 @@ declare interface DECharacterPerspectiveLocationSlot {
      */
     items: Array<DEItemInPerspective>;
     /**
+     * Items missing from the location slot perspective by the character, this means the character cannot
+     * see them and what the character is missing them
+     */
+    missingItems: Array<DEItemInPerspective>;
+    /**
      * Whether the items on this slot (straight on) can be seen by the character in perspective or not
      * this is specific canSeeItems is either true or false, if false the itemListsAreUnclear will specify
      * why, but otherwise it can be said it can see the items on top but unclear if itemListsAreUnclear gives a reason
@@ -4240,7 +4406,12 @@ declare interface DECharacterPerspectiveLocationSlot {
      * 
      * Note that this list does not include the character in perspective, use self to access it
      */
-    characters: Array<DECharacterPerspectiveCharacter>;
+    characters: Array<string>;
+    /**
+     * Characters missing from the location slot perspective by the character, this means the character cannot
+     * see them and what the character is missing
+     */
+    missingCharacters: Array<string>;
     /**
      * Whether the characters at the location slot can be seen by the character in perspective or not, if not, a string describing why they are unclear
      * this is specific canSeeCharacters is either true or false, if false the characterListsAreUnclear will specify
@@ -4259,10 +4430,67 @@ declare interface DECharacterPerspectiveLocationSlot {
     description: string;
 }
 
+declare interface DEPerspectiveLocationSlotMemory {
+    /**
+     * the location slot ID of the location slot that is in perspective at that moment in time
+     */
+    slotId: string;
+    /**
+     * the location slot name of the location slot that is in perspective at that moment in time
+     */
+    slotName: string;
+    /**
+     * The items that are in the location slot at that moment in time
+     */
+    items: Array<DEItemInPerspective>;
+}
+
+declare interface DEPerspectiveLocationMemory {
+    /**
+     * Memory of the location
+     */
+    memory: DEPerspectiveMemory;
+    /**
+     * The location ID of the location that is in perspective at that moment in time
+     */
+    locationId: string;
+    /**
+     * The location name 
+     */
+    locationName: string;
+    /**
+     * The memory of the location slot that is in perspective at that moment in time
+     */
+    slots: Array<DEPerspectiveLocationSlotMemory>;
+    /**
+     * Memory on when the character last was in the location
+     */
+    lastBeen: DETimeDescription;
+    /**
+     * Memory for how long the character was in the location
+     */
+    lastBeenForTime: DETimeDurationDescription;
+    /**
+     * Mirror of hasBeenTimesExact, but for memory, this is the exact number of times the character has been in the location
+     * do not use this against character knowledge as it is "too accurate"
+     */
+    hasBeenTimesExact: number;
+    /**
+     * Mirror of hasBeenTimesEstimate, but for memory, this is the estimated number of times the character has been in the location
+     * this is a rough estimate and should be used for character knowledge
+     * as they remember it, it can be "some" or "many" if they don't remember the exact number
+     */
+    hasBeenTimesEstimate: number | "some" | "many";
+}
+
 /**
  * Location in perspective
  */
-declare interface DECharacterPerspectiveLocation {
+declare interface DEPerspectiveLocation {
+    /**
+     * Memory of the location
+     */
+    memory: DEPerspectiveMemory;
     /**
      * The metadata of the location that is in perspective at that moment in time
      */
@@ -4282,12 +4510,31 @@ declare interface DECharacterPerspectiveLocation {
     /**
      * The available slots in the location
      */
-    slots: Array<DECharacterPerspectiveLocationSlot>;
+    slots: Array<DEPerspectiveLocationSlot>;
     /**
      * The description of the location in the rich format
      * that needs to use parseNarration
      */
     description: string;
+    /**
+     * Duration since the character has been in the locaation
+     */
+    hasBeenSince: DETimeDescription;
+    /**
+     * Duration for how long the character has been in the location
+     */
+    hasBeenFor: DETimeDurationDescription;
+    /**
+     * The exact number of times the character has been in the location
+     * do not use this against character knowledge as it is "too accurate"
+     */
+    hasBeenTimesExact: number;
+    /**
+     * The estimated number of times the character has been in the location
+     * this is a rough estimate and should be used for character knowledge
+     * as they remember it, it can be "some" or "many" if they don't remember the exact number
+     */
+    hasBeenTimesEstimate: number | "some" | "many";
 }
 
 /**
@@ -4295,12 +4542,12 @@ declare interface DECharacterPerspectiveLocation {
  * perspective is a snapshot of the world from the character's point of view, including their own state, the state of other characters, and the state of locations and items they can perceive
  * as they perceive them; one character's perspective is not necessarily the same as another's.
  */
-declare interface DECharacterPerspective {
+declare interface DEPerspective {
     /**
      * The self character perspective, this is the perspective of the character that is in perspective at that moment in time
      * from their own point of view, including their own state, the state of other characters, and the state of locations and items they can perceive
      */
-    self: DECharacterPerspectiveCharacter;
+    self: DEPerspectiveCharacter;
     /**
      * The character ID of the character that is in perspective at that moment in time
      */
@@ -4328,15 +4575,36 @@ declare interface DECharacterPerspective {
     /**
      * The current location of the character in perspective
      */
-    ownLocation: DECharacterPerspectiveLocation;
+    ownLocation: DEPerspectiveLocation;
+    /**
+     * Array of remembered locations
+     */
+    rememberedLocations: DEPerspectiveLocationMemory[];
+    /**
+     * Array of remembered characters
+     * this does not include visible or perceived perspectiveCharacters
+     */
+    rememberedCharacters: DEPerspectiveCharacterMemory[];
+    /**
+     * Characters in perspective that are available at the time
+     * 
+     * This includes non-visible characters
+     */
+    perspectiveCharacters: DEPerspectiveCharacter[];
     /**
      * Whether the character is perceiving the world blind or not
      */
     ownCharacterBlindness: "no" | "partial-good" | "partial-bad" | "full";
     /**
-     * Social groups
+     * Social groups in perspective, does not include characters the perspective
+     * cannot see
      */
     socialGroups: DESocialGroupInPerspective;
+    /**
+     * Social groups in objective perspective, this includes all the characters
+     * including those that the character isn't aware of
+     */
+    objectiveSocialGroups: DEObjectiveSocialGroupsInPerspective;
     /**
      * The time when the perspective was taken
      */
@@ -4347,29 +4615,34 @@ declare interface DECharacterPerspective {
     worldMetadata: Record<string, any>;
 }
 
-declare interface DESocialGroupInPerspective {
-    /**
-     * Whether the characters at the group slot can be seen by the character in perspective or not
-     */
-    canSeeCharacters: boolean;
-    /**
-     * Whether the characters in the groups slot are clear of not, if not clear, a string describing why they are unclear
-     */
-    characterListsAreUnclear: false | string;
-
+declare interface DEObjectiveSocialGroupsInPerspective {
     /**
      * The characters that are in the same social group as the character in perspective, this includes all the characters that are in the same social group as the character in perspective, including the character in perspective themselves
      */
-    soloCharacters: Array<DECharacterPerspectiveCharacter>;
+    soloCharacters: Array<string>;
+
     /**
      * The characters that are in the same social group as the character in perspective, this includes all the characters that are in the same social group as the character in perspective, excluding the character in perspective themselves
      * this list is guaranteed to be accurate and complete, as it is derived from the character's own perspective and knowledge of their social group
      */
-    ownGroup: Array<DECharacterPerspectiveCharacter>;
+    ownGroup: Array<string>;
+
     /**
      * Character in another social group that is not the same
      */
-    otherGroups: Array<Array<DECharacterPerspectiveCharacter>>;
+    otherGroups: Array<Array<string>>;
+}
+
+declare interface DESocialGroupsInPerspective extends DEObjectiveSocialGroupsInPerspective {
+    /**
+     * Whether the characters at the group slot can be seen by the character in perspective or not
+     */
+    canSeeCharacters: boolean;
+
+    /**
+     * Whether the characters in the groups slot are clear of not, if not clear, a string describing why they are unclear
+     */
+    characterListsAreUnclear: false | string;
 }
 
 declare interface DESurroundingCharacters {
@@ -4525,8 +4798,6 @@ declare interface DEUtils {
          * @param location Location reference or ID.
          */
         getDescriptionOfLocation(location: DELocation | string, inPerspectiveOf: DECompleteCharacterReference | string): Promise<string>;
-        /** Describe a slot using the observer's vision; accepts a slot reference or globally unique slot ID. */
-        getDescriptionOfLocationSlot(slot: DELocationSlot | string, inPerspectiveOf: DECompleteCharacterReference | string): Promise<string>;
         /** Describe a slot within a particular location, validating that it belongs there. */
         getDescriptionOfLocationSlot(location: DELocation | string, slot: DELocationSlot | string, inPerspectiveOf: DECompleteCharacterReference | string): Promise<string>;
     },
@@ -4617,25 +4888,13 @@ declare interface DEUtils {
     },
     characterInfo: {
         getSurroundingCharacters(char: DECompleteCharacterReference | string, inPerspective: boolean): Promise<DESurroundingCharacters>;
-        getPerspective(char: DECompleteCharacterReference | string): Promise<DECharacterPerspective>;
-        getStoredPerspective(perspectiveId: string): Promise<DECharacterPerspective | null>;
+        getPerspective(char: DECompleteCharacterReference | string, destroyedItemsIds?: string[]): Promise<DEPerspective>;
+        getStoredPerspective(perspectiveId: string): Promise<DEPerspective | null>;
         /** Group directly carried items by equality ignoring ids, returning the first item and count for each group. */
         getRepresentativeCarrying(char: DECompleteCharacterReference | string): Array<{ item: DEItem; amount: number }>;
         /** Group directly worn items by equality ignoring ids, returning the first item and count for each group. */
         getRepresentativeWearing(char: DECompleteCharacterReference | string): Array<{ item: DEItem; amount: number }>;
-        whatCanTheyMakeOfAnotherCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf: DECompleteCharacterReference | string): {
-            canTellStates: boolean;
-            canTellNakedness: boolean;
-            canTellDetailsOfClothingOrCarriedItems: boolean;
-            canTellSpecies: boolean;
-            canTellGender: boolean;
-            canTellHeight: boolean;
-            canTellWeight: boolean;
-            hasLowPerception: boolean;
-            hasMediumPerception: boolean;
-            hasHighPerception: boolean;
-            hasPerfectPerception: boolean;
-        };
+        whatCanTheyMakeOfAnotherCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf: DECompleteCharacterReference | string): DECharacterPerception;
         /** Resolve character visibility using location, sensory resolution and awareness of conversation partners or carriers. */
         canSeeCharacter(char: DECompleteCharacterReference | string, inPerspectiveOf?: DECompleteCharacterReference | string | null): DEVisibility;
         getInternalDescriptionOfCharacter(char: DECompleteCharacterReference | string): Promise<DEInternalDescriptionOfCharacter>;
@@ -5257,15 +5516,15 @@ declare interface DEDatabaseConversationFns {
 
 declare interface DEDatabasePerspectiveFns {
     /** Serialize a character perspective snapshot as a JSON document and return its new storage id. */
-    storePerspective(perspective: DECharacterPerspective): Promise<string>;
+    storePerspective(perspective: DEPerspective): Promise<string>;
     /** Retrieve a stored character perspective snapshot by its id, or null if absent. */
-    getPerspectiveById(perspectiveId: string): Promise<DECharacterPerspective | null>;
+    getPerspectiveById(perspectiveId: string): Promise<DEPerspective | null>;
     /** This observer's most recently stored snapshot, without memory filtering; null if absent. */
-    getLastPerspectiveOfCharacter(charId: string): Promise<DECharacterPerspective | null>;
-    /** Latest sighting remembered at useMemoryFromTime (story Unix milliseconds); excludes future snapshots. */
-    getLatestPerspectiveWithCharacter(charId: string, otherCharId: string, useMemoryFromTime: number): Promise<DECharacterPerspective | null>;
-    /** Same memory/time filtering for items, optionally requiring an open-container sighting. */
-    getLatestPerspectiveWithItem(charId: string, itemId: string, useMemoryFromTime: number, openContainerOnly?: boolean): Promise<DECharacterPerspective | null>;
+    getLastPerspectiveOfCharacter(charId: string): Promise<DEPerspective | null>;
+    /** This observer's most recently stored sighting of the character; null if absent. */
+    getLatestPerspectiveWithCharacter(charId: string, otherCharId: string): Promise<DEPerspective | null>;
+    /** This observer's most recently stored sighting of the item; null if absent. */
+    getLatestPerspectiveWithItem(charId: string, itemId: string): Promise<DEPerspective | null>;
 }
 
 declare interface DEDatabase extends DEDatabaseConversationFns, DEDatabasePerspectiveFns, DETransactionFns {

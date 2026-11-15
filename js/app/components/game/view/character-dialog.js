@@ -6,7 +6,7 @@ import { getPerspectiveIndex } from './perspective-data.js';
 export class CharacterDialog extends IdentifierDetail {
     constructor() { super(); this.kind = 'Character'; this.layout = 'character'; }
 
-    /** @param {DECharacterPerspective} perspective */
+    /** @param {DEPerspective} perspective */
     getDisplayData(perspective) {
         const id = this.getAttribute('identifier-id') || '';
         const character = getPerspectiveIndex(perspective).characters.get(id);
@@ -14,16 +14,16 @@ export class CharacterDialog extends IdentifierDetail {
         const context = getItemTreeContext(perspective);
         const content = createItemTree(loadCharacterItemGroups(id, context), context);
         return {
-            name: character.characterNameComplex,
-            description: character.characterExternalDescriptionForUser,
+            name: character.nameComplex,
+            description: character.externalDescriptionForUser,
             states: character.states,
-            portrait: character.characterMetadata.assets?.neutral || '',
-            banner: character.characterMetadata.banner || '',
+            portrait: character.metadata.assets?.neutral || '',
+            banner: character.metadata.banner || '',
             content,
         };
     }
 
-    /** @param {DECharacterPerspective} perspective */
+    /** @param {DEPerspective} perspective */
     async getDebugSections(perspective) {
         const id = this.getAttribute('identifier-id') || '';
         const character = getPerspectiveIndex(perspective).characters.get(id);

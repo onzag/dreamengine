@@ -28,7 +28,7 @@ textarea { display: block; resize: vertical; width: 100%; min-height: 10vh; max-
         this.drafts = new Map();
         this.draftKey = '';
         this.userKey = '';
-        /** @type {DECharacterPerspective | null} */
+        /** @type {DEPerspective | null} */
         this.currentPerspective = null;
         this.enabled = false;
         this.form.addEventListener('submit', event => { event.preventDefault(); this.submit(); });
@@ -46,7 +46,7 @@ textarea { display: block; resize: vertical; width: 100%; min-height: 10vh; max-
         });
     }
 
-    /** @param {DECharacterPerspective | null} perspective @param {string} draftKey */
+    /** @param {DEPerspective | null} perspective @param {string} draftKey */
     updateUser(perspective, draftKey) {
         this.currentPerspective = perspective;
         if (this.draftKey !== draftKey) {
@@ -55,10 +55,10 @@ textarea { display: block; resize: vertical; width: 100%; min-height: 10vh; max-
         }
         if (this.form.hidden) this.form.hidden = false;
         if (!this.submitted.hidden) this.submitted.hidden = true;
-        const name = perspective?.ownName || perspective?.self.characterNameSimple || 'Player';
-        const image = perspective?.self.characterMetadata.assets?.neutral || '';
+        const name = perspective?.ownName || perspective?.self.nameSimple || 'Player';
+        const image = perspective?.self.metadata.assets?.neutral || '';
         const id = perspective?.self.characterId || '';
-        const description = perspective?.self.characterExternalDescriptionForUser || '';
+        const description = perspective?.self.externalDescriptionForUser || '';
         const key = JSON.stringify([name, image, id, description]);
         if (key === this.userKey) return;
         this.userKey = key;

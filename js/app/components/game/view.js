@@ -19,7 +19,7 @@ export class GameView extends HTMLElement {
         this.currentPerspectiveId = this.getAttribute('initial-perspective-id') || '';
 
         /**
-         * @type {DECharacterPerspective | null}
+         * @type {DEPerspective | null}
          */
         this.currentPerspective = null;
         this.identityVersion = 0;
@@ -445,7 +445,7 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
     onMessageInput(text) { console.log('User message:', text); }
 
     /**
-     * @param {DECharacterPerspective} perspective
+     * @param {DEPerspective} perspective
      */
     async playThemeSongOfPerspective(perspective) {
         try {

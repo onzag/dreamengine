@@ -35,7 +35,7 @@ kbd { opacity: .7; margin-left: 1vh; }
         this.prev = /** @type {HTMLButtonElement} */ (this.root.querySelector('.prev'));
         this.next = /** @type {HTMLButtonElement} */ (this.root.querySelector('.next'));
         this.loading = /** @type {HTMLElement} */ (this.root.querySelector('.loading'));
-        /** @type {DECharacterPerspective | null} */
+        /** @type {DEPerspective | null} */
         this.currentPerspective = null;
         /** @type {(() => void | Promise<void>) | null} */
         this.onNext = null;
@@ -119,7 +119,7 @@ kbd { opacity: .7; margin-left: 1vh; }
     }
 
     /**
-     * @param {DECharacterPerspective | null} perspective
+     * @param {DEPerspective | null} perspective
      * @param {DEConversation | null} conversation
      * @param {DEConversationMessage | null} message
      * @param {DEConversationMessageDialogue | DEConversationMessageNarration | DEConversationMessageThought | null} content
@@ -154,7 +154,7 @@ kbd { opacity: .7; margin-left: 1vh; }
     }
 
     renderControls() {
-        const userName = this.currentPerspective?.ownName || this.currentPerspective?.self.characterNameSimple || 'Player';
+        const userName = this.currentPerspective?.ownName || this.currentPerspective?.self.nameSimple || 'Player';
         const key = JSON.stringify([this.hasCurrent, this.isInputMode, this.frozenKey, this.processing,
             this.hasPrev, this.hasNext, this.navigating, this.messageObject.streaming, userName]);
         if (key === this.controlsKey) return;

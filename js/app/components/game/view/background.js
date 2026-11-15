@@ -3,7 +3,7 @@ export class Background extends HTMLElement {
         super();
         this.defaultBackground = new URL('../../../images/default-world.png', import.meta.url).href;
         this.root = this.attachShadow({ mode: 'open' });
-        /** @type {DECharacterPerspective | null} */
+        /** @type {DEPerspective | null} */
         this.currentPerspective = null;
     }
 
@@ -25,7 +25,7 @@ img[hidden] { display: none; }
         this.updatePerspective(this.currentPerspective);
     }
 
-    /** @param {DECharacterPerspective | null} perspective */
+    /** @param {DEPerspective | null} perspective */
     updatePerspective(perspective) {
         this.currentPerspective = perspective;
         const image = this.root.querySelector('img');

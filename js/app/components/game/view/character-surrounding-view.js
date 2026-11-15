@@ -9,14 +9,14 @@ import { createCharacterTags } from './character-tags.js';
 
 /** @typedef {import('./surrounding-groups.js').SurroundingCharacter} SurroundingCharacter */
 /** @typedef {import('./surrounding-groups.js').SurroundingGroup} SurroundingGroup */
-/** @typedef {{location: string, locationName: string, blindness: DECharacterPerspective['ownCharacterBlindness'], notice: string, groups: SurroundingGroup[]}} SurroundingsDisplayData */
+/** @typedef {{location: string, locationName: string, blindness: DEPerspective['ownCharacterBlindness'], notice: string, groups: SurroundingGroup[]}} SurroundingsDisplayData */
 
 export class CharacterSurroundingView extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
         this.lifecycle = 0;
-        /** @type {DECharacterPerspective | null} */
+        /** @type {DEPerspective | null} */
         this.currentPerspective = null;
         /** @type {Map<string, {element: HTMLElement, placement: string, primary: boolean}>} */
         this.cards = new Map();
@@ -80,7 +80,7 @@ figcaption { margin-top: .6vh; line-height: 1.25; }
         this.animations.clear();
     }
 
-    /** @param {DECharacterPerspective | null} perspective */
+    /** @param {DEPerspective | null} perspective */
     updatePerspective(perspective) {
         this.currentPerspective = perspective;
         if (!perspective) {

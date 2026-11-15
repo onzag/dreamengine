@@ -1,22 +1,22 @@
 /** Snapshot lookups shared by views, narration and identifier dialogs. */
 
-/** @param {Node | null} node @returns {DECharacterPerspective | null} */
+/** @param {Node | null} node @returns {DEPerspective | null} */
 export function getPerspectiveFor(node) {
     while (node) {
         if ('currentPerspective' in node) {
-            return /** @type {{currentPerspective: DECharacterPerspective | null}} */ (node).currentPerspective;
+            return /** @type {{currentPerspective: DEPerspective | null}} */ (node).currentPerspective;
         }
         node = node.parentNode || (node instanceof ShadowRoot ? node.host : null);
     }
     return null;
 }
 
-/** @type {WeakMap<DECharacterPerspective, ReturnType<typeof buildIndex>>} */
+/** @type {WeakMap<DEPerspective, ReturnType<typeof buildIndex>>} */
 const indexes = new WeakMap();
 
-/** @param {DECharacterPerspective} perspective */
+/** @param {DEPerspective} perspective */
 function buildIndex(perspective) {
-    /** @type {Map<string, DECharacterPerspectiveCharacter>} */
+    /** @type {Map<string, DEPerspectiveCharacter>} */
     const characters = new Map();
     /** @type {Map<string, DEItemInPerspective>} */
     const items = new Map();
@@ -29,23 +29,21 @@ function buildIndex(perspective) {
             if (item.canSeeOntop) addItems(item.ontop);
         }
     };
-    const { socialGroups } = perspective;
-    const visibleCharacters = [perspective.self, ...socialGroups.ownGroup,
-        ...socialGroups.soloCharacters, ...socialGroups.otherGroups.flat(),
-        ...perspective.ownLocation.slots.flatMap(slot => slot.characters)];
+    const visibleCharacters = [perspective.self,
+        ...perspective.perspectiveCharacters.filter(character => character.perceptionForm !== 'invisible')];
     for (const character of visibleCharacters) {
         if (characters.has(character.characterId)) continue;
         characters.set(character.characterId, character);
         if (character.canTellDetailsOfClothingOrCarriedItems) {
-            addItems(character.characterCarryingItems);
-            addItems(character.characterWearingItems);
+            addItems(character.carryingItems);
+            addItems(character.wearingItems);
         }
     }
     for (const slot of slots.values()) if (slot.canSeeItems) addItems(slot.items);
     return { characters, items, slots };
 }
 
-/** @param {DECharacterPerspective} perspective */
+/** @param {DEPerspective} perspective */
 export function getPerspectiveIndex(perspective) {
     let index = indexes.get(perspective);
     if (!index) {

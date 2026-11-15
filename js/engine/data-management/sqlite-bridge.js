@@ -95,64 +95,34 @@ function numericId(value, prefix) {
     return Number.isSafeInteger(id) ? id : null;
 }
 
-/** @param {DECharacterPerspective} perspective */
+/** @param {DEPerspective} perspective */
 function perspectiveMembership(perspective) {
-    /** @type {Map<string, {level: number, softLevel: number}>} */
-    const items = new Map();
-    /** @type {Map<string, {level: number, softLevel: number}>} */
-    const openContainers = new Map();
-    /** @type {Map<string, {level: number, softLevel: number}>} */
-    const characters = new Map([[perspective.ownId, { level: 0, softLevel: 0 }]]);
-    /**
-     * @param {Map<string, {level: number, softLevel: number}>} entries
-     * @param {string} id
-     * @param {number} level
-     * @param {number} [softLevel=level]
-     */
-    function remember(entries, id, level, softLevel = level) {
-        if (!Number.isInteger(level) || level < 0 || level > 5) {
-            throw new Error("Perspective memory level must be an integer from 0 to 5.");
-        }
-        if (!Number.isFinite(softLevel)) {
-            throw new Error("Perspective memory softLevel must be a finite number.");
-        }
-        const existing = entries.get(id);
-        if (!existing || level > existing.level || (level === existing.level && softLevel > existing.softLevel)) {
-            entries.set(id, { level, softLevel });
-        }
-    }
+    const items = new Set();
+    const characters = new Set([perspective.ownId]);
     /** @param {DEItemInPerspective[]} entries */
     function visitItems(entries) {
         for (const item of entries) {
             for (const { id } of item.ids) {
-                const level = item.memory?.level ?? 0;
-                const softLevel = item.memory?.softLevel ?? level;
-                remember(items, id, level, softLevel);
-                if (item.containerProperties?.openable && item.state?.opened) remember(openContainers, id, level, softLevel);
+                items.add(id);
             }
-            for (const id of [...item.containingCharacters, ...item.ontopCharacters]) remember(characters, id, 0);
             visitItems(item.containing);
             visitItems(item.ontop);
         }
     }
-    /** @param {DECharacterPerspectiveCharacter} character */
+    /** @param {DEPerspectiveCharacter} character */
     function visitCharacter(character) {
-        remember(characters, character.characterId, character.memory?.level ?? 0,
-            character.memory?.softLevel ?? character.memory?.level ?? 0);
-        for (const id of character.characterCarryingOtherCharactersIds) remember(characters, id, 0);
-        visitItems(character.characterCarryingItems);
-        visitItems(character.characterWearingItems);
+        characters.add(character.characterId);
+        visitItems(character.carryingItems);
+        visitItems(character.wearingItems);
     }
     visitCharacter(perspective.self);
     for (const slot of perspective.ownLocation.slots) {
         visitItems(slot.items);
-        slot.characters.forEach(visitCharacter);
     }
-    const groups = perspective.socialGroups;
-    for (const character of [...groups.soloCharacters, ...groups.ownGroup, ...groups.otherGroups.flat()]) {
-        visitCharacter(character);
+    for (const character of perspective.perspectiveCharacters) {
+        if (character.perceptionForm === "visible") visitCharacter(character);
     }
-    return { items, openContainers, characters };
+    return { items, characters };
 }
 
 export class SQLiteBridge extends BaseDataManager {
@@ -686,38 +656,30 @@ export class SQLiteBridge extends BaseDataManager {
             CREATE INDEX IF NOT EXISTS engine_perspectives_by_observer_time
             ON engine_perspectives (ownId, perspectiveTime DESC, id DESC)
         `);
+        await this.databaseController.runQuery(databaseId, "DROP TABLE IF EXISTS engine_perspective_open_containers");
         for (const [table, column] of [
             ["engine_perspective_items", "item_id"],
-            ["engine_perspective_open_containers", "item_id"],
             ["engine_perspective_characters", "character_id"],
         ]) {
+            const membershipColumns = await this.databaseController.runQuery(databaseId, `PRAGMA table_info(${table})`);
+            if (membershipColumns.length !== 2) {
+                await this.databaseController.runQuery(databaseId, `DROP TABLE IF EXISTS ${table}`);
+                backfill = true;
+            }
             await this.databaseController.runQuery(databaseId, `
                 CREATE TABLE IF NOT EXISTS ${table} (
                     perspective_id INTEGER NOT NULL REFERENCES engine_perspectives(id) ON DELETE CASCADE,
                     ${column} TEXT NOT NULL,
-                    memoryLevel INTEGER NOT NULL DEFAULT 0 CHECK (memoryLevel BETWEEN 0 AND 5),
-                    memorySoftLevel REAL NOT NULL DEFAULT 0,
                     PRIMARY KEY (perspective_id, ${column})
                 )
             `);
-            const membershipColumns = await this.databaseController.runQuery(databaseId, `PRAGMA table_info(${table})`);
-            if (!membershipColumns.some(column => column.name === "memoryLevel")) {
-                await this.databaseController.runQuery(databaseId,
-                    `ALTER TABLE ${table} ADD COLUMN memoryLevel INTEGER NOT NULL DEFAULT 0 CHECK (memoryLevel BETWEEN 0 AND 5)`);
-                backfill = true;
-            }
-            if (!membershipColumns.some(column => column.name === "memorySoftLevel")) {
-                await this.databaseController.runQuery(databaseId,
-                    `ALTER TABLE ${table} ADD COLUMN memorySoftLevel REAL NOT NULL DEFAULT 0`);
-                backfill = true;
-            }
             await this.databaseController.runQuery(databaseId,
                 `CREATE INDEX IF NOT EXISTS ${table}_lookup ON ${table} (${column}, perspective_id)`);
-            await this.databaseController.runQuery(databaseId,
-                `CREATE INDEX IF NOT EXISTS ${table}_memory_lookup ON ${table} (${column}, memoryLevel, perspective_id)`);
         }
         if (backfill) {
-            const rows = await this.databaseController.runQuery(databaseId, "SELECT id, document FROM engine_perspectives");
+            await this.databaseController.runQuery(databaseId, "DELETE FROM engine_perspective_items");
+            await this.databaseController.runQuery(databaseId, "DELETE FROM engine_perspective_characters");
+            const rows = await this.databaseController.runQuery(databaseId, "SELECT id, document FROM engine_perspectives ORDER BY id");
             for (const row of rows) {
                 const perspective = JSON.parse(row.document);
                 await this.databaseController.runQuery(databaseId, `
@@ -738,24 +700,31 @@ export class SQLiteBridge extends BaseDataManager {
     async indexPerspectiveMembership(databaseId, perspectiveId, membership) {
         for (const [table, column, entries] of [
             ["engine_perspective_items", "item_id", membership.items],
-            ["engine_perspective_open_containers", "item_id", membership.openContainers],
             ["engine_perspective_characters", "character_id", membership.characters],
         ]) {
+            const entityIds = JSON.stringify([...entries]);
+            // Keep one sighting per observer and entity, using the snapshot's ownId.
             await this.databaseController.runQuery(databaseId, `
-                INSERT INTO ${table} (perspective_id, ${column}, memoryLevel, memorySoftLevel)
-                SELECT ?, json_extract(value, '$[0]'), json_extract(value, '$[1].level'),
-                    json_extract(value, '$[1].softLevel') FROM json_each(?)
-                WHERE true
-                ON CONFLICT (perspective_id, ${column}) DO UPDATE SET
-                    memoryLevel = excluded.memoryLevel, memorySoftLevel = excluded.memorySoftLevel
-            `, [perspectiveId, JSON.stringify([...entries])]);
+                UPDATE ${table} SET perspective_id = ?
+                WHERE ${column} IN (SELECT value FROM json_each(?))
+                    AND perspective_id IN (
+                        SELECT id FROM engine_perspectives WHERE ownId = (
+                            SELECT ownId FROM engine_perspectives WHERE id = ?
+                        )
+                    )
+            `, [perspectiveId, entityIds, perspectiveId]);
+            await this.databaseController.runQuery(databaseId, `
+                INSERT INTO ${table} (perspective_id, ${column})
+                SELECT ?, value FROM json_each(?) WHERE true
+                ON CONFLICT (perspective_id, ${column}) DO NOTHING
+            `, [perspectiveId, entityIds]);
         }
     }
 
     /**
      * Store a snapshot with queryable location, times, and deduplicated entity IDs.
      * snapshotTime is real-world Unix milliseconds at capture; perspectiveTime is story Unix milliseconds.
-     * @param {DECharacterPerspective} perspective
+     * @param {DEPerspective} perspective
      * @returns {Promise<string>}
      */
     async storePerspective(perspective) {
@@ -776,62 +745,40 @@ export class SQLiteBridge extends BaseDataManager {
     }
 
     /**
-     * Return the latest sighting still remembered at the supplied story time.
      * @param {string} charId
      * @param {string} otherCharId
-     * @param {number} useMemoryFromTime Story Unix milliseconds, never wall-clock time.
-     * @returns {Promise<DECharacterPerspective | null>}
+     * @returns {Promise<DEPerspective | null>}
      */
-    async getLatestPerspectiveWithCharacter(charId, otherCharId, useMemoryFromTime) {
-        return this.findLatestRememberedPerspective(charId, otherCharId, useMemoryFromTime, "character");
+    async getLatestPerspectiveWithCharacter(charId, otherCharId) {
+        return this.findLatestPerspective(charId, otherCharId, "character");
     }
 
     /**
      * @param {string} charId
      * @param {string} itemId
-     * @param {number} useMemoryFromTime Story Unix milliseconds.
-     * @param {boolean} [openContainerOnly=false] Match only sightings of this container while open.
-     * @returns {Promise<DECharacterPerspective | null>}
+     * @returns {Promise<DEPerspective | null>}
      */
-    async getLatestPerspectiveWithItem(charId, itemId, useMemoryFromTime, openContainerOnly = false) {
-        return this.findLatestRememberedPerspective(charId, itemId, useMemoryFromTime,
-            openContainerOnly ? "openContainer" : "item");
+    async getLatestPerspectiveWithItem(charId, itemId) {
+        return this.findLatestPerspective(charId, itemId, "item");
     }
 
     /**
-     * Level 0: same instant; 1: five minutes; 2: one day; 3: seven days;
-     * 4: thirty days; 5: permanent. Expiration boundaries are inclusive.
      * @param {string} charId
      * @param {string} entityId
-     * @param {number} useMemoryFromTime
-     * @param {"character" | "item" | "openContainer"} kind
-     * @returns {Promise<DECharacterPerspective | null>}
+     * @param {"character" | "item"} kind
+     * @returns {Promise<DEPerspective | null>}
      */
-    async findLatestRememberedPerspective(charId, entityId, useMemoryFromTime, kind) {
-        if (!Number.isFinite(useMemoryFromTime)) {
-            throw new Error("useMemoryFromTime must be a finite story Unix timestamp in milliseconds.");
-        }
+    async findLatestPerspective(charId, entityId, kind) {
         const [table, column] = {
             character: ["engine_perspective_characters", "character_id"],
             item: ["engine_perspective_items", "item_id"],
-            openContainer: ["engine_perspective_open_containers", "item_id"],
         }[kind];
-        return this.withTransactionalRead(["rememberedPerspective", charId, entityId, useMemoryFromTime, kind], async (id) => {
+        return this.withTransactionalRead(["latestPerspective", charId, entityId, kind], async (id) => {
             const rows = await this.databaseController.runQuery(id, `
                 SELECT perspective.document FROM engine_perspectives AS perspective
                 JOIN ${table} AS seen ON seen.perspective_id = perspective.id
-                WHERE perspective.ownId = ? AND seen.${column} = ?
-                    AND perspective.perspectiveTime <= ?
-                    AND (seen.memoryLevel = 5 OR ? - perspective.perspectiveTime <=
-                        CASE seen.memoryLevel
-                            WHEN 0 THEN 0
-                            WHEN 1 THEN 300000
-                            WHEN 2 THEN 86400000
-                            WHEN 3 THEN 604800000
-                            WHEN 4 THEN 2592000000
-                        END)
-                ORDER BY perspective.perspectiveTime DESC, perspective.id DESC LIMIT 1
-            `, [charId, entityId, useMemoryFromTime, useMemoryFromTime]);
+                WHERE perspective.ownId = ? AND seen.${column} = ? LIMIT 1
+            `, [charId, entityId]);
             return rows.length ? JSON.parse(rows[0].document) : null;
         });
     }
@@ -839,7 +786,7 @@ export class SQLiteBridge extends BaseDataManager {
     /**
      * Return this observer's most recently stored snapshot, regardless of memory retention.
      * @param {string} charId
-     * @returns {Promise<DECharacterPerspective | null>}
+     * @returns {Promise<DEPerspective | null>}
      */
     async getLastPerspectiveOfCharacter(charId) {
         return this.withTransactionalRead(["lastPerspective", charId], async (id) => {
@@ -854,7 +801,7 @@ export class SQLiteBridge extends BaseDataManager {
     /**
      * Retrieve a stored character perspective snapshot by its ID, deserialized from JSON.
      * @param {string} perspectiveId
-     * @returns {Promise<DECharacterPerspective | null>}
+     * @returns {Promise<DEPerspective | null>}
      */
     async getPerspectiveById(perspectiveId) {
         return this.withTransactionalRead(["perspective", perspectiveId], async (id) => {

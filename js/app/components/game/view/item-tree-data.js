@@ -1,7 +1,7 @@
 import { getPerspectiveIndex } from './perspective-data.js';
 
 /**
- * @typedef {{perspective: DECharacterPerspective, userId: string, userName: string, blindness: DECharacterPerspective['ownCharacterBlindness'], memoryScope: string}} ItemTreeContext
+ * @typedef {{perspective: DEPerspective, userId: string, userName: string, blindness: DEPerspective['ownCharacterBlindness'], memoryScope: string}} ItemTreeContext
  * @typedef {'communicator' | 'consumable' | 'container' | 'open' | 'closed' | 'locked' | 'eye' | 'eye-off' | 'rigid' | 'flexible' | 'tag'} ItemTagIcon
  * @typedef {{label: string, source: 'item' | 'state', type: 'communicator' | 'consumable' | 'container' | 'open' | 'closed' | 'locked' | 'capacity-weight' | 'capacity-volume' | 'weight' | 'volume' | 'relative-position' | 'posture' | 'tag', icons?: ItemTagIcon[], description?: string}} ItemTagData
  * @typedef {{kind: 'item', id: string, label: string, amount: number, asset: string, tags: ItemTagData[], item: DEItemInPerspective}} ItemNodeData
@@ -9,7 +9,7 @@ import { getPerspectiveIndex } from './perspective-data.js';
  * @typedef {{label: string, message: string, items: (ItemNodeData | CharacterNodeData)[]}} ItemGroupData
  */
 
-/** @param {DECharacterPerspective} perspective @returns {ItemTreeContext} */
+/** @param {DEPerspective} perspective @returns {ItemTreeContext} */
 export function getItemTreeContext(perspective) {
     return { perspective, userId: perspective.ownId, userName: perspective.ownName,
         blindness: perspective.ownCharacterBlindness, memoryScope: perspective.ownId };
@@ -94,11 +94,11 @@ export function loadItemNode(id, context, useSimpleName = false) {
     return itemNode(item, id, useSimpleName);
 }
 
-/** @param {DECharacterPerspectiveCharacter} character @returns {CharacterNodeData} */
+/** @param {DEPerspectiveCharacter} character @returns {CharacterNodeData} */
 function characterNode(character) {
-    return { kind: 'character', id: character.characterId, label: character.characterNameComplex, amount: 1,
-        asset: character.characterMetadata.assets?.neutral || '', tags: [],
-        description: character.characterPlaceAndPostureDescription };
+    return { kind: 'character', id: character.characterId, label: character.nameComplex, amount: 1,
+        asset: character.metadata.assets?.neutral || '', tags: [],
+        description: character.placeAndPostureDescription };
 }
 
 /** @param {string[]} ids @param {ItemTreeContext} context */
@@ -136,13 +136,20 @@ export function loadCharacterItemGroups(characterId, context) {
     if (!character) throw new Error('Character is not available in this perspective.');
     const visible = character.canTellDetailsOfClothingOrCarriedItems;
     return ['Carrying', 'Wearing'].map(label => {
-        const items = visible ? (label === 'Carrying' ? character.characterCarryingItems : character.characterWearingItems)
+        const items = visible ? (label === 'Carrying' ? character.carryingItems : character.wearingItems)
             .map(item => itemNode(item)) : [];
         /** @type {(ItemNodeData | CharacterNodeData)[]} */
         const nodes = [...items];
-        if (label === 'Carrying') nodes.push(...characterNodes(character.characterCarryingOtherCharactersIds, context));
-        return { label, items: nodes, message: !visible ? (label === 'Carrying' ? 'Cannot see carried objects.' : 'Cannot see clothing or accessories.')
-            : nodes.length ? '' : character.characterNameDefinite + ' is not ' + label.toLowerCase() + ' any items.' };
+        const reasons = [label === 'Carrying' ? character.carriedItemsIsUnclear : character.clothingIsUnclear];
+        if (!visible && !reasons[0]) reasons.push(label === 'Carrying' ? 'Cannot see carried objects.' : 'Cannot see clothing or accessories.');
+        if (label === 'Carrying') {
+            if (character.canTellOtherCarriedCharacters) nodes.push(...characterNodes(character.carryingOtherCharacters, context));
+            if (character.otherCarriedCharactersIsUnclear) reasons.push(character.otherCarriedCharactersIsUnclear);
+            else if (!character.canTellOtherCarriedCharacters) reasons.push('Cannot see other carried characters.');
+        }
+        const message = [...new Set(reasons.filter(Boolean))].join(' ');
+        return { label, items: nodes, message: message ||
+            (nodes.length ? '' : character.nameDefinite + ' is not ' + label.toLowerCase() + ' any items.') };
     });
 }
 
@@ -151,7 +158,7 @@ export function loadLocationSlotItemGroups(slotId, context) {
     const { perspective } = context;
     const slot = getPerspectiveIndex(perspective).slots.get(slotId);
     if (!slot) throw new Error('Location slot is not available in this perspective.');
-    const characters = slot.characters.map(character => characterNode(character));
+    const characters = characterNodes(slot.characters, context);
     if (slotId === perspective.ownLocationSlotId) characters.unshift(characterNode(perspective.self));
     const items = slot.items.map(item => itemNode(item));
     return [

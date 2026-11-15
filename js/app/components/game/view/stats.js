@@ -11,7 +11,7 @@ export class Stats extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
-        /** @type {DECharacterPerspective | null} */
+        /** @type {DEPerspective | null} */
         this.currentPerspective = null;
         /** @type {StatsDisplayData | null} */
         this.displayData = null;
@@ -172,7 +172,7 @@ section[hidden] { display: none; }
         document.body.append(dialog);
     }
 
-    /** @param {DECharacterPerspective | null} perspective */
+    /** @param {DEPerspective | null} perspective */
     updatePerspective(perspective) {
         this.currentPerspective = perspective;
         const section = this.root.querySelector('section');
@@ -184,8 +184,8 @@ section[hidden] { display: none; }
         this.setDisplayData({
             userId: perspective.ownId,
             userName: perspective.ownName,
-            externalDescription: self.characterExternalDescriptionForUser,
-            profileImage: self.characterMetadata.assets?.neutral || '',
+            externalDescription: self.externalDescriptionForUser,
+            profileImage: self.metadata.assets?.neutral || '',
             location: perspective.ownLocationName,
             locationSlot: perspective.ownLocationSlotName,
             dateTime: Number.isFinite(time) ? new Date(time).toLocaleString('en-US', {

@@ -16,7 +16,7 @@ export class ItemsOverlay extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
-        /** @type {DECharacterPerspective | null} */
+        /** @type {DEPerspective | null} */
         this.currentPerspective = null;
         this.locationId = '';
         this.userId = '';
@@ -133,7 +133,7 @@ h2 { margin: 0 0 1.5vh; font-size: 2.8vh; }
         this.dispatchEvent(new Event('toggle'));
     }
 
-    /** @param {DECharacterPerspective | null} perspective */
+    /** @param {DEPerspective | null} perspective */
     updatePerspective(perspective) {
         this.currentPerspective = perspective;
         if (!perspective) {

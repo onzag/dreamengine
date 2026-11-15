@@ -8,7 +8,7 @@ export class CharacterItemsView extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
-        /** @type {DECharacterPerspective | null} */
+        /** @type {DEPerspective | null} */
         this.currentPerspective = null;
     }
 
@@ -26,7 +26,7 @@ ${sharedStyles}
         this.updatePerspective(this.currentPerspective || getPerspectiveFor(this.parentNode));
     }
 
-    /** @param {DECharacterPerspective | null} perspective */
+    /** @param {DEPerspective | null} perspective */
     updatePerspective(perspective) {
         this.currentPerspective = perspective;
         const inventory = this.root.querySelector('.inventory');

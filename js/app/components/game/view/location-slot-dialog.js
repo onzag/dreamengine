@@ -6,7 +6,7 @@ import { createItemTree } from './item-node.js';
 export class LocationSlotDialog extends IdentifierDetail {
     constructor() { super(); this.kind = 'Location slot'; }
 
-    /** @param {DECharacterPerspective} perspective */
+    /** @param {DEPerspective} perspective */
     getDisplayData(perspective) {
         const id = this.getAttribute('identifier-id') || '';
         const slot = getPerspectiveIndex(perspective).slots.get(id);
@@ -16,7 +16,7 @@ export class LocationSlotDialog extends IdentifierDetail {
         return { name: slot.slotName, description: slot.description, banner: slot.slotMetadata.asset || '', content };
     }
 
-    /** @param {DECharacterPerspective} perspective */
+    /** @param {DEPerspective} perspective */
     getDebugSections(perspective) {
         const id = this.getAttribute('identifier-id') || '';
         const slot = getPerspectiveIndex(perspective).slots.get(id);

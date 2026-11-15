@@ -557,38 +557,18 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (!resolvedLocation) throw new Error(`Location ${location} not found`);
             return describePlace(DE, resolvedLocation, inPerspectiveOf);
         },
-        /**
-         * Accepts (slot, observer) or (location, slot, observer).
-         * @param {DELocation | DELocationSlot | string} locationOrSlot
-         * @param {DELocationSlot | DECompleteCharacterReference | string} slotOrObserver
-         * @param {DECompleteCharacterReference | string} [inPerspectiveOf]
-         */
-        async getDescriptionOfLocationSlot(locationOrSlot, slotOrObserver, inPerspectiveOf) {
-            if (inPerspectiveOf !== undefined) {
-                if (typeof locationOrSlot !== "string" && !("slots" in locationOrSlot)) {
-                    throw new Error("Expected a location reference");
-                }
-                const location = resolveLocation(DE, locationOrSlot);
-                if (!location) throw new Error(`Location ${locationOrSlot} not found`);
-                if (typeof slotOrObserver !== "string" && "gender" in slotOrObserver) {
-                    throw new Error("Expected a location slot reference");
-                }
-                const slotId = typeof slotOrObserver === "string" ? slotOrObserver : slotOrObserver.id;
-                const slot = typeof slotOrObserver === "string" ? location.slots[slotId] : slotOrObserver;
-                if (!slot || !Object.prototype.hasOwnProperty.call(location.slots, slotId)) {
-                    throw new Error(`Location slot ${slotId} not found in location ${location.id}`);
-                }
-                return describePlace(DE, slot, inPerspectiveOf);
-            }
-            if (typeof locationOrSlot !== "string" && "slots" in locationOrSlot) {
+        async getDescriptionOfLocationSlot(location, slot, inPerspectiveOf) {
+            const resolvedLocation = resolveLocation(DE, location);
+            if (!resolvedLocation) throw new Error(`Location ${location} not found`);
+            if (typeof slot !== "string" && "gender" in slot) {
                 throw new Error("Expected a location slot reference");
             }
-            if (typeof slotOrObserver !== "string" && !("gender" in slotOrObserver)) {
-                throw new Error("Expected a character reference");
+            const slotId = typeof slot === "string" ? slot : slot.id;
+            const resolvedSlot = typeof slot === "string" ? resolvedLocation.slots[slotId] : slot;
+            if (!resolvedSlot || !Object.prototype.hasOwnProperty.call(resolvedLocation.slots, slotId)) {
+                throw new Error(`Location slot ${slotId} not found in location ${resolvedLocation.id}`);
             }
-            const slot = resolveLocationSlot(DE, locationOrSlot);
-            if (!slot) throw new Error(`Location slot ${locationOrSlot} not found`);
-            return describePlace(DE, slot, slotOrObserver);
+            return describePlace(DE, resolvedSlot, inPerspectiveOf);
         },
         defineGlobalInterest(interest) {
             if (DE.interests[interest.id]) {
@@ -1301,7 +1281,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         endedConversation.nextConversationIdsPerParticipant[allParticipantId] = actualNewConversationForRemainingParticipants.id;
                     }
                 }
-                
+
                 if (endedConversation && !endedConversation.endTime) {
                     endedConversation.endTime = { ...DE.currentTime };
                     await DE.database.updateConversation(endedConversation.id, {
@@ -1377,7 +1357,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 }
 
                 const heardIdentifiers = DE.stateFor[participantId].heardIdentifiers;
-                const perspective = await getPerspective(DE, participantChar, newMessage);
+                const perspective = await getPerspective(DE, participantChar, [], newMessage);
                 const savedPerspective = await DE.database.storePerspective(perspective);
                 newMessage.perspectiveByCharacterId[participantId] = {
                     before: savedPerspective,
@@ -1436,7 +1416,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                             // must be a ghost participant, skip perspective generation
                             continue;
                         }
-                        const perspective = await getPerspective(DE, participantChar, addedMessage);
+                        const perspective = await getPerspective(DE, participantChar, [], addedMessage);
                         const savedPerspective = await DE.database.storePerspective(perspective);
                         addedMessage.perspectiveByCharacterId[participantId].after = savedPerspective;
                     }
@@ -1683,9 +1663,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
             const character = requireCharacter(DE, char);
             return getSurroundingCharacters(DE, character.id, inPerspective);
         },
-        getPerspective(char) {
+        getPerspective(char, destroyedItemsIds = []) {
             const character = requireCharacter(DE, char);
-            return getPerspective(DE, character);
+            return getPerspective(DE, character, destroyedItemsIds);
         },
         getStoredPerspective(perspectiveId) {
             return DE.database.getPerspectiveById(perspectiveId);
@@ -1699,7 +1679,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             return getRepresentativeItems(DE.stateFor[character.id].wearing);
         },
         whatCanTheyMakeOfAnotherCharacter(char, inPerspectiveOf) {
-            return whatCanTheyMakeOfAnotherCharacter(requireCharacter(DE, char), requireCharacter(DE, inPerspectiveOf));
+            return whatCanTheyMakeOfAnotherCharacter(DE, requireCharacter(DE, char), requireCharacter(DE, inPerspectiveOf));
         },
         canSeeCharacter(char, inPerspectiveOf) {
             const target = resolveCharacter(DE, char);
@@ -2068,7 +2048,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (currentState.seenCharacters.some(seen => seen.id === charRef.id)) {
                 return currentState.location;
             }
-            const perspective = await DE.database.getLatestPerspectiveWithCharacter(povRef.id, charRef.id, DE.currentTime.time);
+            const perspective = await DE.database.getLatestPerspectiveWithCharacter(povRef.id, charRef.id);
             return perspective?.ownLocationId ?? "";
         },
         async hasNoIdeaWhereIs(povChar, char) {

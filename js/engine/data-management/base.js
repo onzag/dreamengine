@@ -193,7 +193,7 @@ export class BaseDataManager {
 
     /**
      * Serialize a character perspective snapshot and return its new storage ID.
-     * @param {DECharacterPerspective} perspective
+     * @param {DEPerspective} perspective
      * @returns {Promise<string>}
      */
     async storePerspective(perspective) {
@@ -205,7 +205,7 @@ export class BaseDataManager {
     /**
      * Retrieve a stored character perspective snapshot by its ID.
      * @param {string} perspectiveId
-     * @returns {Promise<DECharacterPerspective | null>}
+     * @returns {Promise<DEPerspective | null>}
      */
     async getPerspectiveById(perspectiveId) {
         return null; // Placeholder: Implement logic to retrieve a character perspective snapshot.
@@ -214,7 +214,7 @@ export class BaseDataManager {
     /**
      * Return this observer's most recently stored snapshot, or null if absent.
      * @param {string} charId
-     * @returns {Promise<DECharacterPerspective | null>}
+     * @returns {Promise<DEPerspective | null>}
      */
     async getLastPerspectiveOfCharacter(charId) {
         return null;
@@ -223,21 +223,18 @@ export class BaseDataManager {
     /**
      * @param {string} charId
      * @param {string} otherCharId
-     * @param {number} useMemoryFromTime Story Unix milliseconds.
-     * @returns {Promise<DECharacterPerspective | null>}
+     * @returns {Promise<DEPerspective | null>}
      */
-    async getLatestPerspectiveWithCharacter(charId, otherCharId, useMemoryFromTime) {
+    async getLatestPerspectiveWithCharacter(charId, otherCharId) {
         return null;
     }
 
     /**
      * @param {string} charId
      * @param {string} itemId
-     * @param {number} useMemoryFromTime Story Unix milliseconds.
-     * @param {boolean} [openContainerOnly=false]
-     * @returns {Promise<DECharacterPerspective | null>}
+     * @returns {Promise<DEPerspective | null>}
      */
-    async getLatestPerspectiveWithItem(charId, itemId, useMemoryFromTime, openContainerOnly = false) {
+    async getLatestPerspectiveWithItem(charId, itemId) {
         return null;
     }
 

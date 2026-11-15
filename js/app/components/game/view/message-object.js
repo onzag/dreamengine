@@ -37,7 +37,7 @@ app-game-tooltip, app-world-image { display: block; width: 14vh; height: 14vh; }
 <app-game-tooltip align-with="top"><app-world-image default-image="./images/default-profile.png" aria-hidden="true"></app-world-image></app-game-tooltip>
 <div class="name"></div></div><div class="body"><div class="thought-label" hidden>Thinking...</div><div class="text" aria-label="Message"></div></div></article>`;
         this.text = /** @type {HTMLElement} */ (this.root.querySelector('.text'));
-        /** @type {DECharacterPerspective | null} */
+        /** @type {DEPerspective | null} */
         this.currentPerspective = null;
         this.contentKey = '';
         this.speakerKey = '';
@@ -53,7 +53,7 @@ app-game-tooltip, app-world-image { display: block; width: 14vh; height: 14vh; }
     pause() { window.clearTimeout(this.timer); this.timer = 0; }
 
     /**
-     * @param {DECharacterPerspective | null} perspective
+     * @param {DEPerspective | null} perspective
      * @param {DEConversationMessage} message
      * @param {DEConversationMessageDialogue | DEConversationMessageNarration | DEConversationMessageThought} content
      * @param {string} selectionKey
@@ -66,12 +66,12 @@ app-game-tooltip, app-world-image { display: block; width: 14vh; height: 14vh; }
         // related-emotion order as the old renderer before falling back to neutral.
         const emotion = message.emotion || 'neutral';
         const relatedEmotions = Object.values(emotionsGrouped).find(group => group.includes(emotion)) || [];
-        const assets = character?.characterMetadata.assets;
+        const assets = character?.metadata.assets;
         const image = [emotion, ...relatedEmotions, 'neutral'].map(key => assets?.[key]).find(Boolean) || '';
         const speaker = {
             visible: content.type !== 'narration', id: character?.characterId || '',
-            name: character?.characterNameSimple || 'Unknown speaker',
-            description: character?.characterExternalDescriptionForUser || '',
+            name: character?.nameSimple || 'Unknown speaker',
+            description: character?.externalDescriptionForUser || '',
             image,
         };
         const speakerKey = JSON.stringify(speaker);
