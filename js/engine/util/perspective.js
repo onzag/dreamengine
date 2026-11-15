@@ -689,7 +689,7 @@ async function buildPerspectiveCharacter(
         ? await DE.database.getLastPerspectiveOfCharacter(observerId)
         : previousPerspective;
     const previousCharacter = findCharacterInPerspective(lastPerspectiveOfObserver, targetId);
-    const elapsed = lastPerspectiveOfObserver ? DE.currentTime.time - lastPerspectiveOfObserver.timeOfPerspective.time : 0;
+    const elapsed = lastPerspectiveOfObserver ? DE.currentTime.time - lastPerspectiveOfObserver.timeOfPerspective.time : 10 * 60 * 1000; // default to 10 minutes if no previous perspective
 
     // they are being mentioned or part of the same conversation
     const isActivelyObserved = relatedConversationMessage?.content.some((c) => {
@@ -893,7 +893,7 @@ function checkNestedItemListsAreIdenticalInPerspective(listA, listB) {
  * @returns {boolean}
  */
 function checkItemsAreIdenticalInPerspective(itemA, itemB, ignoreAmount = true) {
-    const propertiesToIgnore = ["ids", "nameInAmount"];
+    const propertiesToIgnore = ["ids", "nameInAmount", "memory", "missingContaining", "missingOntop", "missingContainingCharacters", "missingOntopCharacters"];
     const nestedItemKeys = ["ontop", "containing"];
 
     const a = /** @type {Record<string, any>} */ (itemA);
@@ -935,6 +935,13 @@ function mergeIdenticalItemsInPerspective(items) {
         if (representative) {
             representative.ids.push(...item.ids);
             representative.amount = representative.ids.length;
+            representative.missingContaining.push(...item.missingContaining);
+            representative.missingOntop.push(...item.missingOntop);
+            representative.missingContainingCharacters.push(...item.missingContainingCharacters);
+            representative.missingOntopCharacters.push(...item.missingOntopCharacters);
+            if (representative.memory.softLevel < item.memory.softLevel) {
+                representative.memory = item.memory;
+            }
         } else {
             merged.push(item);
         }
@@ -1005,7 +1012,7 @@ export async function buildPerspectiveItems(DE, parentItemId, items, observerId,
         const previousItem = findItemInPerspective(lastPerspectiveOfObserver, item.id);
         const retainedMemory = previousItem ? previousItem.memory : null;
         // Only time since a direct observation counts as continued exposure.
-        const elapsed = lastPerspectiveOfObserver ? DE.currentTime.time - lastPerspectiveOfObserver.timeOfPerspective.time : 0;
+        const elapsed = lastPerspectiveOfObserver ? DE.currentTime.time - lastPerspectiveOfObserver.timeOfPerspective.time : 10 * 60 * 1000; // default to 10 minutes if no previous perspective
         const isActivelyObserved = relatedConversationMessage?.content.some((c) => {
             return c.fragments.some((f) => {
                 return typeof f !== "string" && f.type === "identifier" && f.identifiers.some((id) => id === item.id);
@@ -1024,6 +1031,7 @@ export async function buildPerspectiveItems(DE, parentItemId, items, observerId,
             owner: item.owner,
             maxWeightOnTopKg: item.maxWeightOnTopKg,
             oneOfAKind: item.oneOfAKind,
+            common: item.common,
             metadata: item.metadata || {},
             name: item.name,
             state: item.state,
@@ -1074,21 +1082,61 @@ export async function buildPerspectiveItems(DE, parentItemId, items, observerId,
 
         if (canSeeContents) {
             node.containing = contents.items;
-            node.missingContaining = contents.missingItems;
+            node.missingContaining = contents.missingItems.map(missingItem => {
+                return {
+                    parent: item.id,
+                    item: missingItem,
+                }
+            });
             node.containingCharacters = containingCharacters.visibleCharacterIds;
-            node.missingContainingCharacters = containingCharacters.invisibleCharacterIds;
+            node.missingContainingCharacters = containingCharacters.invisibleCharacterIds.map(missingCharacterId => {
+                return {
+                    parent: item.id,
+                    character: missingCharacterId,
+                }
+            });
         } else {
-            node.missingContaining = [...contents.items, ...contents.missingItems];
-            node.missingContainingCharacters = [...containingCharacters.visibleCharacterIds, ...containingCharacters.invisibleCharacterIds];
+            node.missingContaining = [...contents.items, ...contents.missingItems].map(missingItem => {
+                return {
+                    parent: item.id,
+                    item: missingItem,
+                }
+            });
+            node.missingContainingCharacters = [...containingCharacters.visibleCharacterIds, ...containingCharacters.invisibleCharacterIds].map(missingCharacterId => {
+                return {
+                    parent: item.id,
+                    character: missingCharacterId,
+                }
+            });
         }
         if (canSeeOntop) {
             node.ontop = ontop.items;
-            node.missingOntop = ontop.missingItems;
+            node.missingOntop = ontop.missingItems.map(missingItem => {
+                return {
+                    parent: item.id,
+                    item: missingItem,
+                }
+            });
             node.ontopCharacters = ontopCharacters.visibleCharacterIds;
-            node.missingOntopCharacters = ontopCharacters.invisibleCharacterIds;
+            node.missingOntopCharacters = ontopCharacters.invisibleCharacterIds.map(missingCharacterId => {
+                return {
+                    parent: item.id,
+                    character: missingCharacterId,
+                }
+            });
         } else {
-            node.missingOntop = [...ontop.items, ...ontop.missingItems];
-            node.missingOntopCharacters = [...ontopCharacters.visibleCharacterIds, ...ontopCharacters.invisibleCharacterIds];
+            node.missingOntop = [...ontop.items, ...ontop.missingItems].map(missingItem => {
+                return {
+                    parent: item.id,
+                    item: missingItem,
+                }
+            });
+            node.missingOntopCharacters = [...ontopCharacters.visibleCharacterIds, ...ontopCharacters.invisibleCharacterIds].map(missingCharacterId => {
+                return {
+                    parent: item.id,
+                    character: missingCharacterId,
+                }
+            });
         }
 
         if (visibility === 'invisible') {
@@ -1103,12 +1151,12 @@ export async function buildPerspectiveItems(DE, parentItemId, items, observerId,
 
     for (const node of mergedCanSeeItems) {
         // Build the nameInAmount for each item after all children have been built, so that the nameInAmount of children is available to the parent.
-        node.nameInAmount = utilItemCount(DE, locationId, !!node.oneOfAKind && node.ids.length === 1, node.owner, node.ids.length, node.name, node.ids[0].id, true, false, true);
+        node.nameInAmount = utilItemCount(DE, locationId, !!node.oneOfAKind && node.ids.length === 1, node.common, node.owner, node.ids.length, node.name, node.ids[0].id, true, false, true);
     }
 
     for (const node of mergedMissingItems) {
         // Build the nameInAmount for each item after all children have been built, so that the nameInAmount of children is available to the parent.
-        node.nameInAmount = utilItemCount(DE, locationId, !!node.oneOfAKind && node.ids.length === 1, node.owner, node.ids.length, node.name, node.ids[0].id, true, false, true);
+        node.nameInAmount = utilItemCount(DE, locationId, !!node.oneOfAKind && node.ids.length === 1, node.common, node.owner, node.ids.length, node.name, node.ids[0].id, true, false, true);
     }
 
     return {

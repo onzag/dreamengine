@@ -2850,7 +2850,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 if (options?.capitalize) nameGiven = nameGiven.charAt(0).toUpperCase() + nameGiven.slice(1);
                 return options?.justName ? nameGiven : "<" + item.id + ":" + nameGiven + ">";
             }
-            const nameGiven = utilItemCount(DE, null, item.oneOfAKind || false, item.owner, options?.amount || 1, item.name, item.id, options?.capitalize, options?.type === "definite", options?.type === "plain");
+            const nameGiven = utilItemCount(DE, null, item.oneOfAKind || false, item.common, item.owner, options?.amount || 1, item.name, item.id, options?.capitalize, options?.type === "definite", options?.type === "plain");
             return options?.justName ? nameGiven : "<" + item.id + ":" + nameGiven + ">";
         },
         formatLocationName(location, inPerspectiveOf, options) {

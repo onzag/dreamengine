@@ -454,6 +454,7 @@ const irregularPlurals = {
  * @param {DEObject} deObject
  * @param {string|null} locationToCheckOneOfAKind
  * @param {boolean} oneOfAKind
+ * @param {boolean} common
  * @param {string|null} owner
  * @param {number} amount 
  * @param {string} itemName
@@ -462,7 +463,7 @@ const irregularPlurals = {
  * @param {boolean} [forceThe] whether to force "the" in front of the item, this is used for example when we want to refer to a specific item that we know is present, so we want to make sure the message reflects that, even if there is only one of that item, for example "the apple" instead of just "an apple"
  * @param {boolean} [forcePlain] whether to force the item to be plain, this is used for example when we want to refer to a specific item that we know is present, so we want to make sure the message reflects that, even if there is only one of that item, for example "apple" instead of just "an apple"
  */
-export function utilItemCount(deObject, locationToCheckOneOfAKind, oneOfAKind, owner, amount, itemName, itemId, capitalize = false, forceThe = false, forcePlain = false) {
+export function utilItemCount(deObject, locationToCheckOneOfAKind, oneOfAKind, common, owner, amount, itemName, itemId, capitalize = false, forceThe = false, forcePlain = false) {
     const itemTrimmedLower = itemName.trim().toLowerCase();
     const itemIsAlreadyPlural = isAlreadyPlural(itemTrimmedLower);
     const itemIsSingularOfPlural = isSingularOfPlural(itemTrimmedLower);
@@ -479,7 +480,7 @@ export function utilItemCount(deObject, locationToCheckOneOfAKind, oneOfAKind, o
     } else if (amount === 1) {
         if (itemIsSingularOfPlural) {
             // "pair of glasses" -> "the pair of glasses" or "a pair of glasses"
-            const isOneOfAKind = oneOfAKind || (!locationToCheckOneOfAKind ? false : checkItemIsOneOfAKindAtLocation(deObject, locationToCheckOneOfAKind, itemName, itemId));
+            const isOneOfAKind = oneOfAKind || (!locationToCheckOneOfAKind ? false : (common ? false : checkItemIsOneOfAKindAtLocation(deObject, locationToCheckOneOfAKind, itemName, itemId)));
             if (forceThe || isOneOfAKind) {
                 toReturn = `the ${itemName}`;
             } else if (forcePlain) {
@@ -493,7 +494,7 @@ export function utilItemCount(deObject, locationToCheckOneOfAKind, oneOfAKind, o
             // "glasses" -> "the glasses" (can't say "a glasses")
             toReturn = `the ${itemName}`;
         } else {
-            const isOneOfAKind = oneOfAKind || (!locationToCheckOneOfAKind ? false : checkItemIsOneOfAKindAtLocation(deObject, locationToCheckOneOfAKind, itemName, itemId));
+            const isOneOfAKind = oneOfAKind || (!locationToCheckOneOfAKind ? false : (common ? false : checkItemIsOneOfAKindAtLocation(deObject, locationToCheckOneOfAKind, itemName, itemId)));
             if (forceThe || isOneOfAKind) {
                 toReturn = `the ${itemName}`;
             } else if (forcePlain) {

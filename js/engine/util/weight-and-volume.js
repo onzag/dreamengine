@@ -263,10 +263,10 @@ export function getItemExcessElements(deObject, item) {
         }
     }
 
-    const itemNameForText = utilItemCount(deObject, null, item.oneOfAKind || false, item.owner, 1, item.name, false, true);
+    const itemNameForText = utilItemCount(deObject, null, item.oneOfAKind || false, item.common, item.owner, 1, item.name, item.id, false, true);
 
     if (isOverweightAndBreaks) {
-        const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(deObject, null, i.oneOfAKind || false, i.owner, 1, i.name, false, true));
+        const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(deObject, null, i.oneOfAKind || false, i.common, i.owner, 1, i.name, i.id, false, true));
         const listOfItems = deObject?.utils.templates.formatAnd(breakList);
         const overweightReasons = [
             `${listOfItems} causes ${itemNameForText} to be overweight and break`,
@@ -315,7 +315,7 @@ export function getItemExcessElements(deObject, item) {
     }
 
     if (isOverweightAndBreaks) {
-        const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(deObject, null, i.oneOfAKind || false, i.owner, 1, i.name, false, true));
+        const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(deObject, null, i.oneOfAKind || false, i.common, i.owner, 1, i.name, i.id, false, true));
         const listOfItems = deObject?.utils.templates.formatAnd(breakList);
         const crushedReasons = [
             `${listOfItems} causes ${itemNameForText} to be overloaded and it breaks under the weight`,
@@ -480,7 +480,7 @@ export function getWearableFitment(deObject, item, character, isNotBeingCurrentl
                 fitmentDescription = "fits extremely tightly";
             }
 
-            const itemNameForText = utilItemCount(deObject, null, item.oneOfAKind || false, item.owner, 1, item.name, false, true);
+            const itemNameForText = utilItemCount(deObject, null, item.oneOfAKind || false, item.common, item.owner, 1, item.name, item.id, false, true);
 
             return {
                 fitment: deObject.utils.templates.formatAnd([fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),

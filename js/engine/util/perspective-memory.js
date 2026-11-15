@@ -269,6 +269,7 @@ function convertItemToMemory(item) {
             ...(typeof item.state.locked === 'boolean' ? { locked: item.state.locked } : {}),
             ...(item.state.tags ? { tags: [...item.state.tags] } : {}),
         },
+        common: item.common,
         metadata: {},
         owner: null,
         classes: [],
@@ -503,7 +504,7 @@ export function passPerspectiveThroughMemory(DE, perspective, previousPerspectiv
             if (survivingIds.length !== i.ids.length) {
                 i.ids = survivingIds;
                 i.amount = survivingIds.length;
-                i.nameInAmount = utilItemCount(DE, null, !!i.oneOfAKind && i.ids.length === 1, i.owner, i.ids.length, i.name, i.ids[0].id, true, false, true);
+                i.nameInAmount = utilItemCount(DE, null, !!i.oneOfAKind && i.ids.length === 1, i.common, i.owner, i.ids.length, i.name, i.ids[0].id, true, false, true);
             }
 
             i.containing = filterItems(i.containing, removedArrayIds, removeIfPresentInCurrentPerspective, latestItems);

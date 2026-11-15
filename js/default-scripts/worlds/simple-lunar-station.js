@@ -144,6 +144,7 @@ engine.exports = {
         const forkFactory = DE.utils.items.newClonableItemFactory(() => ({
             name: "Fork",
             description: "A standard eating utensil with four tines, used for picking up and eating food",
+            common: true,
             weightKg: 0.1,
             volumeLiters: 0.05,
             state: {},
@@ -166,6 +167,7 @@ engine.exports = {
             description: "A bulky space suit designed for extra-vehicular activity on the lunar surface. It provides life support and protection from the harsh environment of space",
             weightKg: 20,
             volumeLiters: 150,
+            common: true,
             state: {},
             metadata: standardApp.buildItemMetadata({
                 asset: "@assets/worlds/simple-lunar-station/space_suit.jpg",
@@ -203,6 +205,7 @@ engine.exports = {
         const lockerFactory = DE.utils.items.newClonableItemFactory(() => ({
             name: "Locker",
             description: "A sturdy locker used for storing personal belongings and equipment within the lunar station",
+            common: true,
             weightKg: 1500,
             volumeLiters: 1000,
             state: {},
@@ -233,6 +236,7 @@ engine.exports = {
             description: "A compact stove designed for cooking meals in the confined space of the lunar station. It features multiple burners and a small oven",
             weightKg: 30,
             volumeLiters: 100,
+            common: true,
             state: {},
             containerProperties: {
                 capacityKg: 100,
@@ -261,6 +265,7 @@ engine.exports = {
             description: "A standard eating utensil with a rounded bowl, used for scooping and eating food",
             weightKg: 0.1,
             volumeLiters: 0.05,
+            common: true,
             state: {},
             metadata: standardApp.buildItemMetadata({
                 asset: "@assets/worlds/simple-lunar-station/spoon.jpg",
@@ -281,6 +286,7 @@ engine.exports = {
             description: "A small drawer within the lunar station's kitchenette, used for storing utensils and small kitchen items",
             weightKg: 5,
             volumeLiters: 20,
+            common: true,
             state: {},
             containerProperties: {
                 capacityKg: 10,
@@ -312,6 +318,7 @@ engine.exports = {
             description: "A small bowl used for holding food or liquids",
             weightKg: 0.2,
             volumeLiters: 0.5,
+            common: true,
             state: {},
             metadata: standardApp.buildItemMetadata({
                 asset: "@assets/worlds/simple-lunar-station/bowl.jpg",
@@ -341,6 +348,7 @@ engine.exports = {
             weightKg: 5,
             volumeLiters: 20,
             state: {},
+            common: true,
             containerProperties: {
                 capacityKg: 10,
                 capacityLiters: 20,
@@ -370,6 +378,7 @@ engine.exports = {
             description: "A storage cabinet in the lunar station's kitchenette, used for storing food items, utensils, and kitchen supplies",
             weightKg: 50,
             volumeLiters: 200,
+            common: true,
             state: {},
             metadata: standardApp.buildItemMetadata({
                 asset: "@assets/worlds/simple-lunar-station/cabinet.jpg",
@@ -401,6 +410,7 @@ engine.exports = {
             description: "A compact, vacuum-sealed food pack designed for consumption in space. It contains a nutritious meal suitable for astronauts",
             weightKg: 0.5,
             volumeLiters: 0.3,
+            common: true,
             state: {},
             metadata: standardApp.buildItemMetadata({
                 asset: "@assets/worlds/simple-lunar-station/space_food_pack.jpg",
@@ -427,6 +437,7 @@ engine.exports = {
                 description: "A large storage cabinet in the lunar station's kitchenette, used for storing bulk food items and kitchen supplies",
                 weightKg: 500,
                 volumeLiters: (spaceFood[0].volumeLiters * 100) + 100,
+                common: true,
                 state: {},
                 containerProperties: {
                     capacityKg: (spaceFood[0].weightKg * 100) + 100,
@@ -448,7 +459,7 @@ engine.exports = {
                 ontopCharacters: [],
                 owner: null,
                 communicator: null,
-            }
+            };
         });
 
         const chairFactory = DE.utils.items.newClonableItemFactory(() => ({
@@ -457,6 +468,7 @@ engine.exports = {
             weightKg: 5,
             volumeLiters: 30,
             state: {},
+            common: true,
             metadata: standardApp.buildItemMetadata({
                 asset: "@assets/worlds/simple-lunar-station/chair.jpg",
             }),
@@ -477,6 +489,7 @@ engine.exports = {
             weightKg: 0.5,
             volumeLiters: 0.2,
             state: {},
+            common: true,
             metadata: standardApp.buildItemMetadata({
                 asset: "@assets/worlds/simple-lunar-station/lunar_rock.jpg",
             }),
@@ -497,6 +510,7 @@ engine.exports = {
             weightKg: 20,
             volumeLiters: 100,
             state: {},
+            common: true,
             metadata: standardApp.buildItemMetadata({
                 asset: "@assets/worlds/simple-lunar-station/bunk_bed.jpg",
             }),

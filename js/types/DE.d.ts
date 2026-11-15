@@ -2481,6 +2481,10 @@ declare interface DEItem {
      */
     oneOfAKind?: boolean;
     /**
+     * On the contrary of oneOfAKind, this means that this item is a common item
+     */
+    common: boolean;
+    /**
      * A relative position to the parent item that it is on top or containing, or relative to the character that is carrying it, for example, a backpack may be on the back of the character, or a phone may be in the character's pocket, this is useful for determining where the item is located in relation to other items or characters
      * the position should be simple, eg, "on the back", "in the pocket", "on the head", "in the hand", etc...
      * for an object "on the corner of the table", etc... it should not mention other objects or characters and must be relative to the parent
@@ -4285,7 +4289,7 @@ declare interface DEItemInPerspective extends Omit<DEItem, "id"> {
     /**
      * Missing items that are supposed to be on top but the character in perspective cannot see them
      */
-    missingOntop: Array<DEItemInPerspective>;
+    missingOntop: Array<{parent: string, item: DEItemInPerspective}>;
     /**
      * List of items contained in this item, if any, that are in perspective at that moment in time
      */
@@ -4295,7 +4299,7 @@ declare interface DEItemInPerspective extends Omit<DEItem, "id"> {
      * 
      * check the reason of why it is unclear and why there might be something here
      */
-    missingContaining: Array<DEItemInPerspective>;
+    missingContaining: Array<{parent: string, item: DEItemInPerspective}>;
     /**
      * List of characters that are in this item, if any, that are in perspective at that moment in time
      */
@@ -4304,7 +4308,7 @@ declare interface DEItemInPerspective extends Omit<DEItem, "id"> {
      * Missing characters that are supposed to be contained but the character in perspective cannot see them
      * check the reason of why it is unclear and why there might be something here
      */
-    missingContainingCharacters: Array<string>;
+    missingContainingCharacters: Array<{parent: string, character: string}>;
     /**
      * List of characters that are on top of this item, if any, that are in perspective at that moment in time
      */
@@ -4313,7 +4317,7 @@ declare interface DEItemInPerspective extends Omit<DEItem, "id"> {
      * List on on top characters that are missing from the list, check the reason of why it is unclear and why there might
      * be something here
      */
-    missingOntopCharacters: Array<string>;
+    missingOntopCharacters: Array<{parent: string, character: string}>;
     /**
      * Whether the contents of this item can be seen by the character in perspective or not
      * this is specific canSeeContents is either true or false, if false the contentsIsUnclear will specify
