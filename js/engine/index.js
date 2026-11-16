@@ -1052,12 +1052,8 @@ export class DEngine {
             throw new Error("Data manager not set");
         }
 
-        /**
-         * @type {string[]}
-         */
-        let addedMessagesForStoryMaster = [];
         if (options.moveTimeForwards) {
-            addedMessagesForStoryMaster = await timeForwardsUsingUntimedMessages(this);
+            await timeForwardsUsingUntimedMessages(this);
         }
 
         const lastMessages = await getHistoryFragment(this, this.deObject.characters[this.deObject.user], {
@@ -1067,12 +1063,9 @@ export class DEngine {
 
         for (const characterId of lastMessages.mentionedCharacters) {
             const character = this.deObject.characters[characterId];
-            const messagesByPostureChange = await calculatePostureChange(this, character);
-
-            addedMessagesForStoryMaster.push(...messagesByPostureChange);
+            await calculatePostureChange(this, character);
+            await calculateStateChange(this, character);
         }
-
-        // TODO process storymaster messages to add
 
         await consumeAccumulatedSideEffectsReadyFunctions();
         await this.informDEObjectUpdated();
@@ -1219,7 +1212,7 @@ export class DEngine {
             });
 
             await this.deObject.utils.conversations.addMessageToConversation(conversation.id, {
-                canOnlyBeSeenByCharacter: null,
+                canOnlyBeSeenByCharacters: null,
                 content: [
                     {
                         type: "narration",
@@ -1271,7 +1264,7 @@ export class DEngine {
                 const actualMessages = messages.map((text) => text.trim()).filter((text) => text.length > 0).join("\n\n").split("\n\n");
 
                 const messageObjNew = await this.deObject.utils.conversations.addMessageToConversation(conversation.id, {
-                    canOnlyBeSeenByCharacter: userOnly ? this.deObject.user : null,
+                    canOnlyBeSeenByCharacters: userOnly ? [this.deObject.user] : null,
                     content: actualMessages.map((text) => ({ type: "narration", fragments: [text] })),
                     characterId: null,
                     isCharacter: false,
@@ -1635,7 +1628,7 @@ export class DEngine {
                     isDebugMessage: false,
                     isStoryMasterMessage: false,
                     isRejectedMessage: makeRejected,
-                    canOnlyBeSeenByCharacter: null,
+                    canOnlyBeSeenByCharacters: null,
                     perspectiveSummaryIds: {},
                     interactingCharacters: [],
                     rumors: [],
@@ -1869,7 +1862,7 @@ export class DEngine {
             isDebugMessage: true,
             isStoryMasterMessage: true,
             isRejectedMessage: false,
-            canOnlyBeSeenByCharacter: null,
+            canOnlyBeSeenByCharacters: null,
             perspectiveSummaryIds: {},
             singleSummary: null,
             emotion: null,

@@ -1,13 +1,12 @@
 import { debug } from "../debug.js";
 import { DEngine } from "../index.js";
-import { getBasicPostures, getExtendedPosturesOf, getExternalDescriptionOfCharacter, getExternalDescriptionOfCharacterPostureOnly, humanReadablePostureToPosture, POSTURE_MAP, postureToText } from "../util/character-info.js";
+import { getBasicPostures, getExtendedPosturesOf, getExternalDescriptionOfCharacterPostureOnlyChanged, whatCanTheyMakeOfAnotherCharacter } from "../util/character-info.js";
 import { createGrammarFromList, yesNoGrammar } from "../util/grammar.js";
 import { convertMessagesToSimpleList, getHistoryFragment } from "../util/messages.js";
 
 /**
  * @param {DEngine} engine
  * @param {DECompleteCharacterReference} character
- * @returns {Promise<string[]>} - an array of messages for storymaster
  */
 export default async function calculatePostureChange(engine, character) {
     if (!engine.deObject) {
@@ -160,10 +159,54 @@ export default async function calculatePostureChange(engine, character) {
     }
 
     if (foundAPostureChange) {
-        return [
-            getExternalDescriptionOfCharacterPostureOnly(engine.deObject, character.id, character.id, false),
-        ]
-    };
+        const narration = getExternalDescriptionOfCharacterPostureOnlyChanged(engine.deObject, character.id, character.id);
+        const narrationParsed = await engine.deObject.utils.narrationAndDialogue.parseNarration(narration, null);
 
-    return [];
+        const characterState = engine.deObject.stateFor[character.id];
+        const characterConversationId = characterState.conversationId;
+
+        let everyoneCanSee = true;
+        /**
+         * @type {string[]}
+         */
+        const onlyTheseCharactersCanSee = [];
+        if (characterConversationId) {
+            const conversation = await engine.deObject.utils.conversations.getConversation(characterConversationId);
+
+            if (conversation) {
+                for (const participant of conversation.participants) {
+                    const whatCanTheyMakeOfTheOtherCharacter = whatCanTheyMakeOfAnotherCharacter(engine.deObject, character, engine.deObject.characters[participant]);
+                    const blindness = engine.deObject.characters[participant].blindness;
+                    const canSeePosture = blindness === "partial-good" || blindness === "no" || blindness === "partial-bad" && (whatCanTheyMakeOfTheOtherCharacter.hasHighPerception);
+                    if (canSeePosture) {
+                        onlyTheseCharactersCanSee.push(participant);
+                    } else {
+                        everyoneCanSee = false;
+                    }
+                }
+
+                await engine.deObject.utils.conversations.addMessageIntoCharactersConversation(character, {
+                    canOnlyBeSeenByCharacters: everyoneCanSee ? null : onlyTheseCharactersCanSee,
+                    content: [
+                        {
+                            type: "narration",
+                            fragments: narrationParsed,
+                        },
+                    ],
+                    characterId: null,
+                    isCharacter: false,
+                    isDebugMessage: false,
+                    isRejectedMessage: false,
+                    isStoryMasterMessage: true,
+                    singleSummary: null,
+                    emotion: null,
+                    emotionalRange: null,
+                    interactingCharacters: [],
+                    rumors: [],
+                    metadata: {},
+                    summariesByCharacterId: {},
+                });
+            }
+        }
+    };
 }

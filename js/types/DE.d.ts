@@ -3468,13 +3468,14 @@ declare interface DEConversationMessage {
      */
     isProcessingSideEffects: boolean;
     /**
-     * If the message can only be seen by a specific character, their Id
+     * If the message can only be seen by specific characters, their IDs
      * eg. for private thoughts, state changes, or secret messages; basically representing the character's internal monologue
      * Also true for schizophrenic characters that hear voices that no one else can hear
      * 
      * if null, the message can be seen by all participants in the conversation
+     * An empty array restricts the message to story-master / omniscient views.
      */
-    canOnlyBeSeenByCharacter: string | null;
+    canOnlyBeSeenByCharacters: string[] | null;
 
     /**
      * A very short summary of this same message, this is used because the LLM has a hard time keeping track

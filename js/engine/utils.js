@@ -62,7 +62,7 @@ async function findVisibleConversationMessage(DE, characterId, conversation, sta
     while (true) {
         for (let index = startIndex; index >= 0 && index < conversation.messages.length; index += direction) {
             const message = conversation.messages[index];
-            if ((!message.canOnlyBeSeenByCharacter || message.canOnlyBeSeenByCharacter === characterId) || isOmnicientUser) {
+            if ((!message.canOnlyBeSeenByCharacters || message.canOnlyBeSeenByCharacters.includes(characterId)) || isOmnicientUser) {
                 return { conversation, message };
             }
         }
@@ -1398,7 +1398,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 const isOminicientUser = participantId === DE.user && DE.userMode === "debug";
                 const canReadThoughts = participantChar.canReadThoughts || false;
 
-                if (newMessage.canOnlyBeSeenByCharacter && newMessage.canOnlyBeSeenByCharacter !== participantId && !isOminicientUser) {
+                if (newMessage.canOnlyBeSeenByCharacters && newMessage.canOnlyBeSeenByCharacters.includes(participantId) === false && !isOminicientUser) {
                     // do not generate anything for this participant, since they cannot see the message
                     continue;
                 }
@@ -1463,7 +1463,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     }
 
                     const isOminicientUser = participantId === DE.user && DE.userMode === "debug";
-                    if (addedMessage.canOnlyBeSeenByCharacter && addedMessage.canOnlyBeSeenByCharacter !== participantId && !isOminicientUser) {
+                    if (addedMessage.canOnlyBeSeenByCharacters && addedMessage.canOnlyBeSeenByCharacters.includes(participantId) === false && !isOminicientUser) {
                         // do not generate anything for this participant, since they cannot see the message
                         continue;
                     }
@@ -2982,16 +2982,6 @@ function defineStateInCharacter(DE, character, stateName, stateDefinition) {
 }
 
 /**
- * 
- * @param {DEObject} DE 
- * @param {string} content 
- */
-function makeUserStoryMasterMessage(DE, content) {
-    DE.internalState.ADD_STORY_MASTER_MESSAGES = DE.internalState.ADD_STORY_MASTER_MESSAGES || [];
-    DE.internalState.ADD_STORY_MASTER_MESSAGES.push({ type: "user", content });
-}
-
-/**
  * @param {DEObject} DE
  */
 function markGameOver(DE) {
@@ -2999,13 +2989,71 @@ function markGameOver(DE) {
 }
 
 /**
- * 
- * @param {DEObject} DE 
- * @param {string} content 
+ * @param {DEObject} deObject 
+ * @param {string} stateName 
+ * @param {DECharacterStateDefinition} stateDescription 
+ * @param {DECompleteCharacterReference} character 
+ * @param {string} message
  */
-function makeStoryMasterMessage(DE, content) {
-    DE.internalState.ADD_STORY_MASTER_MESSAGES = DE.internalState.ADD_STORY_MASTER_MESSAGES || [];
-    DE.internalState.ADD_STORY_MASTER_MESSAGES.push({ type: "everyone", content });
+async function makeCharacterConversationStoryMasterMessage(deObject, stateName, stateDescription, character, message) {
+    if (stateDescription.behaviourType === "HIDDEN") {
+        return;
+    }
+
+    const conversationId = deObject.stateFor[character.id].conversationId;
+    if (!conversationId) {
+        console.warn(`Character ${character.name} does not have an active conversation when making story master message for state ${stateName}`);
+        return;
+    }
+    const conversation = await deObject.database.getConversation(conversationId);
+    if (!conversation) {
+        console.warn(`Conversation ${conversationId} not found when making story master message for state ${stateName} on character ${character.name}`);
+        return;
+    }
+
+    let canBeSeenByAll = true;
+    /**
+     * @type {string[]}
+     */
+    const canOnlyBeSeenBy = [];
+
+    if (stateDescription.hiddenToOthers) {
+        canBeSeenByAll = false;
+        canOnlyBeSeenBy.push(character.id);
+    } else {
+        const participantIds = conversation.participants;
+        for (const participantId of participantIds) {
+            const whatCanTheyMakeOf = whatCanTheyMakeOfAnotherCharacter(deObject, character, deObject.characters[participantId]);
+
+            if (whatCanTheyMakeOf.canTellStates) {
+                canOnlyBeSeenBy.push(participantId);
+            } else {
+                canBeSeenByAll = false;
+            }
+        }
+    }
+
+    await deObject.utils.conversations.addMessageToConversation(conversationId, {
+        characterId: null,
+        canOnlyBeSeenByCharacters: canBeSeenByAll ? null : canOnlyBeSeenBy,
+        content: [
+            {
+                type: "narration",
+                fragments: await deObject.utils.narrationAndDialogue.parseNarration(message, null),
+            },
+        ],
+        emotion: null,
+        emotionalRange: [],
+        interactingCharacters: [character.id],
+        isCharacter: false,
+        isDebugMessage: false,
+        isRejectedMessage: false,
+        isStoryMasterMessage: true,
+        metadata: {},
+        rumors: [],
+        singleSummary: null,
+        summariesByCharacterId: {},
+    });
 }
 
 /**
@@ -3029,17 +3077,21 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
         throw new Error(`Character ${character.name} does not have state description for ${stateName}.`);
     }
 
-    // DE.user is a character id
-    if (deObject.user && deObject.user === character.id) {
-        let stateDescriptionText = typeof characterStateDescription.general === "string" ? characterStateDescription.general : await characterStateDescription.general({
-            char: character,
-            causes: characterStateInfo.causes,
-        });
-        if (!stateDescriptionText.endsWith(".")) {
-            stateDescriptionText += ".";
-        }
-        makeUserStoryMasterMessage(deObject, `${character.name} is now being affected by the state: ${stateName.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}.\n${stateDescriptionText}`);
+    let stateDescriptionText = typeof characterStateDescription.general === "string" ? characterStateDescription.general : await characterStateDescription.general({
+        char: character,
+        causes: characterStateInfo.causes,
+    });
+    if (!stateDescriptionText.endsWith(".")) {
+        stateDescriptionText += ".";
     }
+
+    await makeCharacterConversationStoryMasterMessage(
+        deObject,
+        stateName,
+        characterStateDescription,
+        character,
+        `${character.name} is now ${stateName}.\n\n${stateDescriptionText}`,
+    );
 
     if (characterStateDescription.triggersStates) {
         for (const triggeredState of Object.keys(characterStateDescription.triggersStates)) {
@@ -3116,18 +3168,15 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
             deObject.stateFor[character.id].dead = true;
         }
 
-        // DE.user is a character id
-        if (character.id === deObject.user) {
-            console.log(`The user character ${character.name} has reached a dead-end: ${deadEndPotential}, game over.`);
+        console.log(`The user character ${character.name} has reached a dead-end: ${deadEndPotential}, game over.`);
 
-            if (characterStateDescription.deadEndIsDeath) {
-                makeUserStoryMasterMessage(deObject, `${character.name} has died: ${deadEndPotential}.`);
-            } else {
-                makeUserStoryMasterMessage(deObject, `${character.name} has reached a dead-end and is thus removed from the story: ${deadEndPotential}.`);
-            }
-
-            markGameOver(deObject);
+        if (characterStateDescription.deadEndIsDeath) {
+            await makeCharacterConversationStoryMasterMessage(deObject, stateName, characterStateDescription, character, `${deObject.utils.templates.formatCharacterName(character)} has died.\n\n${deadEndPotential}.`);
+        } else {
+            await makeCharacterConversationStoryMasterMessage(deObject, stateName, characterStateDescription, character, `${deObject.utils.templates.formatCharacterName(character)} is gone.\n\n${deadEndPotential}.`);
         }
+
+        markGameOver(deObject);
     }
 }
 
@@ -3137,11 +3186,6 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
  * @param {string} stateName 
  */
 export async function onStateRemovedOnCharacter(deObject, character, stateName) {
-    // DE.user is a character id
-    if (deObject.user && deObject.user === character.id) {
-        makeUserStoryMasterMessage(deObject, `${character.name} is no longer affected by the state: ${stateName.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}.`);
-    }
-
     // stateFor keyed by character id
     const characterState = deObject.stateFor[character.id];
     if (!characterState) {
@@ -3155,6 +3199,8 @@ export async function onStateRemovedOnCharacter(deObject, character, stateName) 
     if (!characterStateDescription) {
         throw new Error(`Character ${character.name} does not have state description for ${stateName}.`);
     }
+
+    await makeCharacterConversationStoryMasterMessage(deObject, stateName, characterStateDescription, character, `${character.name} is no longer ${stateName}.`);
 
     if (characterStateDescription.triggersStatesOnRemove) {
         for (const triggeredState of Object.keys(characterStateDescription.triggersStatesOnRemove)) {
@@ -3254,7 +3300,7 @@ export async function onStateRelievedOnCharacter(deObject, character, stateName)
             stateDescriptionText = "";
         }
 
-        makeUserStoryMasterMessage(deObject, `${character.name} is has begun to relieve: ${stateName.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}${stateDescriptionText}`);
+        // makeUserStoryMasterMessage(deObject, `${character.name} is has begun to relieve: ${stateName.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}${stateDescriptionText}`);
     }
 
     if (characterStateDescription.triggersStatesOnRelieve) {

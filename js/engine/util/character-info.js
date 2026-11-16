@@ -1236,7 +1236,6 @@ export function getExternalDescriptionOfCharacterPostureOnly(deObject, character
     const posturesThatDoNotSpecifyGround = [
         "standing",
         "flying",
-        "floating",
         "swimming",
     ]
 
@@ -1278,6 +1277,66 @@ export function getExternalDescriptionOfCharacterPostureOnly(deObject, character
     if (!noName) {
         messageFinal = inPerspectiveOfCharacterName + " is " + messageFinal;
     }
+
+    if (characterExactLocation.relativePosition) {
+        // capitalize the first letter of the relative position
+        messageFinal += " " + characterExactLocation.relativePosition.charAt(0).toUpperCase() + characterExactLocation.relativePosition.slice(1) + ".";
+    }
+
+    return messageFinal;
+}
+
+/**
+ * @param {DEObject} deObject 
+ * @param {string} characterId 
+ * @param {string} inPerspectiveOfCharacterId 
+ */
+export function getExternalDescriptionOfCharacterPostureOnlyChanged(deObject, characterId, inPerspectiveOfCharacterId) {
+    const character = deObject.characters[characterId];
+    if (!character) {
+        throw new Error(`Character ${characterId} not found.`);
+    }
+    const characterState = deObject.stateFor[characterId];
+    if (!characterState) {
+        throw new Error(`Character state for ${characterId} not found.`);
+    }
+
+    const posturesThatDoNotSpecifyGround = [
+        "standing",
+        "flying",
+        "swimming",
+    ]
+
+    const characterExactLocation = getCharacterExactLocation(deObject, characterId);
+
+    const slotValue = deObject.world.locations[characterState.location].slots[characterState.locationSlot];
+    const formattedSlotName = deObject.utils.templates.formatLocationSlotName(slotValue, inPerspectiveOfCharacterId, { type: "definite" })
+
+    let postureAppliedOnDescription = (posturesThatDoNotSpecifyGround.includes(characterState.posture)) ? "at " + formattedSlotName : "on the ground at " + formattedSlotName;
+    if (characterExactLocation.itemPathEnd === "ontopCharacters" && characterExactLocation.itemPath) {
+        postureAppliedOnDescription = locationPathToMessage(
+            deObject,
+            characterId,
+            inPerspectiveOfCharacterId,
+            characterState.location,
+            [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]
+        );
+    } else if (characterExactLocation.itemPathEnd === "containingCharacters" && characterExactLocation.itemPath) {
+        postureAppliedOnDescription = locationPathToMessage(
+            deObject,
+            characterId,
+            inPerspectiveOfCharacterId,
+            characterState.location,
+            [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]
+        );
+    }
+
+    const inPerspectiveOfCharacterName = deObject.utils.templates.formatCharacterName(character, inPerspectiveOfCharacterId, {
+        capitalize: true,
+        type: "definite",
+    });
+
+    let messageFinal = inPerspectiveOfCharacterName + " is now " + postureToText(characterState.posture) + " " + postureAppliedOnDescription + ".";
 
     if (characterExactLocation.relativePosition) {
         // capitalize the first letter of the relative position

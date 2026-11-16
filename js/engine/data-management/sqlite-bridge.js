@@ -30,7 +30,7 @@ const messageFields = {
     endTime: "json",
     untimed: "boolean",
     isProcessingSideEffects: "boolean",
-    canOnlyBeSeenByCharacter: "text",
+    canOnlyBeSeenByCharacters: "json",
     singleSummary: "text",
     summariesByCharacterId: "json",
     perspectiveMessageByCharacterId: "json",
@@ -371,6 +371,8 @@ export class SQLiteBridge extends BaseDataManager {
                 `);
                 await this.ensurePerspectiveSchema(id);
                 const additions = [
+                    ["engine_conversation_messages", "canOnlyBeSeenByCharacters",
+                        "TEXT CHECK (canOnlyBeSeenByCharacters IS NULL OR json_valid(canOnlyBeSeenByCharacters))"],
                     ["engine_conversations", "nextConversationIdsPerParticipant",
                         "TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(nextConversationIdsPerParticipant))"],
                     ["engine_conversation_messages", "isProcessingSideEffects",
@@ -391,6 +393,14 @@ export class SQLiteBridge extends BaseDataManager {
                             continue;
                         }
                         await this.databaseController.runQuery(id, `ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+                        // Preserve visibility restrictions in databases using the old scalar field.
+                        if (name === "canOnlyBeSeenByCharacters" && columns.some(column => column.name === "canOnlyBeSeenByCharacter")) {
+                            await this.databaseController.runQuery(id, `
+                                UPDATE engine_conversation_messages
+                                SET canOnlyBeSeenByCharacters = json_array(canOnlyBeSeenByCharacter)
+                                WHERE canOnlyBeSeenByCharacter IS NOT NULL
+                            `);
+                        }
                         if (name === "nextConversationIdsPerParticipant") {
                             await this.databaseController.runQuery(id, `
                                 UPDATE engine_conversations

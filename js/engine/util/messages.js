@@ -140,7 +140,7 @@ export function renderNarrationFragmentsToText(fragments) {
  * @property {DEEmotionNames[]|null} emotionalRange the emotional range of the message
  * @property {boolean} untimed whether this message is untimed or not
  * @property {boolean} processed whether this message has been processed or not
- * @property {string | null} onlySeenByCharacterIdName the <id:name> of the character that can see this message, if any, otherwise null
+ * @property {string[] | null} onlySeenByCharacterIdNames the <id:name> identifiers of characters that can see this message, or null for everyone
  * @property {string | null} perspectiveId the id of the last perspective of the fed character, if any, otherwise null
  */
 
@@ -198,7 +198,7 @@ export async function* getHistory(engine, character, options) {
 
         // process the conversation messages
         const conversationMessages = currentConversationObject.messages.filter(msg => (options.includeRejectedMessages || !msg.isRejectedMessage) && (options.includeDebugMessages || !msg.isDebugMessage) &&
-            (options.perspective === "story-master" || !msg.canOnlyBeSeenByCharacter || msg.canOnlyBeSeenByCharacter === character.id));
+            (options.perspective === "story-master" || !msg.canOnlyBeSeenByCharacters || msg.canOnlyBeSeenByCharacters.includes(character.id)));
 
         const conversationLocation = currentConversationObject.locations[character.id];
         const conversationLocationId = conversationLocation.locationId;
@@ -271,7 +271,7 @@ export async function* getHistory(engine, character, options) {
                 emotionalRange: null,
                 untimed: true,
                 processed: false,
-                onlySeenByCharacterIdName: null,
+                onlySeenByCharacterIdNames: null,
                 perspectiveId: null,
             };
             if (!keepgoing) {
@@ -296,7 +296,7 @@ export async function* getHistory(engine, character, options) {
                 const otherCharInfo = message.characterId ? engine.getDEObject().characters[message.characterId] : null;
                 const knownName = message.isStoryMasterMessage ? "Story Master" : (!otherCharInfo ? "Unknown Entity" : getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine.getDEObject(), character, otherCharInfo));
 
-                const canOnlyBeSeenByCharacter = message.canOnlyBeSeenByCharacter ? engine.getDEObject().characters[message.canOnlyBeSeenByCharacter] : null;
+                const canOnlyBeSeenByCharacters = message.canOnlyBeSeenByCharacters ? message.canOnlyBeSeenByCharacters.map(id => engine.getDEObject().characters[id]) : null;
 
                 const keepgoing = yield ({
                     name: knownName,
@@ -314,8 +314,8 @@ export async function* getHistory(engine, character, options) {
                     emotionalRange: message.emotionalRange,
                     untimed: message.untimed || false,
                     processed: !message.isProcessingSideEffects,
-                    onlySeenByCharacterIdName: canOnlyBeSeenByCharacter ?
-                        getNameIdentificationForOneCharacterTowardsAnother(engine.getDEObject(), options.perspective === "story-master" ? canOnlyBeSeenByCharacter : character, canOnlyBeSeenByCharacter) : null,
+                    onlySeenByCharacterIdNames: canOnlyBeSeenByCharacters ?
+                        canOnlyBeSeenByCharacters.map(viewer => getNameIdentificationForOneCharacterTowardsAnother(engine.getDEObject(), options.perspective === "story-master" ? viewer : character, viewer)) : null,
                     perspectiveId: options.perspective === "character" ? (
                         message.perspectiveByCharacterId ? message.perspectiveByCharacterId[character.id].after || message.perspectiveByCharacterId[character.id].before || null : null
                     ) : null,
@@ -382,7 +382,7 @@ export async function* getHistory(engine, character, options) {
                     emotionalRange: null,
                     untimed: true,
                     processed: false,
-                    onlySeenByCharacterIdName: null,
+                    onlySeenByCharacterIdNames: null,
                     perspectiveId: null,
                 };
                 if (!keepgoing) {
@@ -400,7 +400,7 @@ export async function* getHistory(engine, character, options) {
  * @param {string} name
  * @param {string|null} characterId
  * @param {boolean} storyMaster
- * @param {string|null} onlySeenByCharacterIdName
+ * @param {string[]|null} onlySeenByCharacterIdNames
  * @returns {Array<string>}
  */
 function convertContentToSimpleList(
@@ -408,7 +408,7 @@ function convertContentToSimpleList(
     name,
     characterId,
     storyMaster,
-    onlySeenByCharacterIdName,
+    onlySeenByCharacterIdNames,
 ) {
     /**
      * @type {Array<string>}
@@ -425,7 +425,7 @@ function convertContentToSimpleList(
                 }
             }
             message += contentPart.type === "thought" ? "" : "*";
-            const onlyNoticedBy = onlySeenByCharacterIdName ? " (only noticed by " + onlySeenByCharacterIdName + ")" : "";
+            const onlyNoticedBy = onlySeenByCharacterIdNames?.length ? " (only noticed by " + onlySeenByCharacterIdNames.join(", ") + ")" : "";
 
             if (contentPart.type === "thought") {
                 finalList.push((storyMaster ? ("Story Master: " + message) : ("<" + characterId + ":" + name + "> (thought): " + message)) + onlyNoticedBy);
@@ -466,7 +466,7 @@ function convertContentToSimpleList(
                 }
             }
 
-            const onlyHeardBy = onlySeenByCharacterIdName ? " (only heard by " + onlySeenByCharacterIdName + ")" : "";
+            const onlyHeardBy = onlySeenByCharacterIdNames?.length ? " (only heard by " + onlySeenByCharacterIdNames.join(", ") + ")" : "";
 
             finalList.push((storyMaster ? ("Story Master: " + pieces.join(" ")) : ("<" + characterId + ":" + name + ">: " + pieces.join(" "))) + onlyHeardBy);
         }
@@ -475,12 +475,12 @@ function convertContentToSimpleList(
 }
 
 /**
- * @param {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, storyMaster: boolean, characterId: string | null, conversationId: string | null, onlySeenByCharacterIdName: string | null}>} messages
+ * @param {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, storyMaster: boolean, characterId: string | null, conversationId: string | null, onlySeenByCharacterIdNames: string[] | null}>} messages
  * @returns {Array<{message: string, author: string, storyMaster: boolean}>}
  */
 export function convertMessagesToSimpleList(messages) {
     const accumulatedLists = messages.map(msg => {
-        return convertContentToSimpleList(msg.content, msg.name, msg.characterId, msg.storyMaster, msg.onlySeenByCharacterIdName).map(message => {
+        return convertContentToSimpleList(msg.content, msg.name, msg.characterId, msg.storyMaster, msg.onlySeenByCharacterIdNames).map(message => {
             return {
                 message,
                 author: msg.name,
@@ -512,7 +512,7 @@ export function convertMessagesToSimpleList(messages) {
  *   enrichedMode?: boolean,
  *   perspective: "character" | "story-master"
  * }} options
- * @returns {Promise<{messages: Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null, onlySeenByCharacterIdName: string | null}>, conversingCharacters: string[], mentionedCharacters: string[], lastPerspectiveId: string | null}>}
+ * @returns {Promise<{messages: Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null, onlySeenByCharacterIdNames: string[] | null}>, conversingCharacters: string[], mentionedCharacters: string[], lastPerspectiveId: string | null}>}
  */
 export async function getHistoryFragment(engine, character, options) {
     if (!engine.deObject) {
@@ -527,7 +527,7 @@ export async function getHistoryFragment(engine, character, options) {
     let generator = await allHistory.next();
 
     /**
-     * @type {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null, onlySeenByCharacterIdName: string | null}>}
+     * @type {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null, onlySeenByCharacterIdNames: string[] | null}>}
      */
     let messagesToAdd = [];
     /**
@@ -584,7 +584,7 @@ export async function getHistoryFragment(engine, character, options) {
                     storyMaster: generator.value.storyMaster,
                     id: generator.value.id,
                     conversationId: generator.value.conversationId,
-                    onlySeenByCharacterIdName: generator.value.onlySeenByCharacterIdName,
+                    onlySeenByCharacterIdNames: generator.value.onlySeenByCharacterIdNames,
                 });
                 if (generator.value.characterId) {
                     if (!conversingCharacters.includes(generator.value.characterId) && !generator.value.storyMaster) {

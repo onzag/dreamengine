@@ -2,7 +2,6 @@ import { findItemInPerspective, isPerspectiveMemoryRetained, findCharacterInPers
 import {
     getListOfCarriedCharactersByCharacter,
     getExternalDescriptionOfCharacter,
-    getInternalDescriptionOfCharacter,
     getBondDeclarationFromBondDescription,
     getFamilyBondRelation,
     getRelationship,

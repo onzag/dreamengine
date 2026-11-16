@@ -170,6 +170,12 @@ export default async function timeForwardsUsingUntimedMessages(engine) {
         throw new Error("User character not found in engine.deObject.characters");
     }
 
+    const userState = engine.deObject.stateFor[engine.deObject.user];
+
+    if (!userState) {
+        throw new Error("User character state not found in engine.deObject.stateFor");
+    }
+
     // now this function is meant to be called every time a character sends a message and ends their talk turn
     // or when the story starts (and since the character shouldn't have spoken yet it will get everything since the beginning of time)
     const untimedFragements = (await getHistoryFragment(engine, userCharacter, {
@@ -265,8 +271,6 @@ export default async function timeForwardsUsingUntimedMessages(engine) {
     currentTime.minuteOfHour = newCurrentTimeDate.getUTCMinutes();
     currentTime.dayOfWeek = newCurrentTimeDate.getUTCDay();
 
-    const storyMasterMessagesToAdd = [];
-
     // reroll world weather
     const characterState = engine.deObject.stateFor[userCharacter.id];
     const currentWeatherAtLocation = engine.deObject.world.locations[characterState.location].internalState.currentWeather;
@@ -281,10 +285,39 @@ export default async function timeForwardsUsingUntimedMessages(engine) {
     const newWeatherAtLocation = engine.deObject.world.locations[characterState.location].internalState.currentWeather;
     if (currentWeatherAtLocation !== newWeatherAtLocation) {
         console.log(`Time-Forwards: Weather at ${characterState.location} changed from ${currentWeatherAtLocation} to ${newWeatherAtLocation} after time advanced.`);
-        storyMasterMessagesToAdd.push(`The weather at ${characterState.location} has changed from ${currentWeatherAtLocation} to ${newWeatherAtLocation}.`);
+        if (userState.conversationId) {
+            await engine.deObject.utils.conversations.addMessageToConversation(userState.conversationId, {
+                canOnlyBeSeenByCharacters: null,
+                characterId: null,
+                content: [
+                    {
+                        type: "narration",
+                        fragments: [
+                            "The weather at ",
+                            {
+                                foundAs: "locations",
+                                identifiers: [characterState.location],
+                                type: "identifier",
+                                text: engine.deObject.world.locations[characterState.location].name,
+                            },
+                            " has changed from " + currentWeatherAtLocation + " to " + newWeatherAtLocation + ".",
+                        ]
+                    }
+                ],
+                emotion: null,
+                emotionalRange: [],
+                interactingCharacters: [],
+                isDebugMessage: false,
+                isCharacter: false,
+                isRejectedMessage: false,
+                isStoryMasterMessage: true,
+                metadata: {},
+                rumors: [],
+                singleSummary: null,
+                summariesByCharacterId: {},
+            });
+        }
     }
 
     await engine.deObject.database.timeUntimedConversationMessages(timeNow);
-
-    return storyMasterMessagesToAdd;
 }

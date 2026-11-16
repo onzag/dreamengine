@@ -13,7 +13,7 @@ export class ChangeNotifications extends HTMLElement {
         this.root.innerHTML = `<style>
 ${sharedStyles}
 ${identifierLinkStyles}
-:host { position: absolute; top: 8vh; right: 2vh; width: min(440px, calc(100% - 4vh)); z-index: 100; pointer-events: none; }
+:host { position: absolute; top: 10vh; right: 2vh; width: min(440px, calc(100% - 4vh)); z-index: 100; pointer-events: none; }
 [hidden] { display: none !important; }
 article { position: relative; pointer-events: auto; overflow: hidden; padding: 2vh 5vh; border: 0.1vh solid #b4ddff65; background: linear-gradient(125deg, #6588ac35, #122034c9), #0c1729b8; backdrop-filter: blur(20px) saturate(150%); -webkit-backdrop-filter: blur(20px) saturate(150%); box-shadow: 0 12px 36px #0006, inset 0 1px #effaff26; color: #eef7ff; animation: arrive .3s ease-out; }
 header { display: flex; align-items: center; gap: 10px; color: #b9e5ff; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }

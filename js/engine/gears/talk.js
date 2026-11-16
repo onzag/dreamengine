@@ -541,7 +541,7 @@ export async function talk(engine, character, options) {
      * @type {DEConversationMessage}
      */
     const nextMessage = {
-        canOnlyBeSeenByCharacter: null,
+        canOnlyBeSeenByCharacters: null,
         content: [],
         // This gets set later by time-forwards.js
         duration: {

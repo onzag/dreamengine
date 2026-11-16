@@ -23,7 +23,7 @@ engine.exports = {
         // TODO remove this testing stuff
         await DE.utils.conversations.addMessageIntoCharactersConversation(DE.user, {
             metadata: {},
-            canOnlyBeSeenByCharacter: null,
+            canOnlyBeSeenByCharacters: null,
             content: [
                 {
                     type: "dialogue",
@@ -851,7 +851,7 @@ engine.exports = {
             // what else could it be?
             actionPromptInjection: [
                 {
-                    action: (info) => `${info.char.name} has an urgent need to return to the airlock and into the lunar station to avoid asphyxiation`,
+                    action: (info) => `${DE.utils.templates.formatCharacterName(info.char)} has an urgent need to return to the airlock and into the lunar station to avoid asphyxiation`,
                     isDeadEndScenario: false,
                     deadEndIsDeath: false,
                     primaryEmotion: "fearful",
@@ -863,10 +863,10 @@ engine.exports = {
             deadEndIsDeath: true,
             // 30 seconds to death by asphyxiation
             deadEndByTimeInMinutes: 0.5,
-            triggersDeadEnd: (info) => `${info.char.name} has run out of air and has asphyxiated in the vacuum of space`,
+            triggersDeadEnd: (info) => `${DE.utils.templates.formatCharacterName(info.char)} has run out of air and has asphyxiated in the vacuum of space`,
             intensityChangeRatePerInferenceCycle: 0,
             dominance: 10,
-            general: (info) => `${info.char.name} is struggling to breathe in the vacuum of space`,
+            general: (info) => `${DE.utils.templates.formatCharacterName(info.char)} is struggling to breathe in the vacuum of space`,
         });
 
         DE.utils.characters.defineStateInAllCharacters("Freezing in the Vaccuum", {
