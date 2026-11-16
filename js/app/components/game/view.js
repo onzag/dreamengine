@@ -5,6 +5,8 @@ import './view/character-surrounding-view.js';
 import './view/message-view.js';
 import './view/items-overlay.js';
 import './view/menu.js';
+import './view/change-notifications.js';
+import { selectMessagePerspective, isWaitingForAfter } from './view/message-perspective.js';
 import { playHoverSound, stopAllAmbiencesAndStartNewOne } from '../../sound.js';
 
 /** Coordinates message selection and hands its stored perspective to every display. */
@@ -25,6 +27,7 @@ export class GameView extends HTMLElement {
         this.identityVersion = 0;
         this.pendingUserSelection = false;
         this.loadedPerspectiveId = '';
+        this.changeNotificationKey = '';
         this.lifecycle = 0;
         this.perspectiveVersion = 0;
         this.perspectiveUpdateQueued = false;
@@ -108,8 +111,7 @@ export class GameView extends HTMLElement {
                 this.currentConversationMessage = firstValue.message || null;
                 this.currentConversationMessageContent = firstValue.message?.perspectiveMessageByCharacterId?.[this.currentUserId]?.[0] || null;
                 this.currentConversationMessageContentIndex = 0;
-                const potentialPerspectiveInfo = this.currentConversationMessage?.perspectiveByCharacterId?.[this.currentUserId];
-                this.currentPerspectiveId = potentialPerspectiveInfo?.after || potentialPerspectiveInfo?.before || '';
+                this.selectCurrentPerspective();
             }
         }
 
@@ -123,8 +125,7 @@ export class GameView extends HTMLElement {
                 this.currentConversationMessageContentIndex = contents.length
                     ? Math.max(0, Math.min(this.currentConversationMessageContentIndex, contents.length - 1)) : -1;
                 this.currentConversationMessageContent = contents[this.currentConversationMessageContentIndex] || null;
-                const potentialPerspectiveInfo = this.currentConversationMessage?.perspectiveByCharacterId?.[this.currentUserId];
-                this.currentPerspectiveId = potentialPerspectiveInfo?.after || potentialPerspectiveInfo?.before || '';
+                this.selectCurrentPerspective();
             }
 
             if (recalculateNext) {
@@ -192,8 +193,7 @@ export class GameView extends HTMLElement {
         this.currentConversationMessageContentIndex = this.prevConversationMessageContentIndex;
         this.currentConversationMessageContent = this.prevConversationMessageContent;
 
-        const potentialPerspectiveInfo = this.currentConversationMessage?.perspectiveByCharacterId?.[this.currentUserId];
-        this.currentPerspectiveId = potentialPerspectiveInfo?.after || potentialPerspectiveInfo?.before || '';
+        this.selectCurrentPerspective();
 
         await this.recalculateMessageView(true, false, false);
         await this.renderCurrentPerspective();
@@ -201,7 +201,7 @@ export class GameView extends HTMLElement {
 
     async goNextMessage() {
         await this.pendingPerspectiveUpdate;
-        if (this.currentConversationMessage?.isProcessingSideEffects) return;
+        if (this.currentConversationMessage?.isProcessingSideEffects || this.waitingForAfter) return;
         if (!this.nextConversation || !this.nextConversationMessage || !this.nextConversationMessageContent) return;
 
         this.currentConversationId = this.nextConversation.id;
@@ -217,8 +217,7 @@ export class GameView extends HTMLElement {
         this.currentConversationMessageContentIndex = this.nextConversationMessageContentIndex;
         this.currentConversationMessageContent = this.nextConversationMessageContent;
 
-        const potentialPerspectiveInfo = this.currentConversationMessage?.perspectiveByCharacterId?.[this.currentUserId];
-        this.currentPerspectiveId = potentialPerspectiveInfo?.after || potentialPerspectiveInfo?.before || '';
+        this.selectCurrentPerspective();
 
         await this.recalculateMessageView(false, false, true);
         await this.renderCurrentPerspective();
@@ -292,12 +291,17 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
                 </div>
             </div>
             <app-game-items-overlay></app-game-items-overlay>
+            <app-game-change-notifications></app-game-change-notifications>
             <div class="black-overlay" style="position:absolute;inset:0;background:#000;z-index:1000" aria-hidden="true"></div>`;
         const button = /** @type {HTMLButtonElement} */ (this.root.querySelector('.items-toggle'));
         const overlay = /** @type {import('./view/items-overlay.js').ItemsOverlay} */ (this.root.querySelector('app-game-items-overlay'));
         const messageView = /** @type {import('./view/message-view.js').MessageView} */ (this.root.querySelector('app-game-message-view'));
         messageView.onNext = () => this.goNextMessage();
         messageView.onPrev = () => this.goPrevMessage();
+        messageView.addEventListener('message-visibility-change', event => {
+            if (/** @type {CustomEvent<boolean>} */ (event).detail) this.renderChangeNotifications();
+            else this.changeNotifications?.clear();
+        });
         messageView.addEventListener('message-input', event => {
             this.onMessageInput(/** @type {CustomEvent<string>} */ (event).detail);
         });
@@ -397,20 +401,69 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
         }
     }
 
+    /** Keep the after snapshot and its notifications confined to the final fragment. */
+    selectCurrentPerspective() {
+        const selection = selectMessagePerspective(this.currentConversationMessage,
+            this.currentUserId, this.currentConversationMessageContentIndex);
+        this.currentPerspectiveId = selection.id;
+        const key = selection.isAfter ? JSON.stringify([this.currentUserId, this.currentConversationId,
+            this.currentMessageId, this.currentConversationMessageContentIndex, selection.id]) : '';
+        if (key !== this.changeNotificationKey) {
+            this.changeNotifications?.clear();
+            this.changeNotificationKey = key;
+        }
+    }
+
+    get changeNotifications() {
+        return /** @type {import('./view/change-notifications.js').ChangeNotifications | null} */ (
+            this.root.querySelector('app-game-change-notifications'));
+    }
+
+    get waitingForAfter() {
+        return isWaitingForAfter(this.currentConversationMessage, this.currentUserId,
+            this.currentConversationMessageContentIndex, this.currentPerspective ? this.loadedPerspectiveId : '',
+            !!this.nextConversationMessageContent);
+    }
+
+    renderChangeNotifications() {
+        const messageView = /** @type {import('./view/message-view.js').MessageView | null} */ (
+            this.root.querySelector('app-game-message-view'));
+        if (this.changeNotificationKey && this.currentPerspective && messageView?.messageVisible
+            && this.loadedPerspectiveId === this.currentPerspectiveId) {
+            this.changeNotifications?.showChanges(this.changeNotificationKey, this.currentPerspective);
+        }
+    }
+
     async renderCurrentPerspective() {
+        this.selectCurrentPerspective();
         const id = this.currentPerspectiveId;
         // A missing snapshot is retried even when the message's ID has not changed.
         if (this.currentPerspective && id === this.loadedPerspectiveId) {
             this.renderMessageView();
+            this.renderChangeNotifications();
             return;
         }
         const version = ++this.perspectiveVersion;
-        const perspective = id ? await window.ENGINE_WORKER_CLIENT.queryDEObject({
+        // Disable forward navigation immediately, including while the after ID is being fetched.
+        this.renderMessageView();
+        let loadedId = id;
+        let perspective = id ? await window.ENGINE_WORKER_CLIENT.queryDEObject({
             path: ['utils', 'characterInfo', 'getStoredPerspective'], call: [id],
         }) : null;
         if (!this.isConnected || version !== this.perspectiveVersion || id !== this.currentPerspectiveId) return;
+        if (!perspective) {
+            // Keep the scene readable while waiting, but never label this fallback as after.
+            const before = this.currentConversationMessage?.perspectiveByCharacterId?.[this.currentUserId]?.before;
+            if (before && before !== id) {
+                loadedId = before;
+                perspective = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                    path: ['utils', 'characterInfo', 'getStoredPerspective'], call: [before],
+                });
+                if (!this.isConnected || version !== this.perspectiveVersion || id !== this.currentPerspectiveId) return;
+            }
+        }
         this.currentPerspective = perspective;
-        this.loadedPerspectiveId = perspective ? id : '';
+        this.loadedPerspectiveId = perspective ? loadedId : '';
         const background = /** @type {import('./view/background.js').Background | null} */ (this.root.querySelector('app-game-background'));
         const surroundings = /** @type {import('./view/character-surrounding-view.js').CharacterSurroundingView | null} */ (this.root.querySelector('app-game-character-surrounding-view'));
         const stats = /** @type {import('./view/stats.js').Stats | null} */ (this.root.querySelector('app-game-stats'));
@@ -421,6 +474,7 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
         items?.updatePerspective(perspective);
 
         this.renderMessageView();
+        this.renderChangeNotifications();
 
         if (perspective) this.playThemeSongOfPerspective(perspective);
 
@@ -438,6 +492,7 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
             !!this.prevConversationMessageContent,
             !!this.nextConversationMessageContent,
             this.currentConversationMessageContentIndex,
+            this.waitingForAfter,
         );
     }
 
@@ -521,6 +576,8 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
     }
 
     disconnectedCallback() {
+        this.changeNotifications?.clear();
+        this.changeNotificationKey = '';
         this.lifecycle++;
         this.perspectiveVersion++;
         this.blackOverlayAnimation?.cancel();

@@ -50,9 +50,11 @@ kbd { opacity: .7; margin-left: 1vh; }
         this.hasPrev = false;
         this.hasNext = false;
         this.processing = false;
+        this.waitingForAfter = false;
         this.isInputMode = false;
         this.navigating = false;
         this.controlsKey = '';
+        this.messageVisible = false;
         this.prev.addEventListener('click', () => { void this.goBack(); });
         this.next.addEventListener('click', () => {
             if (this.isInputMode) this.input.submit();
@@ -111,6 +113,7 @@ kbd { opacity: .7; margin-left: 1vh; }
         this.messageKey = this.selectionKey = this.frozenKey = '';
         this.hasCurrent = this.hasPrev = this.hasNext = false;
         this.processing = this.isInputMode = false;
+        this.waitingForAfter = false;
         this.input.drafts.clear();
         this.input.draftKey = '';
         this.input.textarea.value = '';
@@ -126,8 +129,9 @@ kbd { opacity: .7; margin-left: 1vh; }
      * @param {boolean} hasPrev
      * @param {boolean} hasNext
      * @param {number} [contentIndex]
+     * @param {boolean} [waitingForAfter]
      */
-    updateMessageView(perspective, conversation, message, content, hasPrev, hasNext, contentIndex = 0) {
+    updateMessageView(perspective, conversation, message, content, hasPrev, hasNext, contentIndex = 0, waitingForAfter = false) {
         this.hasCurrent = !!(conversation && message && content);
         if (!conversation || !message || !content) {
             this.messageObject.pause();
@@ -145,7 +149,8 @@ kbd { opacity: .7; margin-left: 1vh; }
         this.currentPerspective = perspective;
         this.hasPrev = hasPrev;
         this.hasNext = hasNext;
-        this.processing = message.isProcessingSideEffects === true;
+        this.waitingForAfter = waitingForAfter;
+        this.processing = message.isProcessingSideEffects === true || waitingForAfter;
         this.messageObject.updateMessage(perspective, message, content, selectionKey);
         this.input.updateUser(perspective, JSON.stringify([perspective?.ownId, conversation.id]));
         // A next message may arrive while an unsent draft is open. Keep the draft for later.
@@ -156,11 +161,16 @@ kbd { opacity: .7; margin-left: 1vh; }
     renderControls() {
         const userName = this.currentPerspective?.ownName || this.currentPerspective?.self.nameSimple || 'Player';
         const key = JSON.stringify([this.hasCurrent, this.isInputMode, this.frozenKey, this.processing,
-            this.hasPrev, this.hasNext, this.navigating, this.messageObject.streaming, userName]);
+            this.hasPrev, this.hasNext, this.navigating, this.messageObject.streaming, userName, this.waitingForAfter]);
         if (key === this.controlsKey) return;
         this.controlsKey = key;
         this.hidden = !this.hasCurrent;
         this.messageObject.hidden = this.isInputMode;
+        const messageVisible = this.hasCurrent && !this.isInputMode;
+        if (messageVisible !== this.messageVisible) {
+            this.messageVisible = messageVisible;
+            this.dispatchEvent(new CustomEvent('message-visibility-change', { detail: messageVisible }));
+        }
         this.input.hidden = !this.isInputMode;
         this.input.setEnabled(this.hasCurrent && this.isInputMode && !this.frozenKey && !this.processing && !this.navigating);
         this.prev.hidden = !!this.frozenKey || !(this.isInputMode || this.hasPrev);
@@ -175,7 +185,7 @@ kbd { opacity: .7; margin-left: 1vh; }
         if (nextLabel.textContent !== label) nextLabel.textContent = label;
         this.loading.hidden = !(this.frozenKey || this.processing || this.navigating);
         const status = /** @type {HTMLElement} */ (this.loading.querySelector('.status'));
-        const statusText = this.frozenKey ? 'Waiting...' : 'Processing\u2026';
+        const statusText = this.frozenKey ? 'Waiting...' : this.waitingForAfter ? 'Loading outcome\u2026' : 'Processing\u2026';
         if (status.textContent !== statusText) status.textContent = statusText;
     }
 

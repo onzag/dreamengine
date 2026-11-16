@@ -271,7 +271,7 @@ export class GameOverlay extends HTMLElement {
         view.setAttribute('initial-conversation-id', readyInfo.lastConversationAndMessageInfo.conversation?.id || '');
         view.setAttribute('initial-message-id', readyInfo.lastConversationAndMessageInfo.message?.id || '');
         const potentialPerspectiveInfo = readyInfo.lastConversationAndMessageInfo.message?.perspectiveByCharacterId[readyInfo.userId];
-        view.setAttribute('initial-perspective-id', potentialPerspectiveInfo?.after || potentialPerspectiveInfo?.before || '');
+        view.setAttribute('initial-perspective-id', potentialPerspectiveInfo?.before || '');
         view.addEventListener('wake-up', () => this.onExitClick());
         view.addEventListener('ready', async event => {
             

@@ -1454,18 +1454,30 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 throw new Error(`Failed to add message to conversation ${conversationId}`);
             }
 
-            let called = false;
             const sideEffectsReady = async () => {
-                if (called) {
-                    throw new Error("Side effects ready function has already been called");
-                }
-                called = true;
                 for (const participantId of conversationObject.participants) {
                     const participantChar = DE.characters[participantId];
                     if (!participantChar) {
                         // must be a ghost participant, skip perspective generation
                         continue;
                     }
+
+                    const isOminicientUser = participantId === DE.user && DE.userMode === "debug";
+                    if (addedMessage.canOnlyBeSeenByCharacter && addedMessage.canOnlyBeSeenByCharacter !== participantId && !isOminicientUser) {
+                        // do not generate anything for this participant, since they cannot see the message
+                        continue;
+                    }
+
+                    // Reload by ID: later messages and linked conversations may have been
+                    // created since this callback was queued. Only the last visible message
+                    // for this participant owns the completed chain's after perspective.
+                    const nextVisible = await DE.utils.conversations.getNextConversationAndMessageForCharacter(
+                        participantId, conversationId, addedMessage.id,
+                    );
+                    if (nextVisible.message) {
+                        continue;
+                    }
+
                     const perspective = await getPerspective(
                         DE,
                         participantChar,
@@ -1473,7 +1485,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         addedMessage,
                         beforePerspectivePerCharacterId[participantId],
                     );
+
                     const afterPerspective = await DE.database.storePerspective(perspective);
+
                     addedMessage.perspectiveByCharacterId[participantId].after = afterPerspective;
                 }
 
@@ -1689,7 +1703,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 distance: loc.distance,
             }));
 
-            /** @type {Array<{ message: DEConversationMessage, _sideEffectsReady: () => Promise<void> }>} */
+            /** @type {Array<{ message: DEConversationMessage }>} */
             const finalConversationeMessages = [];
 
             messagesToBroadcast.forEach(async m => {

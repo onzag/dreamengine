@@ -5108,7 +5108,7 @@ declare interface DEUtils {
             location: DELocation | string,
             travelDistance: number,
             travelDistaceType: "meters" | "connections",
-        ): Promise<Array<{ message: DEConversationMessage, _sideEffectsReady: () => Promise<void> }>>;
+        ): Promise<Array<{ message: DEConversationMessage }>>;
         newConversation(conversation: Pick<DEConversation, "participants" | "communicators" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean } = {}): Promise<DEConversation>;
     },
     characterInfo: {

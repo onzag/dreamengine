@@ -13,7 +13,12 @@ const ATTRIBS = {
         "for": "UI Sound Effects",
         "license": "CC0 (Public Domain)"
     },
-}
+    "anthonyrox": {
+        "url": "https://freesound.org/people/AnthonyRox/",
+        "for": "UI Sound Effects",
+        "license": "CC0 (Public Domain)"
+    },
+};
 
 class OtherAttributions extends HTMLElement {
     constructor() {
