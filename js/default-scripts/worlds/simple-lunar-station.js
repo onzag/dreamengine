@@ -21,7 +21,7 @@ engine.exports = {
     },
     async onSceneStarted(DE, scene) {
         // TODO remove this testing stuff
-        const result = await DE.utils.conversations.addMessageIntoCharactersConversation(DE.user, {
+        await DE.utils.conversations.addMessageIntoCharactersConversation(DE.user, {
             metadata: {},
             canOnlyBeSeenByCharacter: null,
             content: [
@@ -77,7 +77,6 @@ engine.exports = {
         }, {
             ghost: true,
         });
-        await result.sideEffectsReady();
     },
     initialize(DE) {
         /**

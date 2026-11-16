@@ -1,5 +1,5 @@
 import { emotions } from "./util/emotions.js";
-import { deEngineUtilsFn } from "./utils.js";
+import { consumeAccumulatedSideEffectsReadyFunctions, deEngineUtilsFn } from "./utils.js";
 import { commands } from "./commands.js";
 import { BaseInferenceAdapter } from "./inference/base.js";
 import calculateStateChange from "./gears/state-change.js";
@@ -1059,6 +1059,7 @@ export class DEngine {
             addedMessagesForStoryMaster = await timeForwardsUsingUntimedMessages(this);
         }
 
+        await consumeAccumulatedSideEffectsReadyFunctions();
         await this.informDEObjectUpdated();
     }
 
@@ -1202,7 +1203,7 @@ export class DEngine {
                 unsafeMode: false,
             });
 
-            const messageObj = await this.deObject.utils.conversations.addMessageToConversation(conversation.id, {
+            await this.deObject.utils.conversations.addMessageToConversation(conversation.id, {
                 canOnlyBeSeenByCharacter: null,
                 content: [
                     {
@@ -1233,7 +1234,6 @@ export class DEngine {
                 moveTimeForwards: !preselectedTimeAtSceneStart,
             });
 
-            await messageObj.sideEffectsReady();
             await this.informDEObjectUpdated();
 
             return;

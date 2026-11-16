@@ -15,6 +15,7 @@ import {
     getNameIdentificationForOneCharacterTowardsAnotherOnlyName,
 } from './messages.js';
 import { getPerceivedItemLabel } from './visibility.js';
+import { millisecondsToDuration } from './time.js';
 
 /**
  * Count explicit identifier mentions in message content, including nested dialogue.
@@ -46,9 +47,10 @@ function countIdentifierMentions(message, id) {
  * @param {DECompleteCharacterReference | string} character
  * @param {string[]} [destroyedItemsIds]
  * @param {Omit<DEConversationMessage, "id">} [relatedConversationMessage]
+ * @param {DEPerspective | null} [knownPreviousPerspective]
  * @returns {Promise<DEPerspective>}
  */
-export async function getPerspective(DE, character, destroyedItemsIds = [], relatedConversationMessage) {
+export async function getPerspective(DE, character, destroyedItemsIds = [], relatedConversationMessage, knownPreviousPerspective = null) {
     const ownId = typeof character === 'string' ? character : character.id;
     const ownChar = DE.characters[ownId];
     if (!ownChar) {
@@ -60,7 +62,7 @@ export async function getPerspective(DE, character, destroyedItemsIds = [], rela
     }
 
     const destroyedIds = new Set(destroyedItemsIds);
-    const previousPerspective = await DE.database.getLastPerspectiveOfCharacter(ownId);
+    const previousPerspective = knownPreviousPerspective ?? await DE.database.getLastPerspectiveOfCharacter(ownId);
 
     const locationId = ownState.location;
     const location = DE.world.locations[locationId];
@@ -187,8 +189,181 @@ export async function getPerspective(DE, character, destroyedItemsIds = [], rela
         rememberedCharacters: [],
         rememberedLocations: [],
         timeOfPerspective: { ...DE.currentTime },
+        changes: {
+            timeForwards: { time: millisecondsToDuration(0), description: '0 seconds passed' },
+            atNewLocation: { case: false, firstTime: false, description: '' },
+            justStartedSpeakingWith: [], itemsMoved: [], itemsDroppedByCharacters: [],
+            itemsPickedUpByCharacters: [], charactersArrived: [], charactersLeft: [], charactersMoved: [],
+        },
     }, previousPerspective, DE.currentTime.time, destroyedItemsIds);
+
+    activePerspective.changes = await getPerspectiveChanges(DE, activePerspective, previousPerspective);
     return activePerspective;
+}
+
+/**
+ * Compare observations only; remembered and missing entities are not new events.
+ * With no previous snapshot there is no evidence of a change.
+ * @param {DEObject} DE
+ * @param {DEPerspective} perspective
+ * @param {DEPerspective | null | undefined} previousPerspective
+ * @returns {Promise<DEPerspective['changes']>}
+ */
+export async function getPerspectiveChanges(DE, perspective, previousPerspective) {
+    const elapsed = previousPerspective
+        ? Math.max(0, perspective.timeOfPerspective.time - previousPerspective.timeOfPerspective.time) : 0;
+    const time = millisecondsToDuration(elapsed);
+    const units = [[time.inDays, 'day'], [time.inHours, 'hour'], [time.inMinutes, 'minute'], [time.inSeconds, 'second']];
+    const [amount, unit] = units.find(([value]) => Number(value) >= 1) || units[3];
+    const duration = Math.round(Number(amount) * 100) / 100;
+    /** @type {DEPerspective['changes']} */
+    const changes = {
+        timeForwards: { time, description: `${duration} ${unit}${duration === 1 ? '' : 's'} passed` },
+        atNewLocation: { case: false, firstTime: false, description: '' },
+        justStartedSpeakingWith: [], itemsMoved: [], itemsDroppedByCharacters: [],
+        itemsPickedUpByCharacters: [], charactersArrived: [], charactersLeft: [], charactersMoved: [],
+    };
+    if (!previousPerspective) return changes;
+
+    /** @param {string} id @param {string} name */
+    const ref = (id, name) => `<${id}:${name}>`;
+    const selfRef = ref(perspective.ownId, perspective.self.nameSimple);
+    const locationRef = ref(perspective.ownLocationId, perspective.ownLocationName);
+    const changedLocation = perspective.ownLocationId !== previousPerspective.ownLocationId;
+    if (changedLocation) {
+        const firstTime = perspective.ownLocation.hasBeenTimesExact === 1;
+        changes.atNewLocation = {
+            case: true, firstTime,
+            description: `${selfRef} is ${firstTime ? 'for the first time ' : ''}at ${locationRef}`,
+        };
+    }
+    const oldCharacters = new Map([previousPerspective.self, ...previousPerspective.perspectiveCharacters].map(c => [c.characterId, c]));
+    const newCharacters = new Map([perspective.self, ...perspective.perspectiveCharacters].map(c => [c.characterId, c]));
+    for (const id of new Set(perspective.socialGroups.ownGroup)) {
+        if (previousPerspective.socialGroups.ownGroup.includes(id)) continue;
+        const character = newCharacters.get(id);
+        if (!character) continue;
+        const firstTimeMeeting = await DE.utils.bonds.justStartedTalkingToEachOther(perspective.ownId, id);
+        changes.justStartedSpeakingWith.push({
+            id, name: character.nameSimple, firstTimeMeeting,
+            description: `${selfRef} ${firstTimeMeeting ? 'just met' : 'started speaking with'} ${ref(id, character.nameSimple)}${firstTimeMeeting ? ' for the first time' : ''}`,
+        });
+    }
+
+    /** @param {DEPerspective} snapshot */
+    const characterSlots = (snapshot) => {
+        /** @type {Map<string, DEPerspectiveLocationSlot>} */
+        const slots = new Map();
+        for (const slot of snapshot.ownLocation.slots) {
+            for (const id of slot.characters) slots.set(id, slot);
+        }
+        const ownSlot = snapshot.ownLocation.slots.find(slot => slot.slotId === snapshot.ownLocationSlotId);
+        if (ownSlot) slots.set(snapshot.ownId, ownSlot);
+        return slots;
+    };
+    const oldSlots = characterSlots(previousPerspective);
+    const newSlots = characterSlots(perspective);
+    // Changing the observer's location does not imply everyone else arrived or left.
+    if (!changedLocation) {
+        for (const [id, character] of newCharacters) {
+            if (character.perceptionForm === 'invisible') continue;
+            const characterName = character.nameSimple;
+            const characterRef = ref(id, characterName);
+            if (!oldCharacters.has(id) && id !== perspective.ownId) {
+                changes.charactersArrived.push({ characterId: id, characterName, description: `${characterRef} arrived at ${locationRef}` });
+            }
+            const before = oldSlots.get(id);
+            const after = newSlots.get(id);
+            if (before && after && before.slotId !== after.slotId) {
+                changes.charactersMoved.push({
+                    characterId: id, characterName, toSlotId: after.slotId, toSlotName: after.slotName,
+                    description: `${characterRef} moved from ${ref(before.slotId, before.slotName)} to ${ref(after.slotId, after.slotName)}`,
+                });
+            }
+        }
+        for (const [id, character] of oldCharacters) {
+            if (id === perspective.ownId || character.perceptionForm === 'invisible' || newCharacters.has(id)) continue;
+            changes.charactersLeft.push({ characterId: id, characterName: character.nameSimple,
+                description: `${ref(id, character.nameSimple)} left ${locationRef}` });
+        }
+    }
+
+    /**
+     * @typedef {{ item: DEItemInPerspective, parent: string | null, relation: string,
+     * locationId: string, slotId: string | null, place: string,
+     * carrier: DEPerspectiveCharacter | null, wearing: boolean }} ItemPosition
+     */
+    /** @param {DEPerspective} snapshot */
+    const indexItems = (snapshot) => {
+        /** @type {Map<string, ItemPosition>} */
+        const index = new Map();
+        /** @param {DEItemInPerspective[]} items @param {Omit<ItemPosition, 'item' | 'parent'>} position */
+        const visit = (items, position) => {
+            for (const item of items) {
+                for (const entry of item.ids) index.set(entry.id, { ...position, item, parent: entry.parent });
+                visit(item.containing, { ...position, relation: 'inside' });
+                visit(item.ontop, { ...position, relation: 'on top of' });
+            }
+        };
+        for (const slot of snapshot.ownLocation.slots) {
+            visit(slot.items, { locationId: snapshot.ownLocationId, slotId: slot.slotId,
+                place: ref(slot.slotId, slot.slotName), carrier: null, wearing: false, relation: 'at' });
+        }
+        const slots = characterSlots(snapshot);
+        for (const character of [snapshot.self, ...snapshot.perspectiveCharacters]) {
+            if (character.perceptionForm === 'invisible') continue;
+            const position = { locationId: snapshot.ownLocationId, slotId: slots.get(character.characterId)?.slotId ?? null,
+                place: ref(character.characterId, character.nameSimple), carrier: character, wearing: false, relation: 'carried by' };
+            visit(character.carryingItems, position);
+            visit(character.wearingItems, { ...position, wearing: true, relation: 'worn by' });
+        }
+        return index;
+    };
+    const oldItems = indexItems(previousPerspective);
+    const newItems = indexItems(perspective);
+    /** @param {ItemPosition} position @param {Map<string, ItemPosition>} index */
+    const describePosition = (position, index) => {
+        const parent = position.parent && index.get(position.parent);
+        const place = parent && position.parent ? ref(position.parent, parent.item.name) : position.place;
+        return `${position.relation} ${place}${position.item.relativePosition ? ` ${position.item.relativePosition}` : ''}`;
+    };
+    // Group only IDs that share both their source and destination, even when a stack splits.
+    /** @type {Map<string, { ids: string[], before: ItemPosition, after: ItemPosition }>} */
+    const movements = new Map();
+    /** @param {ItemPosition} position */
+    const positionKey = position => [position.locationId, position.slotId, position.carrier?.characterId,
+        position.wearing, position.parent, position.relation, position.item.relativePosition || null];
+    for (const [id, after] of newItems) {
+        const before = oldItems.get(id);
+        if (!before || JSON.stringify(positionKey(before)) === JSON.stringify(positionKey(after))) continue;
+        const key = JSON.stringify([after.item.ids.map(entry => entry.id), positionKey(before), positionKey(after)]);
+        const group = movements.get(key);
+        if (group) group.ids.push(id);
+        else movements.set(key, { ids: [id], before, after });
+    }
+    for (const { ids, before, after } of movements.values()) {
+        const item = after.item;
+        const itemNames = utilItemCount(DE, after.locationId, !!item.oneOfAKind && ids.length === 1,
+            item.common, item.owner, ids.length, item.name, ids[0], true, false, true);
+        const itemRef = ref(ids.join(','), itemNames);
+        const base = { itemIds: ids, itemNames };
+        const changedCarrier = before.carrier?.characterId !== after.carrier?.characterId;
+        if (before.carrier && changedCarrier) {
+            changes.itemsDroppedByCharacters.push({ ...base, byCharacterId: before.carrier.characterId,
+                byCharacterName: before.carrier.nameSimple,
+                description: `${ref(before.carrier.characterId, before.carrier.nameSimple)} dropped ${itemRef} ${describePosition(after, newItems)}` });
+        }
+        if (after.carrier && (changedCarrier || before.wearing !== after.wearing)) {
+            changes.itemsPickedUpByCharacters.push({ ...base, byCharacterId: after.carrier.characterId,
+                byCharacterName: after.carrier.nameSimple, wearing: after.wearing,
+                description: `${ref(after.carrier.characterId, after.carrier.nameSimple)} ${after.wearing ? 'put on' : 'picked up'} ${itemRef}` });
+        }
+        if (!changedCarrier && before.wearing === after.wearing) {
+            changes.itemsMoved.push({ ...base,
+                description: `${itemRef} moved from ${describePosition(before, oldItems)} to ${describePosition(after, newItems)}` });
+        }
+    }
+    return changes;
 }
 
 /**

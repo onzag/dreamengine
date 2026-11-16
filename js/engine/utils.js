@@ -285,6 +285,48 @@ function getRepresentativeItems(items) {
 }
 
 /**
+ * @type {Array<() => Promise<void>>}
+ */
+let ACCUMULATED_SIDE_EFFECTS_READY_FUNCTIONS = [];
+
+/**
+ * @type {Map<string, { perspective: DEPerspective, perspectiveId: string }>}
+ */
+const CACHED_PERSPECTIVE = new Map();
+
+/**
+ * 
+ * @param {DEObject} DE
+ * @param {DECompleteCharacterReference} character
+ * @param {string[]} [destroyedItemsIds]
+ * @param {Omit<DEConversationMessage, "id">} [relatedConversationMessage]
+ * @returns {Promise<[DEPerspective, string]>}
+ */
+async function cachedGetPerspective(DE, character, destroyedItemsIds, relatedConversationMessage) {
+    if (CACHED_PERSPECTIVE.get(character.id)) {
+        // @ts-expect-error
+        return [CACHED_PERSPECTIVE.get(character.id).perspective, CACHED_PERSPECTIVE.get(character.id).perspectiveId];
+    }
+    const perspective = await getPerspective(DE, character, destroyedItemsIds, relatedConversationMessage);
+    const beforePerspective = await DE.database.storePerspective(perspective);
+    CACHED_PERSPECTIVE.set(character.id, { perspective, perspectiveId: beforePerspective });
+    return [perspective, beforePerspective];
+}
+
+export async function consumeAccumulatedSideEffectsReadyFunctions() {
+    CACHED_PERSPECTIVE.clear();
+    for (const fn of ACCUMULATED_SIDE_EFFECTS_READY_FUNCTIONS) {
+        try {
+            await fn();
+        } catch (error) {
+            console.error("Error in side effects ready function:", error);
+        }
+    }
+    ACCUMULATED_SIDE_EFFECTS_READY_FUNCTIONS = [];
+    CACHED_PERSPECTIVE.clear();
+}
+
+/**
  * @param {DEObject} DE
  * @param {DEngine} engine
  * @returns {DEUtils}
@@ -1341,6 +1383,11 @@ export const deEngineUtilsFn = (DE, engine) => ({
 
             const emitterChar = message.characterId ? DE.characters[message.characterId] : null;
 
+            /**
+             * @type {Record<string, DEPerspective>}
+             */
+            const beforePerspectivePerCharacterId = {};
+
             for (const participantId of conversationObject.participants) {
                 const participantChar = DE.characters[participantId];
                 if (!participantChar) {
@@ -1357,10 +1404,10 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 }
 
                 const heardIdentifiers = DE.stateFor[participantId].heardIdentifiers;
-                const perspective = await getPerspective(DE, participantChar, [], newMessage);
-                const savedPerspective = await DE.database.storePerspective(perspective);
+                const [beforePerspective, beforePerspectiveId] = await cachedGetPerspective(DE, participantChar, [], newMessage);
+                beforePerspectivePerCharacterId[participantId] = beforePerspective;
                 newMessage.perspectiveByCharacterId[participantId] = {
-                    before: savedPerspective,
+                    before: beforePerspectiveId,
                     after: null,
                 };
 
@@ -1407,26 +1454,39 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 throw new Error(`Failed to add message to conversation ${conversationId}`);
             }
 
-            return {
-                message: addedMessage,
-                sideEffectsReady: async () => {
-                    for (const participantId of conversationObject.participants) {
-                        const participantChar = DE.characters[participantId];
-                        if (!participantChar) {
-                            // must be a ghost participant, skip perspective generation
-                            continue;
-                        }
-                        const perspective = await getPerspective(DE, participantChar, [], addedMessage);
-                        const savedPerspective = await DE.database.storePerspective(perspective);
-                        addedMessage.perspectiveByCharacterId[participantId].after = savedPerspective;
-                    }
-
-                    await DE.database.updateConversationMessage(addedMessage.id, {
-                        perspectiveByCharacterId: addedMessage.perspectiveByCharacterId,
-                        isProcessingSideEffects: false,
-                    });
+            let called = false;
+            const sideEffectsReady = async () => {
+                if (called) {
+                    throw new Error("Side effects ready function has already been called");
                 }
+                called = true;
+                for (const participantId of conversationObject.participants) {
+                    const participantChar = DE.characters[participantId];
+                    if (!participantChar) {
+                        // must be a ghost participant, skip perspective generation
+                        continue;
+                    }
+                    const perspective = await getPerspective(
+                        DE,
+                        participantChar,
+                        [],
+                        addedMessage,
+                        beforePerspectivePerCharacterId[participantId],
+                    );
+                    const afterPerspective = await DE.database.storePerspective(perspective);
+                    addedMessage.perspectiveByCharacterId[participantId].after = afterPerspective;
+                }
+
+                await DE.database.updateConversationMessage(addedMessage.id, {
+                    perspectiveByCharacterId: addedMessage.perspectiveByCharacterId,
+                    isProcessingSideEffects: false,
+                });
             };
+            const result = {
+                message: addedMessage,
+            };
+            ACCUMULATED_SIDE_EFFECTS_READY_FUNCTIONS.push(sideEffectsReady);
+            return result;
         },
         async addMessageIntoCharactersConversation(targetCharacterId, message, options = {}) {
             targetCharacterId = typeof targetCharacterId === "string" ? targetCharacterId : targetCharacterId.id;
@@ -1629,7 +1689,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 distance: loc.distance,
             }));
 
-            /** @type {Array<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>} */
+            /** @type {Array<{ message: DEConversationMessage, _sideEffectsReady: () => Promise<void> }>} */
             const finalConversationeMessages = [];
 
             messagesToBroadcast.forEach(async m => {

@@ -4616,6 +4616,155 @@ declare interface DEPerspective {
      * Metadata of the world that is in perspective at that moment in time, this includes all the world's attributes, states, and other properties
      */
     worldMetadata: Record<string, any>;
+    /**
+     * Any changes between the last perspective and this one, this includes changes in the world, characters, locations, and items
+     */
+    changes: {
+        /**
+         * How much time difference between the previous perspective and this one
+         */
+        timeForwards: {
+            /**
+             * The time that has passed between the last perspective and this one, in a human readable format
+             */
+            time: DETimeDurationDescription;
+            /**
+             * A human readable description using the same <id:name> format as any of perspective, this is a narrative description
+             * eg. "5 minutes passed"
+             */
+            description: string;
+        };
+
+        /**
+         * Whether the character in perspective has "just" moved to a new location
+         */
+        atNewLocation: {
+            /**
+             * Whether we are actually at a new location compared to the last perspective
+             */
+            case: boolean;
+            /**
+             * Whether this is the first time the character in perspective has been at this location, if so, it will be true, otherwise false
+             */
+            firstTime: boolean;
+            /**
+             * The description, in narrative form, of the new location, this is a human readable description using the same <id:name> format as any of perspective
+             * eg. "<id:char> is for the first time at <id:location>"
+             */
+            description: string;
+        };
+        /**
+         * An array of characters id and name in perspective that the character in perspective has just started speaking with
+         */
+        justStartedSpeakingWith: Array<{
+            /**
+             * The character id of the character that the character in perspective has just started speaking with
+             */
+            id: string;
+            /**
+             * The character name of the character that the character in perspective has just started speaking with
+             */
+            name: string;
+            /**
+             * Whether this is the first time the character in perspective has spoken with this character, as in this is the first conversation ever
+             * between the both of them, if so, it will be true, otherwise false
+             */
+            firstTimeMeeting: boolean;
+            /**
+             * The description, in narrative form, of the new conversation, this is a human readable description using the same <id:name> format as any of perspective
+             * eg. "<id:char> just met <id:char> for the first time"
+             */
+            description: string;
+        }>;
+        /**
+         * An array of items that moved on their own, this includes items that moved due to gravity, items that moved due to being pushed or pulled by other items, and items that moved due to being carried by other characters
+         */
+        itemsMoved: Array<{
+            /**
+             * The item ids of the items that were moved
+             */
+            itemIds: Array<string>;
+            /**
+             * The item names of the items that moved,
+             * expected they would be the same, using utilItemCount
+             */
+            itemNames: string;
+            /**
+             * The description, in narrative form, of the item that moved, this is a human readable description using the same <id:name> format as any of perspective
+             * eg. "<id,id,id:item> moved from <id:location> relative position to <id:location> relative position"
+             * 
+             * this can be complex, as it can include multiple items that moved together, and can include the relative positions of the items before and after the move
+             */
+            description: string;
+        }>;
+        /**
+         * An array of items that were dropped by characters, this includes items that were dropped by the character in perspective and items that were dropped by other characters
+         */
+        itemsDroppedByCharacters: Array<{
+            /**
+             * The item ids of the items that were dropped
+             */
+            itemIds: Array<string>;
+            /**
+             * The item names of the items that moved,
+             * expected they would be the same, using utilItemCount
+             */
+            itemNames: string;
+            /**
+             * The character id of the character that dropped the item
+             */
+            byCharacterId: string;
+            /**
+             * The character name of the character that dropped the item
+             */
+            byCharacterName: string;
+            /**
+             * The description, in narrative form, of the item that was dropped, this is a human readable description using the same <id:name> format as any of perspective
+             * eg. "<id:char> dropped <id:item> at <id:location>"
+             */
+            description: string;
+        }>;
+        /**
+         * An array of items that were picked up by characters, this includes items that were picked up by the character in perspective and items that were picked up by other characters
+         */
+        itemsPickedUpByCharacters: Array<{
+            itemIds: Array<string>;
+            itemNames: string;
+            wearing: boolean;
+            description: string;
+            byCharacterId: string;
+            byCharacterName: string;
+        }>;
+
+        /**
+         * An array of characters that arrived at the location, this includes characters that arrived by walking, running, teleporting, or any other means
+         */
+        charactersArrived: Array<{
+            characterId: string;
+            characterName: string;
+            description: string;
+        }>;
+
+        /**
+         * An array of characters that left the location, this includes characters that left by walking, running, teleporting, or any other means
+         */
+        charactersLeft: Array<{
+            characterId: string;
+            characterName: string;
+            description: string;
+        }>;
+
+        /**
+         * An array of characters that moved to a different slot in the location, this includes characters that moved by walking, running, teleporting, or any other means
+         */
+        charactersMoved: Array<{
+            characterId: string;
+            characterName: string;
+            toSlotId: string;
+            toSlotName: string;
+            description: string;
+        }>;
+    }
 }
 
 declare interface DEObjectiveSocialGroupsInPerspective {
@@ -4697,6 +4846,10 @@ declare interface DEInferenceToolArrayParameter {
     items: {
         type: "string" | "number" | "boolean";
     };
+}
+
+declare interface DEAddedConversationMessageResult {
+    message: DEConversationMessage;
 }
 
 declare type DEInferenceToolParameter = DEInferenceToolBooleanParameter | DEInferenceToolStringParameter | DEInferenceToolNumberParameter | DEInferenceToolArrayParameter;
@@ -4926,8 +5079,20 @@ declare interface DEUtils {
         getNextConversationAndMessageForCharacter(character: DECompleteCharacterReference | string, conversation: DEConversation | string, message: string | DEConversationMessage): Promise<{ conversation: DEConversation | null, message: DEConversationMessage | null }>;
         getConversation(conversationId: DEConversation | string): Promise<DEConversation | null>;
         getAllConversationsAtLocation(locationId: DELocation | string): Promise<{ conversations: DEConversation[], leftoverCharacters: string[], foundCharacters: string[] }>; // leftoverCharacters are characters that are at the location but not in any conversation
-        addMessageToConversation(conversationId: DEConversation | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects" | "perspectiveMessageByCharacterId" | "perspectiveByCharacterId">, options: { unsafeMode?: boolean } = {}): Promise<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>;
-        addMessageIntoCharactersConversation(targetCharacterId: DECompleteCharacterReference | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects" | "perspectiveMessageByCharacterId" | "perspectiveByCharacterId">, options?: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean, messageCommunicator?: { type: "new" | "inherit" | "remove"; communicatorName?: string; communicatorItemId?: string; } }): Promise<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>;
+        addMessageToConversation(
+            conversationId: DEConversation | string,
+            message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects" | "perspectiveMessageByCharacterId" | "perspectiveByCharacterId">,
+            options: { unsafeMode?: boolean } = {},
+        ): Promise<DEAddedConversationMessageResult>;
+        addMessageIntoCharactersConversation(
+            targetCharacterId: DECompleteCharacterReference | string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects" | "perspectiveMessageByCharacterId" | "perspectiveByCharacterId">,
+            options?: {
+                teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null),
+                unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups",
+                ghost?: boolean,
+                messageCommunicator?: { type: "new" | "inherit" | "remove"; communicatorName?: string; communicatorItemId?: string; }
+            }
+        ): Promise<DEAddedConversationMessageResult>;
         /**
          * Broadcast a message, all characters at a given location (and beyond) will pick it up
          * 
@@ -4938,7 +5103,12 @@ declare interface DEUtils {
          * @param travelDistance 
          * @param travelDistaceType
          */
-        broadcastMessage(message: (distance: number) => Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects">, location: DELocation | string, travelDistance: number, travelDistaceType: "meters" | "connections"): Promise<Array<{ message: DEConversationMessage, sideEffectsReady: () => Promise<void> }>>;
+        broadcastMessage(
+            message: (distance: number) => Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed" | "isProcessingSideEffects">,
+            location: DELocation | string,
+            travelDistance: number,
+            travelDistaceType: "meters" | "connections",
+        ): Promise<Array<{ message: DEConversationMessage, _sideEffectsReady: () => Promise<void> }>>;
         newConversation(conversation: Pick<DEConversation, "participants" | "communicators" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipantsTo?: string | [string, string] | ((participant: DECompleteCharacterReference) => string | [string, string] | null), unsafeMode?: boolean } = {}): Promise<DEConversation>;
     },
     characterInfo: {
