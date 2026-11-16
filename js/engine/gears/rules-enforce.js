@@ -3,7 +3,7 @@ import { DEngine } from "../index.js";
 import { getExternalDescriptionOfCharacter, getSurroundingCharacters } from "../util/character-info.js";
 import { isYes } from "../util/grammar.js";
 import { describeItemsAvailableToCharacterForInference, getFullItemListAtLocation } from "../util/items.js";
-import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertMessagesToSimpleList, getHistoryFragment } from "../util/messages.js";
 
 /**
  * Removes any punctuation from a string.
@@ -74,10 +74,10 @@ export default async function testWorldRulesOn(engine, character) {
      */
     const addedMessagesForStoryMaster = [];
 
-    const lastCycleMessages = await getHistoryFragmentForCharacter(engine, character, {
+    const lastCycleMessages = await getHistoryFragment(engine, character, {
         msgLimit: "LAST_CYCLE",
     });
-    const lastCycleMessagesExpanded = await getHistoryFragmentForCharacter(engine, character, {
+    const lastCycleMessagesExpanded = await getHistoryFragment(engine, character, {
         msgLimit: "LAST_CYCLE_EXPANDED",
     });
 

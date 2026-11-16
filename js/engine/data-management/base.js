@@ -160,6 +160,16 @@ export class BaseDataManager {
     }
 
     /**
+     * Finalize timing for all untimed messages, including those with completed side effects.
+     * Only duration, endTime and untimed are changed. Requires an active transaction.
+     * @param {DETimeDescription} time
+     * @returns {Promise<void>}
+     */
+    async timeUntimedConversationMessages(time) {
+
+    }
+
+    /**
      * Begin a new transaction. Only one transaction may be active at a time.
      * Throws if a transaction is already active.
      * @returns {Promise<void>}
@@ -250,6 +260,7 @@ export class BaseDataManager {
             newConversationMessage: this.newConversationMessage.bind(this),
             updateConversation: this.updateConversation.bind(this),
             updateConversationMessage: this.updateConversationMessage.bind(this),
+            timeUntimedConversationMessages: this.timeUntimedConversationMessages.bind(this),
             storePerspective: this.storePerspective.bind(this),
             getPerspectiveById: this.getPerspectiveById.bind(this),
             getLastPerspectiveOfCharacter: this.getLastPerspectiveOfCharacter.bind(this),

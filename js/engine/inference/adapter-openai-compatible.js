@@ -366,8 +366,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
     }
 
     /**
-     * Runs the streaming inference loop with special functions attached to them to emulate the special
-     * functionality that deServer had
+     * Fetches a complete reply.
      * 
      * @param {string} model
      * @param {Array<{role: "system" | "user" | "assistant", content: string}>} messages
@@ -387,285 +386,68 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      *   stopAt?: string[],
      *   stopAfter?: string[],
      *   trail?: string,
-     *   wordRejection?: {
-     *     rejectedWordsInNarration?: string[],
-     *     rejectedWordsInDialogue?: string[],
-     *     delimiters?: string[],
-     *     postRejectedWordInDialogueGrammar?: string,
-     *     postRejectedWordInNarrationGrammar?: string,
-     *     startsInDialogue?: boolean,
-     *   },
      *   grammar?: string,
      *   gear?: string,
      * }} deServerOptions
-     * @returns {AsyncGenerator<string, void, void>}
+     * @returns {Promise<import('./base.js').InferenceResponse>}
      */
-    async *deServerStreamEmulator(model, messages, standardOpenAIOptions, deServerOptions) {
-        if (this.useExperimentalTestMode) {
-            yield* this.runInferenceInTestMode(deServerOptions);
-            return;
-        }
-
-        const escapeRegExp = (/** @type {string} */ s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regexStopAfter = (deServerOptions.stopAfter || []).map(
-            s => new RegExp(`(^|[.,;])\\s*${escapeRegExp(s)}\\s*([.,;]|$)`, 'i')
-        );
-
-        const wr = deServerOptions.wordRejection || null;
-        const delimiters = (wr?.delimiters || []).filter(d => typeof d === 'string' && d.length > 0);
-        const maxDelimLen = delimiters.reduce((m, d) => Math.max(m, d.length), 0);
-
-        // These accumulate across reprocessing passes (forbidden-word rejection
-        // restarts the generation with the already-produced text folded into the
-        // assistant trail and a post-rejection grammar applied).
-        let trail = deServerOptions.trail || "";
-        let grammar = deServerOptions.grammar || null;
-        let inDialogue = wr ? !!wr.startsInDialogue : false;
-        let remainingMaxCharacters = deServerOptions.maxCharacters || 0;
-        let remainingMaxSafetyCharacters = deServerOptions.maxSafetyCharacters || 0;
-        let remainingMaxParagraphs = deServerOptions.maxParagraphs || 0;
-
-        while (true) {
-            // ── Build the OpenAI chat completion payload ──
-            const finalMessages = messages.slice();
-            if (trail) {
-                finalMessages.push({ role: "assistant", content: trail });
+    async runInference(model, messages, standardOpenAIOptions, deServerOptions) {
+        if (this.useExperimentalTestMode) return this.runInferenceInTestMode(deServerOptions);
+        const finalMessages = messages.slice();
+        if (deServerOptions.trail) finalMessages.push({ role: "assistant", content: deServerOptions.trail });
+        /** @type {Record<string, any>} */
+        const payload = { model, messages: finalMessages, stream: true };
+        if (standardOpenAIOptions.temperature != null) payload.temperature = standardOpenAIOptions.temperature;
+        if (standardOpenAIOptions.topP != null) payload.top_p = standardOpenAIOptions.topP;
+        if (standardOpenAIOptions.topK != null) payload.top_k = standardOpenAIOptions.topK;
+        if (standardOpenAIOptions.repetitionPenalty != null) payload.repetition_penalty = standardOpenAIOptions.repetitionPenalty;
+        if (standardOpenAIOptions.maxTokens != null) payload.max_tokens = standardOpenAIOptions.maxTokens;
+        if (deServerOptions.stopAt?.length) payload.stop = deServerOptions.stopAt;
+        this.addExtraOptions(payload, deServerOptions);
+        this.setReasoningEffort(payload, standardOpenAIOptions.reasoningEffort || "medium");
+        // Inspect incoming text so generation stops before the server finishes.
+        const reply = await this._chatCompletion(payload, (text) => {
+            let cutoff = Infinity;
+            for (const stop of deServerOptions.stopAt || []) {
+                const index = stop ? text.indexOf(stop) : -1;
+                if (index !== -1) cutoff = Math.min(cutoff, index);
             }
-
-            /** @type {Record<string, any>} */
-            const payload = {
-                model,
-                messages: finalMessages,
-                stream: true,
-            };
-            if (standardOpenAIOptions.temperature != null) payload.temperature = standardOpenAIOptions.temperature;
-            if (standardOpenAIOptions.topP != null) payload.top_p = standardOpenAIOptions.topP;
-            if (standardOpenAIOptions.topK != null) payload.top_k = standardOpenAIOptions.topK;
-            if (standardOpenAIOptions.repetitionPenalty != null) payload.repetition_penalty = standardOpenAIOptions.repetitionPenalty;
-            if (standardOpenAIOptions.maxTokens != null) payload.max_tokens = standardOpenAIOptions.maxTokens;
-            if (deServerOptions.stopAt && deServerOptions.stopAt.length > 0) payload.stop = deServerOptions.stopAt;
-
-            // Hand off to the subclass for any server-specific fields (e.g. how
-            // grammar/guided decoding is expressed, and how the assistant `trail`
-            // is continued — which differs between vLLM and llama.cpp). This base
-            // implementation is intentionally unaware of the concrete server.
-            this.addExtraOptions(payload, { ...deServerOptions, trail, grammar });
-            this.setReasoningEffort(payload, standardOpenAIOptions.reasoningEffort || "medium");
-
-            const controller = new AbortController();
-
-            // `pending` holds text that has been received but not yet yielded. When
-            // word rejection is active we may hold back the trailing in-progress
-            // word (and any partially-formed delimiter) so that a forbidden word is
-            // never emitted before it can be detected. When word rejection is off
-            // `pending` is flushed on every chunk (we can be as granular as the
-            // server's own streaming, down to a few characters at a time).
-            let pending = "";
-            let producedText = "";
-            let aborted = false;
-            let finished = false;
-
-            /** @type {{textAfter: string, postGrammar: string|null} | null} */
-            let rejected = null;
-
-            // Number of trailing characters of `pending` that must be held back to
-            // avoid emitting a partial forbidden word or a partially-formed
-            // multi-character delimiter.
-            const computeHoldBack = () => {
-                if (!wr) return 0;
-                let i = pending.length;
-                while (i > 0 && /\w/.test(pending[i - 1])) i--;
-                const holdWord = pending.length - i;
-                const holdDelim = Math.min(pending.length, Math.max(0, maxDelimLen - 1));
-                return Math.max(holdWord, holdDelim);
-            };
-
-            const countParagraphs = (/** @type {string} */ text) => {
-                let count = 0;
-                for (let i = 0; i < text.length - 1; i++) {
-                    if (text[i] === '\n' && text[i + 1] === '\n') count++;
-                }
-                return count;
-            };
-
-            for await (const chunk of this._streamChatCompletion(payload, controller.signal)) {
-                producedText += chunk;
-                pending += chunk;
-
-                // ── maxParagraphs: stop at the paragraph boundary ──
-                if (remainingMaxParagraphs > 0 && countParagraphs(producedText) >= remainingMaxParagraphs) {
-                    const partBeforeNew = pending.split('\n')[0];
-                    if (partBeforeNew.length > 0) yield partBeforeNew;
-                    pending = "";
-                    aborted = true;
-                    controller.abort();
-                    break;
-                }
-
-                // ── maxCharacters: soft limit, cut at next newline (or dot) ──
-                if (remainingMaxCharacters > 0 && producedText.length >= remainingMaxCharacters) {
-                    if (chunk.indexOf('\n') !== -1) {
-                        const partBeforeNew = pending.split('\n')[0];
-                        if (partBeforeNew.length > 0) yield partBeforeNew;
-                        pending = "";
-                        aborted = true;
-                        controller.abort();
-                        break;
-                    } else if (deServerOptions.maxCharactersCutOnDot && chunk.indexOf('.') !== -1) {
-                        const partBeforeDot = pending.split('.')[0];
-                        if (partBeforeDot.length > 0) yield partBeforeDot + '.';
-                        pending = "";
-                        aborted = true;
-                        controller.abort();
-                        break;
-                    }
-                }
-
-                // ── maxSafetyCharacters: hard limit, flush and abort ──
-                if (remainingMaxSafetyCharacters > 0 && producedText.length >= remainingMaxSafetyCharacters) {
-                    if (pending.length > 0) yield pending;
-                    pending = "";
-                    aborted = true;
-                    controller.abort();
-                    break;
-                }
-
-                // ── stopAfter: regex trigger, abort without further emit ──
-                if (regexStopAfter.length > 0 && regexStopAfter.some(re => re.test(producedText))) {
-                    aborted = true;
-                    controller.abort();
-                    break;
-                }
-
-                if (!wr) {
-                    // No word rejection: emit everything we have immediately.
-                    if (pending.length > 0) {
-                        yield pending;
-                        pending = "";
-                    }
-                    continue;
-                }
-
-                // ── word rejection: process delimiters and forbidden words in the
-                //    order they appear, holding back the in-progress tail ──
-                let hitBadWord = false;
-                // eslint-disable-next-line no-constant-condition
-                while (true) {
-                    const forbiddenWords = inDialogue
-                        ? (wr.rejectedWordsInDialogue || [])
-                        : (wr.rejectedWordsInNarration || []);
-
-                    // earliest delimiter occurrence
-                    let dIdx = -1;
-                    let dLen = 0;
-                    for (const d of delimiters) {
-                        const idx = pending.indexOf(d);
-                        if (idx !== -1 && (dIdx === -1 || idx < dIdx)) {
-                            dIdx = idx;
-                            dLen = d.length;
-                        }
-                    }
-
-                    // earliest *confirmed* forbidden word (a word is only confirmed
-                    // once there is at least one character after it, otherwise it may
-                    // still be the start of a longer, allowed word)
-                    let wIdx = -1;
-                    let wLen = 0;
-                    for (const word of forbiddenWords) {
-                        const m = new RegExp(`\\b${escapeRegExp(word)}\\b`, 'i').exec(pending);
-                        if (m) {
-                            const end = m.index + m[0].length;
-                            if (end < pending.length && (wIdx === -1 || m.index < wIdx)) {
-                                wIdx = m.index;
-                                wLen = m[0].length;
-                            }
-                        }
-                    }
-
-                    if (wIdx !== -1 && (dIdx === -1 || wIdx <= dIdx)) {
-                        // forbidden word reached: emit the safe text before it, then
-                        // trigger a reprocess from that point.
-                        const before = pending.slice(0, wIdx);
-                        if (before.length > 0) yield before;
-                        rejected = {
-                            textAfter: pending.slice(wIdx + wLen),
-                            postGrammar: inDialogue
-                                ? (wr.postRejectedWordInDialogueGrammar || null)
-                                : (wr.postRejectedWordInNarrationGrammar || null),
-                        };
-                        hitBadWord = true;
-                        break;
-                    } else if (dIdx !== -1) {
-                        // delimiter reached: emit up to and including it, toggle the
-                        // narration/dialogue context, and keep scanning.
-                        const upto = pending.slice(0, dIdx + dLen);
-                        if (upto.length > 0) yield upto;
-                        pending = pending.slice(dIdx + dLen);
-                        inDialogue = !inDialogue;
-                        continue;
-                    }
-                    break;
-                }
-
-                if (hitBadWord) {
-                    aborted = true;
-                    controller.abort();
-                    break;
-                }
-
-                // emit everything that cannot be part of a forming word/delimiter
-                const hold = computeHoldBack();
-                const emit = pending.slice(0, pending.length - hold);
-                if (emit.length > 0) yield emit;
-                pending = pending.slice(pending.length - hold);
+            for (const stop of deServerOptions.stopAfter || []) {
+                const index = stop ? text.indexOf(stop) : -1;
+                if (index !== -1) cutoff = Math.min(cutoff, index + stop.length);
             }
-
-            if (rejected) {
-                // Fold the accepted text (including the rejected word, which stays in
-                // context but was never shown) into the trail and re-run with the
-                // post-rejection grammar in place.
-                const textAfter = rejected.textAfter;
-                const paragraphsSoFar = countParagraphs(producedText);
-                const producedTextWithoutBadWord = producedText.slice(0, producedText.length - textAfter.length);
-
-                let newMaxCharacters = remainingMaxCharacters;
-                if (remainingMaxCharacters !== 0) {
-                    newMaxCharacters = remainingMaxCharacters - producedText.length + textAfter.length;
+            const maxParagraphs = deServerOptions.maxParagraphs || 0;
+            if (maxParagraphs > 0) {
+                let boundary = -2;
+                for (let count = 0; count < maxParagraphs; count++) {
+                    boundary = text.indexOf("\n\n", boundary + 2);
+                    if (boundary === -1) break;
                 }
-                let newMaxSafety = remainingMaxSafetyCharacters;
-                if (remainingMaxSafetyCharacters !== 0) {
-                    newMaxSafety = remainingMaxSafetyCharacters - producedText.length + textAfter.length;
-                }
-
-                if (remainingMaxCharacters !== 0 && newMaxCharacters <= 0) {
-                    // Budget exhausted, stop entirely.
-                    return;
-                }
-
-                trail = trail + producedTextWithoutBadWord;
-                grammar = rejected.postGrammar;
-                remainingMaxCharacters = newMaxCharacters;
-                remainingMaxSafetyCharacters = newMaxSafety;
-                remainingMaxParagraphs = Math.max(0, remainingMaxParagraphs - paragraphsSoFar);
-                continue;
+                if (boundary >= 0) cutoff = Math.min(cutoff, boundary);
             }
-
-            // Natural completion (or an abort that already flushed): emit whatever
-            // remains in the buffer.
-            if (!aborted && !finished && pending.length > 0) {
-                yield pending;
+            const maxCharacters = deServerOptions.maxCharacters || 0;
+            if (maxCharacters > 0 && text.length >= maxCharacters) {
+                const boundary = text.slice(maxCharacters).search(deServerOptions.maxCharactersCutOnDot ? /[.\n]/ : /\n/);
+                if (boundary !== -1) {
+                    const index = maxCharacters + boundary;
+                    cutoff = Math.min(cutoff, index + (text[index] === "." ? 1 : 0));
+                }
             }
-            return;
-        }
+            const maxSafetyCharacters = deServerOptions.maxSafetyCharacters || 0;
+            if (maxSafetyCharacters > 0 && text.length >= maxSafetyCharacters) {
+                cutoff = Math.min(cutoff, maxSafetyCharacters);
+            }
+            return Number.isFinite(cutoff) ? cutoff : null;
+        });
+        console.log({ payload, reply });
+        return reply;
     }
 
     /**
-     * Experimental test-mode generator. Produces random dummy text locally
+     * Experimental test mode. Produces random dummy text locally
      * (no server involved), optionally constrained by a GBNF grammar using the
      * optional `gbnf` dependency. It honours the same stop semantics as the
-     * real emulator (maxParagraphs / maxCharacters / maxCharactersCutOnDot /
-     * maxSafetyCharacters / stopAt / stopAfter) and yields the result in small
-     * string chunks to mimic token-by-token streaming.
+     * completion path (maxParagraphs / maxCharacters / maxCharactersCutOnDot / maxSafetyCharacters / stopAt / stopAfter).
      *
      * Ported from the de-server adapter's test mode so any OpenAI-compatible
      * subclass gets the same developer test behaviour for free.
@@ -680,9 +462,9 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      *   grammar?: string | null,
      *   gear?: string,
      * }} deServerOptions
-     * @returns {AsyncGenerator<string, void, boolean | void>}
+     * @returns {Promise<import('./base.js').InferenceResponse>}
      */
-    async *runInferenceInTestMode(deServerOptions) {
+    async runInferenceInTestMode(deServerOptions) {
         const GBNF = await gbnfModulePromise;
 
         const grammar = deServerOptions.grammar || null;
@@ -867,89 +649,97 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
             currentTextCharLen += nextChar.length;
         }
 
-        const CHUNK_SIZE = 4;
-        const DELAY_MS = 20;
-        for (let i = 0; i < contentsGenerated.length; i += CHUNK_SIZE) {
-            const chunk = contentsGenerated.slice(i, i + CHUNK_SIZE);
-            await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
-            const shouldContinue = yield chunk;
-            if (shouldContinue === false) {
-                break;
-            }
-        }
+        return { text: contentsGenerated, thoughts: [], warnings: [] };
     }
 
     /**
-     * Low-level streaming helper. Performs a streaming POST to
-     * /v1/chat/completions and yields raw assistant content deltas as they
-     * arrive. No de-server specific post-processing is applied here.
-     *
+     * Buffers server deltas into one reply, cancelling as soon as a limit is met.
      * @param {Record<string, any>} payload
-     * @param {AbortSignal} [signal]
-     * @returns {AsyncGenerator<string, void, void>}
+     * @param {(text: string) => number | null} [stopAt]
+     * @returns {Promise<import('./base.js').InferenceResponse>}
      */
-    async *_streamChatCompletion(payload, signal) {
+    async _chatCompletion(payload, stopAt = () => null) {
         const baseUrl = (this.options.host || 'http://127.0.0.1:8765').replace(/\/$/, '');
         const headers = /** @type {Record<string, string>} */ ({ 'Content-Type': 'application/json' });
-        if (this.options.apiKey) {
-            headers['Authorization'] = `Bearer ${this.options.apiKey}`;
-        }
-
-        const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+        if (this.options.apiKey) headers.Authorization = 'Bearer ' + this.options.apiKey;
+        const controller = new AbortController();
+        const response = await fetch(baseUrl + '/v1/chat/completions', {
             method: 'POST',
             headers,
-            body: JSON.stringify(payload),
-            signal,
+            body: JSON.stringify({ ...payload, stream: true }),
+            signal: controller.signal,
         });
-
         if (!response.ok || !response.body) {
             const errText = await response.text().catch(() => '');
-            throw new Error(`Chat completion request failed with HTTP ${response.status}: ${errText}`);
+            throw new Error('Chat completion request failed with HTTP ' + response.status + ': ' + errText);
         }
-
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = "";
+        let buffer = '';
+        let text = '';
+        let thought = '';
+        /** @type {string[]} */
+        const thoughts = [];
+        /** @param {string} data */
+        const consume = (data) => {
+            if (data === '[DONE]') return true;
+            const json = JSON.parse(data);
+            if (json.error) {
+                const err = json.error;
+                const message = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
+                throw new Error('Chat completion returned an error: ' + message);
+            }
+            const choice = json.choices?.[0];
+            const delta = choice?.delta;
+            const reasoning = delta?.reasoning_content ?? delta?.reasoning;
+            if (typeof reasoning === 'string') thought += reasoning;
+            if (typeof delta?.content === 'string' && delta.content.length > 0) {
+                if (thought) {
+                    thoughts.push(thought);
+                    thought = '';
+                }
+                text += delta.content;
+                const cutoff = stopAt(text);
+                if (cutoff !== null) {
+                    text = text.slice(0, cutoff);
+                    return true;
+                }
+            }
+            return choice?.finish_reason != null;
+        };
         try {
-            while (true) {
+            let stopped = false;
+            while (!stopped) {
                 const { done, value } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-
-                let newlineIdx;
-                while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
-                    const line = buffer.slice(0, newlineIdx).trim();
-                    buffer = buffer.slice(newlineIdx + 1);
-                    if (!line.startsWith('data:')) continue;
-                    const data = line.slice('data:'.length).trim();
-                    if (data === '[DONE]') return;
-                    let json;
-                    try {
-                        json = JSON.parse(data);
-                    } catch {
-                        // ignore malformed keep-alive lines
-                        continue;
+                buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+                // SSE events may span transport chunks and contain multiple data lines.
+                let match;
+                while ((match = /\r?\n\r?\n/.exec(buffer))) {
+                    const event = buffer.slice(0, match.index);
+                    buffer = buffer.slice(match.index + match[0].length);
+                    const data = event.split(/\r?\n/).filter(line => line.startsWith('data:'))
+                        .map(line => line.slice(5).replace(/^ /, '')).join('\n');
+                    if (data && consume(data)) {
+                        stopped = true;
+                        break;
                     }
-                    // Some OpenAI-compatible servers (vLLM, llama.cpp) stream an
-                    // error object with a 200 status instead of failing the HTTP
-                    // request. Surface it as a thrown error rather than silently
-                    // ending the stream (which looks like a frozen/empty answer).
-                    if (json.error) {
-                        const err = json.error;
-                        const message = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
-                        const code = typeof err === 'object' && err.code != null ? ` (code ${err.code})` : '';
-                        const type = typeof err === 'object' && err.type ? `${err.type}: ` : '';
-                        throw new Error(`Chat completion stream returned an error${code}: ${type}${message || '<empty message>'}`);
+                }
+                if (done) {
+                    if (!stopped && buffer.trim()) {
+                        const data = buffer.split(/\r?\n/).filter(line => line.startsWith('data:'))
+                            .map(line => line.slice(5).replace(/^ /, '')).join('\n');
+                        if (data) consume(data);
                     }
-                    const delta = json.choices?.[0]?.delta?.content;
-                    if (typeof delta === 'string' && delta.length > 0) {
-                        yield delta;
-                    }
+                    break;
                 }
             }
         } finally {
-            reader.cancel().catch(() => {});
+            controller.abort();
+            await reader.cancel().catch(() => {});
+            reader.releaseLock();
         }
+        if (thought) thoughts.push(thought);
+        return { text, thoughts, warnings: [] };
     }
 
     /**
@@ -1390,9 +1180,9 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      *   forcedSounds: Array<string>,
      *   __debug_id?: string|null,
      * }} options
-     * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
+     * @returns {Promise<import('./base.js').InferenceResponse>}
      */
-    async *inferNextStoryFragmentFor(character, options) {
+    async inferNextStoryFragmentFor(character, options) {
         const { messages, messagesTrail, system, stateInjections, visibleEnviroment, narrativeEffects, grammar } = options;
 
         await this.ensureInitialized();
@@ -1431,6 +1221,7 @@ ${nextMessageMustBeInform}
             throw new Error("User prompt is too long for the model's context window");
         }
 
+        const warnings = [];
         let storySoFar = "";
         let tokensInStorySoFar = 0;
         for (const msg of messages.reverse()) {
@@ -1440,7 +1231,7 @@ ${nextMessageMustBeInform}
             }
             const messageTokens = await this.countTokens(messageToAdd);
             if (tokensExhaustedApprox + tokensInStorySoFar + messageTokens >= contextWindowSize) {
-                yield { type: "warning", content: "The story so far is too long for the model's context window, some of the earliest messages will be truncated." };
+                warnings.push("The story so far is too long for the model's context window, some of the earliest messages will be truncated.");
                 break;
             }
             storySoFar = messageToAdd + storySoFar;
@@ -1482,20 +1273,6 @@ ${nextMessageMustBeInform}
             stopAfter: /** @type {string[]} */ ([]),
             trail: assistantPromptTrail,
             grammar: grammar || undefined,
-            wordRejection: {
-                rejectedWordsInNarration: [
-                    "you", "your", "yours", "yourself", "yourselves",
-                    "I", "me", "my", "mine", "myself",
-                    "we", "us", "our", "ours", "ourselves",
-                ],
-                // dialogue lines are spoken by default; an asterisk flips into a third-person
-                // narration/action beat, so the asterisk is the dialogue<->narration boundary
-                delimiters: options.narration ? [] : ["*"],
-                postRejectedWordInDialogueGrammar: undefined,
-                postRejectedWordInNarrationGrammar: undefined,
-                rejectedWordsInDialogue: /** @type {string[]} */ ([]),
-                startsInDialogue: !options.narration,
-            },
         };
 
         if (options.__debug_id) {
@@ -1508,16 +1285,8 @@ ${nextMessageMustBeInform}
             }
         }
 
-        const stream = this.deServerStreamEmulator(model, chatMessages, this._standardOpenAIOptions(), deServerOptions);
-        for await (const chunk of stream) {
-            const shouldContinue = yield { type: "text", content: chunk };
-            if (shouldContinue === false) {
-                // Returning stops the underlying stream (its reader is cancelled
-                // when this generator is finalised).
-                await stream.return(undefined);
-                break;
-            }
-        }
+        const result = await this.runInference(model, chatMessages, this._standardOpenAIOptions(), deServerOptions);
+        return { ...result, warnings: [...warnings, ...result.warnings] };
     }
 
     /**
@@ -1570,11 +1339,11 @@ ${nextMessageMustBeInform}
             }
         }
 
-        let nextQuestion = yield "ready";
+        let nextQuestion = yield { text: "ready", thoughts: [], warnings: [] };
         while (nextQuestion !== null) {
             if (typeof nextQuestion === "undefined") {
                 console.error("Questioning agent received undefined, treating an invalid ready signal");
-                nextQuestion = yield "ready";
+                nextQuestion = yield { text: "ready", thoughts: [], warnings: [] };
                 continue;
             }
 
@@ -1586,7 +1355,7 @@ ${nextMessageMustBeInform}
             /** @type {Array<{role: "system" | "user" | "assistant", content: string}>} */
             const chatMessages = [
                 { role: "system", content: system },
-                { role: "user", content: userTrail + "\n\n" + questionText },
+                { role: "user", content: userTrail.trimEnd() + "\n\n" + questionText },
             ];
 
             const deServerOptions = {
@@ -1601,10 +1370,7 @@ ${nextMessageMustBeInform}
                 gear,
             };
 
-            let answer = "";
-            for await (const chunk of this.deServerStreamEmulator(model, chatMessages, standardOpenAIOptions, deServerOptions)) {
-                answer += chunk;
-            }
+            const answer = await this.runInference(model, chatMessages, standardOpenAIOptions, deServerOptions);
 
             nextQuestion = yield answer;
         }

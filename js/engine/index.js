@@ -17,6 +17,7 @@ import { regenerateDEFromSavedDE, removeUnnecessaryPropertiesFromDE } from "./ut
 import runAllTriggersFor from "./gears/triggers-run.js";
 import { giveCharacterRandomClothing } from "./util/clothing.js";
 import { BaseDataManager } from "./data-management/base.js";
+import timeForwardsUsingUntimedMessages from "./gears/time-forwards.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -844,6 +845,18 @@ export class DEngine {
             }
         }
 
+        for (const type of orderOfExecution) {
+            /**
+             * @type {Array<{script: DEScript, scriptKey: string}>}
+             */
+            const scripts =
+                // @ts-ignore typescript bugs
+                this.jsEngine.scriptOrder.map(scriptKey => ({ script: this.jsEngine.scriptCache[scriptKey], scriptKey })).filter(script => script.script.type === type);
+
+            
+            await this.callFunctionInScripts(scripts, (script) => `Calling onWorldInitialized script ${script.scriptKey} of type ${type}`, "onWorldInitialized", { untilTrue: false }, this.deObject);
+        }
+
         this.initialized = true;
     }
 
@@ -1024,6 +1037,32 @@ export class DEngine {
     }
 
     /**
+     * 
+     * @param {{moveTimeForwards: boolean}} options 
+     */
+    async calculateSideEffects(options) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        } else if (!this.inferenceAdapter) {
+            throw new Error("Inference adapter not set");
+        } else if (!this.jsEngine) {
+            throw new Error("JS Engine not set");
+        } else if (!this.dataManager) {
+            throw new Error("Data manager not set");
+        }
+
+        /**
+         * @type {string[]}
+         */
+        let addedMessagesForStoryMaster = [];
+        if (options.moveTimeForwards) {
+            addedMessagesForStoryMaster = await timeForwardsUsingUntimedMessages(this);
+        }
+
+        await this.informDEObjectUpdated();
+    }
+
+    /**
      * @param {string} optionName 
      */
     async startScene(optionName) {
@@ -1058,20 +1097,6 @@ export class DEngine {
             const isInitialScene = !this.deObject.world.selectedScene;
 
             /**
-             * @type {string[]}
-             * 
-             * We don't really use these messages, unless we remain at the same location
-             */
-            let timeForwardsMessages = [];
-            const moveTimeForwards = async () => {
-                if (!this.deObject) {
-                    throw new Error("DEngine not initialized");
-                }
-
-                timeForwardsMessages = await timeForwardsUsingLastMessage(this, this.deObject.characters[this.deObject.user]);
-            }
-
-            /**
              * @type {DEScene}
              */
             const scene = this.deObject.world.scenes[optionName];
@@ -1080,29 +1105,29 @@ export class DEngine {
             }
             const sceneObject = scene.prepareScene ? await scene.prepareScene(scene) || scene : scene;
 
+            let preselectedTimeAtSceneStart = false;
+
             // the scene has its own time, we need to check if it's in the past or future
             if (sceneObject.time) {
                 // check that the time is in the future
                 if (sceneObject.time.time < this.deObject.currentTime.time && this.deObject.world.selectedScene) {
                     console.warn(`Scene time ${sceneObject.time.time} is in the past compared to current time ${this.deObject.currentTime.time}.`);
                     this.informCycleState("warning", `Scene time ${sceneObject.time.time} is in the past compared to current time ${this.deObject.currentTime.time}. This may cause unexpected behavior.`);
-                    await moveTimeForwards();
+                    
                 } else {
                     // the scene time is in the future, we need to move time forwards to that point
                     // if we don't have a selected scene, it means this is our first scene
                     if (!this.deObject.world.selectedScene) {
                         this.deObject.initialTime = { ...sceneObject.time };
                         this.deObject.currentTime = { ...sceneObject.time };
-                        for (const charName in this.deObject.stateFor) {
-                            this.deObject.stateFor[charName].time = { ...sceneObject.time };
-                        }
                         rerollWorldWeather(this);
                     } else {
-                        timeForwardsToNewTime(this, sceneObject.time)
+                        preselectedTimeAtSceneStart = true;
+                        await timeForwardsToNewTime(this, sceneObject.time)
                     }
                 }
             } else if (this.deObject.world.selectedScene) {
-                await moveTimeForwards();
+
             } else {
                 rerollWorldWeather(this);
             }
@@ -1198,10 +1223,22 @@ export class DEngine {
                 metadata: {},
                 summariesByCharacterId: {},
             });
+            
+            scene.sceneStarted && await scene.sceneStarted(scene);
+            await this.callFunctionInScripts(allScripts, (script) => `Running onSceneStarted for script ${script.scriptKey} at the start of scene ${sceneId}`, "onSceneStarted", { untilTrue: false }, this.deObject, scene);
 
             await this.informDEObjectUpdated();
 
-            let index = 0;
+            await this.calculateSideEffects({
+                moveTimeForwards: !preselectedTimeAtSceneStart,
+            });
+
+            await messageObj.sideEffectsReady();
+            await this.informDEObjectUpdated();
+
+            return;
+
+
             /**
              * @param {string[]} messages
              * @param {boolean} [userOnly=false] if true, the message will only be added to the conversation for the user character, otherwise it will be added for all participants to see
@@ -1218,7 +1255,7 @@ export class DEngine {
                 // some normalization
                 const actualMessages = messages.map((text) => text.trim()).filter((text) => text.length > 0).join("\n\n").split("\n\n");
 
-                const messageObj = await this.deObject.utils.conversations.addMessageToConversation(conversation.id, {
+                const messageObjNew = await this.deObject.utils.conversations.addMessageToConversation(conversation.id, {
                     canOnlyBeSeenByCharacter: userOnly ? this.deObject.user : null,
                     content: actualMessages.map((text) => ({ type: "narration", fragments: [text] })),
                     characterId: null,
@@ -1234,13 +1271,9 @@ export class DEngine {
                     rumors: [],
                     metadata: {},
                 });
-                await messageObj.sideEffectsReady();
-
+                await messageObjNew.sideEffectsReady();
                 await this.informDEObjectUpdated();
             }
-
-            scene.sceneStarted && await scene.sceneStarted(scene);
-            await this.callFunctionInScripts(allScripts, (script) => `Running onSceneStarted for script ${script.scriptKey} at the start of scene ${sceneId}`, "onSceneStarted", { untilTrue: false }, this.deObject, scene);
 
             this.informCycleState("info", "Pre-calculating item changes and effects...");
             let lastItemChangesInfo = await calculateItemChanges(this, this.deObject.characters[this.deObject.user]);
@@ -1361,7 +1394,6 @@ export class DEngine {
             this.informCycleState("info", "Pre-calculating initial bonds for your character...");
             await calculateBondsChangesDueToMessages(this, this.deObject.characters[this.deObject.user], lastItemChangesInfo.interactedCharacters);
 
-            await messageObj.sideEffectsReady();
             await this.informDEObjectUpdated();
 
             /**

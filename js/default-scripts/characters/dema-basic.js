@@ -141,7 +141,6 @@ engine.exports = {
             },
             generalCharacterDescriptionInjection: {},
             actionPromptInjection: [],
-            bonds: null,
             characterRules: {},
             emotions: {},
             stateDefinitions: {},

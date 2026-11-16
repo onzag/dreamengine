@@ -189,7 +189,7 @@ section[hidden] { display: none; }
             location: perspective.ownLocationName,
             locationSlot: perspective.ownLocationSlotName,
             dateTime: Number.isFinite(time) ? new Date(time).toLocaleString('en-US', {
-                hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
             }) : '',
             weather: perspective.ownLocation.weatherName,
             states: self.states,

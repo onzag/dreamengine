@@ -9,7 +9,7 @@ import { SQLiteBridge } from "../engine/data-management/sqlite-bridge.js";
 import { createDatabaseController } from "./database-controller.js";
 import { INFERENCE_ADAPTERS } from "../engine/inference/all.js";
 import { getInternalDescriptionOfCharacter, getRelationship, getSysPromptForCharacter } from "../engine/util/character-info.js";
-import { getHistoryForCharacter } from "../engine/util/messages.js";
+import { getHistory } from "../engine/util/messages.js";
 import { VOICE_ADAPTERS } from "../engine/voice/all.js";
 import { isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from "../script-generation/base.js";
 
@@ -694,12 +694,12 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
             return null;
         },
 
-        async getHistoryForCharacter({ characterName, lastMessageGid }) {
+        async getHistory({ characterName, lastMessageGid }) {
             /**
              * @type {Array<import("../engine/util/messages.js").DEObjectMessageGeneratorResult>}
              */
             let accumulatedMessages = [];
-            const generator = getHistoryForCharacter(
+            const generator = getHistory(
                 engine,
                 engine.getDEObject().characters[characterName],
                 {

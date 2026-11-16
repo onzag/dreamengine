@@ -139,6 +139,8 @@ export function renderNarrationFragmentsToText(fragments) {
  * @property {DEEmotionNames|null} emotion the primary emotion of the message, provided there is a sender
  * @property {DEEmotionNames[]|null} emotionalRange the emotional range of the message
  * @property {boolean} untimed whether this message is untimed or not
+ * @property {boolean} processed whether this message has been processed or not
+ * @property {string | null} onlySeenByCharacterIdName the <id:name> of the character that can see this message, if any, otherwise null
  */
 
 /**
@@ -152,15 +154,16 @@ export function renderNarrationFragmentsToText(fragments) {
  * @param {import("../index.js").DEngine} engine
  * @param {DECompleteCharacterReference} character
  * @param {{
- *  excludeFrom?: string[] | null,
- *  includeDebugMessages?: boolean | null,
- *  includeRejectedMessages?: boolean | null,
- *  useExponentialShrinkingSelectiveContextWindowStrategy?: boolean,
- *  enrichedMode?: boolean,
+ *      excludeFrom?: string[] | null,
+ *      includeDebugMessages?: boolean | null,
+ *      includeRejectedMessages?: boolean | null,
+ *      useExponentialShrinkingSelectiveContextWindowStrategy?: boolean,
+ *      enrichedMode?: boolean,
+ *      perspective: "character" | "story-master"
  * }} options
  * @return {AsyncGenerator<DEObjectMessageGeneratorResult, void, boolean>}
  */
-export async function* getHistoryForCharacter(engine, character, options) {
+export async function* getHistory(engine, character, options) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     } else if (!engine.deObject.stateFor[character.id]) {
@@ -168,6 +171,18 @@ export async function* getHistoryForCharacter(engine, character, options) {
     } else if (!engine.pseudoConversationSummaryGenerator) {
         // TODO reenable this error once we have a proper LLM integration
         // throw new Error("Pseudo conversation summary generator not initialized.");
+    }
+
+    if (options.useExponentialShrinkingSelectiveContextWindowStrategy && (options.includeDebugMessages || options.includeRejectedMessages)) {
+        throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy cannot be used with includeDebugMessages or includeRejectedMessages");
+    }
+
+    if (options.useExponentialShrinkingSelectiveContextWindowStrategy && options.enrichedMode === false) {
+        throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy cannot be used with enrichedMode set to an explicit false");
+    }
+
+    if (options.useExponentialShrinkingSelectiveContextWindowStrategy && options.perspective !== "character") {
+        throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy can only be used with perspective set to character");
     }
 
     const characterState = engine.deObject.stateFor[character.id];
@@ -182,7 +197,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
 
         // process the conversation messages
         const conversationMessages = currentConversationObject.messages.filter(msg => (options.includeRejectedMessages || !msg.isRejectedMessage) && (options.includeDebugMessages || !msg.isDebugMessage) &&
-            (!msg.canOnlyBeSeenByCharacter || msg.canOnlyBeSeenByCharacter === character.id));
+            (options.perspective === "story-master" || !msg.canOnlyBeSeenByCharacter || msg.canOnlyBeSeenByCharacter === character.id));
 
         const conversationLocation = currentConversationObject.locations[character.id];
         const conversationLocationId = conversationLocation.locationId;
@@ -254,6 +269,8 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 emotion: null,
                 emotionalRange: null,
                 untimed: true,
+                processed: false,
+                onlySeenByCharacterIdName: null,
             };
             if (!keepgoing) {
                 return;
@@ -275,12 +292,14 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 }
 
                 const otherCharInfo = message.characterId ? engine.getDEObject().characters[message.characterId] : null;
-                const knownName = message.isStoryMasterMessage ? "Story Master" : (!otherCharInfo ? "<" + message.characterId + ":Unknown Entity>" : getNameIdentificationForOneCharacterTowardsAnother(engine.getDEObject(), character, otherCharInfo));
+                const knownName = message.isStoryMasterMessage ? "Story Master" : (!otherCharInfo ? "Unknown Entity" : getNameIdentificationForOneCharacterTowardsAnotherOnlyName(engine.getDEObject(), character, otherCharInfo));
+
+                const canOnlyBeSeenByCharacter = message.canOnlyBeSeenByCharacter ? engine.getDEObject().characters[message.canOnlyBeSeenByCharacter] : null;
 
                 const keepgoing = yield ({
                     name: knownName,
                     // no change if the message is from the character themselves, surely they know all the information they used to create that message
-                    content: message.characterId === character.id ? message.content : message.perspectiveMessageByCharacterId[character.id] || message.content,
+                    content: (options.perspective === "character" && message.characterId === character.id) || options.perspective === "story-master" ? message.content : message.perspectiveMessageByCharacterId[character.id] || message.content,
                     id: message.id,
                     characterId: message.characterId,
                     conversationId: currentConversationId,
@@ -292,6 +311,9 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     emotion: message.emotion,
                     emotionalRange: message.emotionalRange,
                     untimed: message.untimed || false,
+                    processed: !message.isProcessingSideEffects,
+                    onlySeenByCharacterIdName: canOnlyBeSeenByCharacter ?
+                        getNameIdentificationForOneCharacterTowardsAnother(engine.getDEObject(), options.perspective === "story-master" ? canOnlyBeSeenByCharacter : character, canOnlyBeSeenByCharacter) : null,
                 });
                 if (!keepgoing) {
                     return;
@@ -354,6 +376,8 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     emotion: null,
                     emotionalRange: null,
                     untimed: true,
+                    processed: false,
+                    onlySeenByCharacterIdName: null,
                 };
                 if (!keepgoing) {
                     return;
@@ -370,13 +394,15 @@ export async function* getHistoryForCharacter(engine, character, options) {
  * @param {string} name
  * @param {string|null} characterId
  * @param {boolean} storyMaster
+ * @param {string|null} onlySeenByCharacterIdName
  * @returns {Array<string>}
  */
-export function convertContentToSimpleList(
+function convertContentToSimpleList(
     content,
     name,
     characterId,
     storyMaster,
+    onlySeenByCharacterIdName,
 ) {
     /**
      * @type {Array<string>}
@@ -393,11 +419,14 @@ export function convertContentToSimpleList(
                 }
             }
             message += contentPart.type === "thought" ? "" : "*";
+            const onlyNoticedBy = onlySeenByCharacterIdName ? " (only noticed by " + onlySeenByCharacterIdName + ")" : "";
+
             if (contentPart.type === "thought") {
-                finalList.push(storyMaster ? ("Story Master: " + message) : ("<" + characterId + ":" + name + "> (thought): " + message));
+                finalList.push((storyMaster ? ("Story Master: " + message) : ("<" + characterId + ":" + name + "> (thought): " + message)) + onlyNoticedBy);
             } else {
-                finalList.push(message);
+                finalList.push((message) + onlyNoticedBy);
             }
+
         } else if (contentPart.type === "dialogue") {
             // Reconstruct the authored format: spoken words are plain, action-beat narration
             // goes back inside asterisks, and voice/sound tags back inside square brackets.
@@ -430,19 +459,22 @@ export function convertContentToSimpleList(
                     }
                 }
             }
-            finalList.push(storyMaster ? ("Story Master: " + pieces.join(" ")) : ("<" + characterId + ":" + name + ">: " + pieces.join(" ")));
+
+            const onlyHeardBy = onlySeenByCharacterIdName ? " (only heard by " + onlySeenByCharacterIdName + ")" : "";
+
+            finalList.push((storyMaster ? ("Story Master: " + pieces.join(" ")) : ("<" + characterId + ":" + name + ">: " + pieces.join(" "))) + onlyHeardBy);
         }
     }
     return finalList;
 }
 
 /**
- * @param {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>, name: string, storyMaster: boolean, characterId: string | null, conversationId: string | null}>} messages
+ * @param {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, storyMaster: boolean, characterId: string | null, conversationId: string | null, onlySeenByCharacterIdName: string | null}>} messages
  * @returns {Array<{message: string, author: string, storyMaster: boolean}>}
  */
 export function convertMessagesToSimpleList(messages) {
     const accumulatedLists = messages.map(msg => {
-        return convertContentToSimpleList(msg.content, msg.name, msg.characterId, msg.storyMaster).map(message => {
+        return convertContentToSimpleList(msg.content, msg.name, msg.characterId, msg.storyMaster, msg.onlySeenByCharacterIdName).map(message => {
             return {
                 message,
                 author: msg.name,
@@ -466,28 +498,30 @@ export function convertMessagesToSimpleList(messages) {
  *   excludeFrom?: string[] | null,
  *   includeDebugMessages?: boolean | null,
  *   includeRejectedMessages?: boolean | null,
- *   includeHiddenMessages?: boolean | null,
  *   msgLimit:
- *      "ALL_MESSAGES_SINCE_CHAR_LAST_MESSAGE_INCLUDING_CHAR_LAST_MESSAGE" |
- *      "ALL_MESSAGES_SINCE_CHAR_LAST_MESSAGE_EXCLUDING_CHAR_LAST_MESSAGE" |
- *      "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_INCLUDING_CHAR_2ND_LAST_MESSAGE" |
- *      "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_EXCLUDING_CHAR_2ND_LAST_MESSAGE" |
+ *      "ALL_UNPROCESSED_MESSAGES_UNTIL_FIRST_PROCESSED_MESSAGE" |
  *      "ALL_UNTIMED_MESSAGES_UNTIL_FIRST_TIMED_MESSAGE" |
  *      "ALL",
  *   useExponentialShrinkingSelectiveContextWindowStrategy?: boolean,
  *   enrichedMode?: boolean,
+ *   perspective: "character" | "story-master"
  * }} options
- * @returns {Promise<{messages: Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null}>, conversingCharacters: string[], mentionedCharacters: string[]}>}
+ * @returns {Promise<{messages: Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null, onlySeenByCharacterIdName: string | null}>, conversingCharacters: string[], mentionedCharacters: string[]}>}
  */
-export async function getHistoryFragmentForCharacter(engine, character, options) {
+export async function getHistoryFragment(engine, character, options) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
-    const allHistory = getHistoryForCharacter(engine, character, options);
+
+    if (options.enrichedMode && options.msgLimit !== "ALL") {
+        throw new Error("enrichedMode can only be used with msgLimit set to ALL");
+    }
+
+    const allHistory = getHistory(engine, character, options);
     let generator = await allHistory.next();
 
     /**
-     * @type {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null}>}
+     * @type {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null, onlySeenByCharacterIdName: string | null}>}
      */
     let messagesToAdd = [];
     /**
@@ -498,14 +532,6 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
      * @type {string[]}
      */
     const mentionedCharacters = [];
-
-    if (options.useExponentialShrinkingSelectiveContextWindowStrategy && (options.includeDebugMessages || options.includeRejectedMessages || options.includeHiddenMessages)) {
-        throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy cannot be used with includeDebugMessages, includeRejectedMessages, or includeHiddenMessages");
-    }
-
-    if (options.useExponentialShrinkingSelectiveContextWindowStrategy && (options.enrichedMode === false)) {
-        throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy cannot be used with enrichedMode set to an explicit false");
-    }
 
     // TODO implement useExponentialShrinkingSelectiveContextWindowStrategy
     // if (options.useExponentialShrinkingSelectiveContextWindowStrategy) {
@@ -523,34 +549,16 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
             if (options.msgLimit === "ALL") {
                 shouldStopAddingMessages = false;
                 shouldAddMessage = true;
-            } else if (options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_LAST_MESSAGE_INCLUDING_CHAR_LAST_MESSAGE") {
-                shouldAddMessage = cycleCount === 0;
-            } else if (options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_LAST_MESSAGE_EXCLUDING_CHAR_LAST_MESSAGE") {
-                shouldAddMessage = cycleCount === 0 && generator.value.characterId !== character.id;
-            } else if (options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_INCLUDING_CHAR_2ND_LAST_MESSAGE") {
-                shouldAddMessage = cycleCount === 0 || (cycleCount === 1 && generator.value.characterId !== character.id);
-            } else if (options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_EXCLUDING_CHAR_2ND_LAST_MESSAGE") {
-                shouldAddMessage = (cycleCount === 0 && generator.value.characterId !== character.id) || (cycleCount === 1 && generator.value.characterId !== character.id);
             } else if (options.msgLimit === "ALL_UNTIMED_MESSAGES_UNTIL_FIRST_TIMED_MESSAGE") {
                 shouldAddMessage = generator.value.untimed;
                 shouldStopAddingMessages = !generator.value.untimed;
+            } else if (options.msgLimit === "ALL_UNPROCESSED_MESSAGES_UNTIL_FIRST_PROCESSED_MESSAGE") {
+                shouldAddMessage = !generator.value.processed;
+                shouldStopAddingMessages = generator.value.processed;
             }
 
             if (generator.value.characterId === character.id) {
                 cycleCount++;
-            }
-
-            if (
-                options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_LAST_MESSAGE_INCLUDING_CHAR_LAST_MESSAGE" ||
-                options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_LAST_MESSAGE_EXCLUDING_CHAR_LAST_MESSAGE"
-            ) {
-                shouldStopAddingMessages = cycleCount >= 1;
-            }
-            if (
-                options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_INCLUDING_CHAR_2ND_LAST_MESSAGE" ||
-                options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_EXCLUDING_CHAR_2ND_LAST_MESSAGE"
-            ) {
-                shouldStopAddingMessages = cycleCount >= 2;
             }
 
             if (shouldAddMessage) {
@@ -561,6 +569,7 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
                     storyMaster: generator.value.storyMaster,
                     id: generator.value.id,
                     conversationId: generator.value.conversationId,
+                    onlySeenByCharacterIdName: generator.value.onlySeenByCharacterIdName,
                 });
                 if (generator.value.characterId) {
                     if (!conversingCharacters.includes(generator.value.characterId) && !generator.value.storyMaster) {

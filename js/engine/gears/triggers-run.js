@@ -73,7 +73,7 @@ function determinePotentialCharacterCausants(
  * @param {DECompleteCharacterReference} character
  * @param {DECharacterYesNoQuestion | DECharacterTextQuestion | DECharacterNumericQuestion} question
  * @param {{
- *    lastCycleMessagesInfo?: Awaited<ReturnType<typeof getHistoryFragmentForCharacter>>,
+ *    lastCycleMessagesInfo?: Awaited<ReturnType<typeof getHistoryFragment>>,
  *    interactedCharactersAccordingToItemChange: string[],
  *    questioningAgent: ReturnType<NonNullable<DEngine["inferenceAdapter"]>["runQuestioningCustomAgentOn"]>,
  *    initializeAgent: () => Promise<void>,
@@ -93,7 +93,7 @@ export async function runQuestion(engine, character, question, options) {
 
     // first we need to update the bonds towards the character, for that we need to get a whole extended cycle
     // gather all the other characters that talked inbetween, and update bonds for each
-    const lastCycleMessagesInfo = options.lastCycleMessagesInfo || await getHistoryFragmentForCharacter(engine, character, {
+    const lastCycleMessagesInfo = options.lastCycleMessagesInfo || await getHistoryFragment(engine, character, {
         msgLimit: "LAST_CYCLE",
         includeDebugMessages: false,
         includeRejectedMessages: false,
@@ -336,7 +336,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
         return { microInjections: [], microVoices: [] };
     }
 
-    const lastCycleMessagesInfo = await getHistoryFragmentForCharacter(engine, character, {
+    const lastCycleMessagesInfo = await getHistoryFragment(engine, character, {
         msgLimit: "LAST_CYCLE",
         includeDebugMessages: false,
         includeRejectedMessages: false,

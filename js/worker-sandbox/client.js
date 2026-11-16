@@ -439,7 +439,7 @@ export class EngineWorkerClient {
      * @param {{ characterName: string, lastMessageGid: string | null }} args
      * @returns {Promise<import("../engine/util/messages.js").DEObjectMessageGeneratorResult[]>}
      */
-    getHistoryForCharacter(args) { return this.#call("getHistoryForCharacter", args); }
+    getHistory(args) { return this.#call("getHistory", args); }
 
     /**
      * @param {{ characterName: string }} args 

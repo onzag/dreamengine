@@ -5,7 +5,7 @@
 import { debug } from "../debug.js";
 import { DEngine } from "../index.js";
 import { getExternalDescriptionOfCharacter, getInternalDescriptionOfCharacter, getRelationshipBetweenCharacters, getSurroundingCharacters } from "../util/character-info.js";
-import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertMessagesToSimpleList, getHistoryFragment } from "../util/messages.js";
 
 /**
  * @typedef {Object} DEngineInteraction
@@ -292,7 +292,7 @@ import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../
 //             character,
 //             systemPrompt,
 //             availableSocialGroupsContextInfo.value,
-//             this.getHistoryForCharacter(character, {}),
+//             this.getHistory(character, {}),
 //             "LAST_CYCLE_EXPANDED",
 //             null,
 //         );
@@ -507,7 +507,7 @@ import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../
 //         ])
 //         const allPotentialsLowered = allPotentials.map(name => name.toLowerCase());
 
-//         const generator = this.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, this.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
+//         const generator = this.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, this.getHistory(character, {}), "LAST_CYCLE_EXPANDED", null);
 //         const ready = await generator.next();
 //         if (ready.value !== "ready") {
 //             throw new Error("Questioning agent could not be started properly.");
@@ -793,7 +793,7 @@ async function testMessageFeasibilityForce(engine, character) {
         }
     ]);
 
-    const lastCycleExpanded = (await getHistoryFragmentForCharacter(engine, character, {
+    const lastCycleExpanded = (await getHistoryFragment(engine, character, {
         includeDebugMessages: false,
         includeRejectedMessages: false,
         msgLimit: "LAST_CYCLE_EXPANDED",

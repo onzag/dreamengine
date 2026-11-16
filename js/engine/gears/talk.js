@@ -3,7 +3,7 @@ import { DEngine } from "../index.js";
 import { getCharacterSurroundingInformation, getSysPromptForCharacter } from "../util/character-info.js";
 import { emotions } from "../util/emotions.js";
 import { createGrammarFromList, generateGrammarForVoice, parseListFromGrammarResponse } from "../util/grammar.js";
-import { convertContentToSimpleList, convertMessagesToSimpleList, getHistoryFragmentForCharacter, getNameIdentificationForOneCharacterTowardsAnother } from "../util/messages.js";
+import { convertMessagesToSimpleList, getHistoryFragment, getNameIdentificationForOneCharacterTowardsAnother } from "../util/messages.js";
 import { minimizeSoundDescription, minimizeModeDescription } from "../util/voice.js";
 import { mergeVoicesFrom, reweightVoiceForEmotion, selectForcedVoiceEffects } from "../util/voice.js";
 
@@ -280,7 +280,7 @@ export async function talk(engine, character, options) {
             ]).join("\n\n"),
         );
 
-        const lastCycleExtended = await getHistoryFragmentForCharacter(engine, character, {
+        const lastCycleExtended = await getHistoryFragment(engine, character, {
             includeDebugMessages: false,
             includeRejectedMessages: false,
             msgLimit: "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_INCLUDING_CHAR_2ND_LAST_MESSAGE",
@@ -390,7 +390,7 @@ export async function talk(engine, character, options) {
      */
     const finalMessages = [];
 
-    const messages = (await getHistoryFragmentForCharacter(engine, character, {
+    const messages = (await getHistoryFragment(engine, character, {
         includeDebugMessages: false,
         includeRejectedMessages: false,
         msgLimit: "ALL",

@@ -279,12 +279,14 @@ const SECOND_RANGES = [
 
 /**
  * @param {DEObject} DE
- * @param {Omit<DECompleteCharacterReference, "id" | "scriptGivenId">} character
+ * @param {Omit<DECompleteCharacterReference, "id" | "scriptGivenId" | "bonds">} character
  * @param {FSS4DOptions | FSS4DCreepyOptions} options
  * @returns {Omit<DECompleteCharacterReference, "id" | "scriptGivenId">}
  */
 function setup(DE, character, options) {
-    character.bonds = {
+    const forcedCharacterWithBonds = /** @type {Omit<DECompleteCharacterReference, "id" | "scriptGivenId">} */ (character);
+
+    forcedCharacterWithBonds.bonds = {
         system: "STANDARD_FULL",
         bond2DoesNotTrackAttraction: options.type === "4d_creepy",
         // @ts-ignore
@@ -349,7 +351,7 @@ function setup(DE, character, options) {
                         secondRangeRule && secondRangeRule[familyStatus];
 
                     if (!baseRule) {
-                        const lastSameFamilyRuleAddedArray = character.bonds.declarations.filter(d => d.familyBond === (familyStatus === "family") && d.minBondLevel === min && d.maxBondLevel === max && d.strangerBond === isStranger);
+                        const lastSameFamilyRuleAddedArray = forcedCharacterWithBonds.bonds.declarations.filter(d => d.familyBond === (familyStatus === "family") && d.minBondLevel === min && d.maxBondLevel === max && d.strangerBond === isStranger);
                         const lastSameFamilyRuleAdded = lastSameFamilyRuleAddedArray.length > 0 ? lastSameFamilyRuleAddedArray[lastSameFamilyRuleAddedArray.length - 1] : null;
 
                         if (lastSameFamilyRuleAdded) {
@@ -361,7 +363,7 @@ function setup(DE, character, options) {
                         continue;
                     }
 
-                    character.bonds.declarations.push({
+                    forcedCharacterWithBonds.bonds.declarations.push({
                         name: `${options.type}_${bondName}_${secondaryBondName}_${isStranger ? "stranger" : "non_stranger"}_${familyStatus}`,
                         description: baseRule.description,
                         relationshipName: baseRule.relationshipName,
@@ -393,7 +395,7 @@ function setup(DE, character, options) {
         }
     }
 
-    return character;
+    return forcedCharacterWithBonds;
 }
 
 engine.exports = {

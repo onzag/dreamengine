@@ -25,7 +25,11 @@ import { DEngine } from "../index.js";
  */
 
 /**
- * @typedef {AsyncGenerator<string, void, {
+ * @typedef {{text: string, thoughts: string[], warnings: string[]}} InferenceResponse
+ */
+
+/**
+ * @typedef {AsyncGenerator<InferenceResponse, void, {
      * answerTrail?: string,
      * grammar?: string,
      * contextInfo?: string,
@@ -113,9 +117,9 @@ export class BaseInferenceAdapter {
      *   forcedSounds: Array<string>,
      *   __debug_id?: string|null,
      * }} options
-     * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
+     * @returns {Promise<InferenceResponse>}
      */
-    async* inferNextStoryFragmentFor(
+    async inferNextStoryFragmentFor(
         character,
         options,
     ) {
@@ -137,7 +141,7 @@ export class BaseInferenceAdapter {
      * The questioning agent is used to create a persistent agent session that can be used to ask multiple questions,
      * this is what is used for bond questioning, what will the character do next, etc...
      * 
-     * When the generator is called it will yield "entire answers" as they are generated, not token by token; giving it a next
+     * The initial yield is {text: "ready", thoughts: [], warnings: []}. Later yields contain complete replies. Giving it a next
      * question will make it keep ongoing, passing null will make it stop after the current answer and the generator will finish.
      * 
      * @param {string} gear the gear that is running this questioning agent

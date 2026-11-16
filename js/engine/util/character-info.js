@@ -2186,6 +2186,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
                 stranger: true,
                 knowsAs: [],
                 believesDead: false,
+                seesAs: null,
                 createdAt: {
                     time: 0,
                     dayOfMonth: 0,
@@ -2335,7 +2336,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
 
             finalResult.relationships.push({
                 title: titleOfRelationship,
-                description: result,
+                description: result.trim(),
             });
 
             if (bondDeclaration.generalCharacterDescriptionInjection) {
@@ -2352,6 +2353,8 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
                     finalResult.general += injection;
                 }
             }
+        } else {
+            console.warn(`No bond declaration found for character ${characterId} towards ${activeBond.towards} with bond level ${activeBond.bond} and bond2 level ${activeBond.bond2}, stranger: ${activeBond.stranger}`);
         }
     }
 

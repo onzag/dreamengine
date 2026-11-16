@@ -627,6 +627,25 @@ export class SQLiteBridge extends BaseDataManager {
     }
 
     /**
+     * Finalize outstanding timing even when message side effects have already completed.
+     * @param {DETimeDescription} time
+     * @returns {Promise<void>}
+     */
+    async timeUntimedConversationMessages(time) {
+        await this.withTransactionalWrite(id => this.databaseController.runQuery(id, `
+            UPDATE engine_conversation_messages
+            SET duration = json_object(
+                    'inDays', (? - json_extract(startTime, '$.time')) / 86400000.0,
+                    'inHours', (? - json_extract(startTime, '$.time')) / 3600000.0,
+                    'inMinutes', (? - json_extract(startTime, '$.time')) / 60000.0,
+                    'inSeconds', (? - json_extract(startTime, '$.time')) / 1000.0
+                ),
+                endTime = ?, untimed = 0
+            WHERE untimed = 1
+        `, [time.time, time.time, time.time, time.time, JSON.stringify(time)]));
+    }
+
+    /**
      * Add queryable snapshot fields and indexed membership tables to old and new databases.
      * The original wall-clock snapshot time is unknown for legacy rows and stays NULL.
      * @param {string} databaseId

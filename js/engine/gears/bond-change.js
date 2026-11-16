@@ -6,7 +6,7 @@ import { debug } from "../debug.js";
 import { DEngine } from "../index.js";
 import { getFamilyBondRelation, getRelationship } from "../util/character-info.js";
 import { yesNoGrammar } from "../util/grammar.js";
-import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertMessagesToSimpleList, getHistoryFragment } from "../util/messages.js";
 
 /**
  * 
@@ -54,7 +54,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
         return;
     }
 
-    const lastCycleExpanded = (await getHistoryFragmentForCharacter(engine, character, {
+    const lastCycleExpanded = (await getHistoryFragment(engine, character, {
         includeDebugMessages: false,
         includeRejectedMessages: false,
         msgLimit: "LAST_CYCLE_EXPANDED",

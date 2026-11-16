@@ -2739,7 +2739,6 @@ declare interface DEStateForCharacter {
     location: string;
     locationSlot: string;
     states: Array<DEApplyingState>;
-    time: DETimeDescription;
     conversationId: string | null;
     posture: DEPosture;
     carrying: DEItem[];
@@ -4289,7 +4288,7 @@ declare interface DEItemInPerspective extends Omit<DEItem, "id"> {
     /**
      * Missing items that are supposed to be on top but the character in perspective cannot see them
      */
-    missingOntop: Array<{parent: string, item: DEItemInPerspective}>;
+    missingOntop: Array<{ parent: string, item: DEItemInPerspective }>;
     /**
      * List of items contained in this item, if any, that are in perspective at that moment in time
      */
@@ -4299,7 +4298,7 @@ declare interface DEItemInPerspective extends Omit<DEItem, "id"> {
      * 
      * check the reason of why it is unclear and why there might be something here
      */
-    missingContaining: Array<{parent: string, item: DEItemInPerspective}>;
+    missingContaining: Array<{ parent: string, item: DEItemInPerspective }>;
     /**
      * List of characters that are in this item, if any, that are in perspective at that moment in time
      */
@@ -4308,7 +4307,7 @@ declare interface DEItemInPerspective extends Omit<DEItem, "id"> {
      * Missing characters that are supposed to be contained but the character in perspective cannot see them
      * check the reason of why it is unclear and why there might be something here
      */
-    missingContainingCharacters: Array<{parent: string, character: string}>;
+    missingContainingCharacters: Array<{ parent: string, character: string }>;
     /**
      * List of characters that are on top of this item, if any, that are in perspective at that moment in time
      */
@@ -4317,7 +4316,7 @@ declare interface DEItemInPerspective extends Omit<DEItem, "id"> {
      * List on on top characters that are missing from the list, check the reason of why it is unclear and why there might
      * be something here
      */
-    missingOntopCharacters: Array<{parent: string, character: string}>;
+    missingOntopCharacters: Array<{ parent: string, character: string }>;
     /**
      * Whether the contents of this item can be seen by the character in perspective or not
      * this is specific canSeeContents is either true or false, if false the contentsIsUnclear will specify
@@ -4676,6 +4675,58 @@ declare interface DESurroundingCharacters {
      */
     deadTotalStrangers: string[];
 }
+
+declare interface DEInferenceToolBooleanParameter {
+    type: "boolean";
+    description: string;
+}
+
+declare interface DEInferenceToolStringParameter {
+    type: "string";
+    description: string;
+}
+
+declare interface DEInferenceToolNumberParameter {
+    type: "number";
+    description: string;
+}
+
+declare interface DEInferenceToolArrayParameter {
+    type: "array";
+    description: string;
+    items: {
+        type: "string" | "number" | "boolean";
+    };
+}
+
+declare type DEInferenceToolParameter = DEInferenceToolBooleanParameter | DEInferenceToolStringParameter | DEInferenceToolNumberParameter | DEInferenceToolArrayParameter;
+
+declare interface DEInferenceTools {
+    talk: {
+        [fnName: string]: {
+            /**
+             * Description of the function, use {{char}} to refer to the character in perspective
+             */
+            description: string;
+            /**
+             * Parameters of the function, use {{char}} to refer to the character in perspective
+             * in any description
+             */
+            parameters: Record<string, DEInferenceToolParameter>;
+            /**
+             * required parameters of the function
+             */
+            requiredParameters: string[];
+            /**
+             * Function to call
+             * @param perspective the perspective of the character 
+             * @param args the arguments given to the function, the keys are the parameter names and the values are the parameter values
+             * @returns a string to provide to the LLM, this string will be used as the output of the function and will be used to generate the next prompt for the LLM
+             */
+            fn: (perspective: DEPerspective, args: Record<string, any>) => Promise<string> | string;
+        },
+    }
+};
 
 declare interface DEUtils {
     engine: {
@@ -5516,6 +5567,8 @@ declare interface DEDatabaseConversationFns {
     updateConversation(conversationId: string, conversation: Partial<Omit<DEConversation, "id" | "messages">>): Promise<DEConversation | null>;
     /** Update supplied fields without changing the message's ID or insertion order. */
     updateConversationMessage(messageId: string, message: Partial<Omit<DEConversationMessage, "id">>): Promise<DEConversationMessage | null>;
+    /** Finalize timing for all untimed messages, including completed messages; requires an active transaction. */
+    timeUntimedConversationMessages(time: DETimeDescription): Promise<void>;
 }
 
 declare interface DEDatabasePerspectiveFns {

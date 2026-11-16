@@ -1,14 +1,14 @@
 import { weightedRandomByLikelihood } from "../../util/random.js";
 import { deepCopyNoHistory, DEngine } from "../index.js";
-import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertMessagesToSimpleList, getHistoryFragment } from "../util/messages.js";
 import { millisecondsToDuration, millisecondsToTime } from "../util/time.js";
 import { debug } from "../debug.js";
 
 /**
  * @param {DEngine} engine
  * @param {string} locationName
- * @param {DEStatefulLocationDefinition} location 
- * @param {DEStatefulLocationDefinition | null} parentLocation
+ * @param {DEStatefulLocation} location 
+ * @param {DEStatefulLocation | null} parentLocation
  * @param {boolean} cascade
  */
 export function rerollLocationWeather(engine, locationName, location, parentLocation, cascade = true) {
@@ -61,8 +61,6 @@ export function rerollLocationWeather(engine, locationName, location, parentLoca
                 throw new Error("Failed to pick new weather system. Are there any weather systems defined?");
             }
             location.internalState.currentWeather = newWeatherSystem.name;
-            // TODO this needs to update when we reroll weather
-            // right now it just remains at 0 forever
             location.internalState.currentWeatherHasBeenOngoingFor = {
                 inMinutes: 0,
                 inHours: 0,
@@ -112,7 +110,7 @@ function updateAllWeatherDurations(engine, timeForwards) {
     }
 
     /**
-     * @param {DEStatefulLocationDefinition} location 
+     * @param {DEStatefulLocation} location 
      */
     const updateWeatherForLocation = (location) => {
         if (location.internalState.currentWeatherHasBeenOngoingFor) {
@@ -134,7 +132,7 @@ function updateAllWeatherDurations(engine, timeForwards) {
  * @param {DEngine} engine 
  * @param {DETimeDescription} time 
  */
-export function timeForwardsToNewTime(engine, time) {
+export async function timeForwardsToNewTime(engine, time) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -148,28 +146,13 @@ export function timeForwardsToNewTime(engine, time) {
     updateAllWeatherDurations(engine, duration);
     rerollWorldWeather(engine);
 
-    for (const [charKey, charState] of Object.entries(engine.deObject.stateFor)) {
-        const currentState = deepCopyNoHistory(charState);
-        charState.time = { ...time };
-        charState.history.push(currentState);
-    }
-
-    // update all conversation messages that are untimed to be timed with the new time
-    for (const conversation of Object.values(engine.deObject.conversations)) {
-        for (const message of conversation.messages) {
-            if (message.untimed) {
-                message.duration = millisecondsToDuration(time.time - message.startTime.time);
-                message.endTime = time;
-            }
-        }
-    }
+    await engine.deObject.database.timeUntimedConversationMessages(time);
 }
 
 /**
  * @param {DEngine} engine 
- * @param {DECompleteCharacterReference} character
  */
-export default async function timeForwardsUsingUntimedMessages(engine, character) {
+export default async function timeForwardsUsingUntimedMessages(engine) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -181,19 +164,28 @@ export default async function timeForwardsUsingUntimedMessages(engine, character
         return [];
     }
 
+    const userCharacter = engine.deObject.characters[engine.deObject.user];
+
+    if (!userCharacter) {
+        throw new Error("User character not found in engine.deObject.characters");
+    }
+
     // now this function is meant to be called every time a character sends a message and ends their talk turn
     // or when the story starts (and since the character shouldn't have spoken yet it will get everything since the beginning of time)
-    const lastStoryFragment = (await getHistoryFragmentForCharacter(engine, character, {
+    const untimedFragements = (await getHistoryFragment(engine, userCharacter, {
         includeDebugMessages: false,
         includeRejectedMessages: false,
         msgLimit: "ALL_UNTIMED_MESSAGES_UNTIL_FIRST_TIMED_MESSAGE",
+        perspective: "story-master",
     })).messages;
 
-    const systemMessage = `You are an assistant and story analyst that helps determine how much time has passed in a story based on the last story fragment.`;
+    const systemMessage = `You are an assistant and story analyst that estimates the elapsed time covered by the provided untimed story fragments.`;
     const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [
         "You must respond in the format, 'Time Passed: X', where X is the amount of time that has passed (e.g., '8 seconds', '5 minutes', '2 hours', '3 days', '1 week').",
-        "Be realistic about how long actions take.",
-        "Vary your estimates naturally - do not default to 1 of any unit. Consider the actual duration implied by the actions described, don't be afraid to estimate or guess if it is unclear and give variety in your responses.",
+        "Estimate the total elapsed time across all provided untimed fragments. Background descriptions establish context and do not imply additional elapsed time unless an action or time jump actually occurs.",
+        "Account for the time needed to speak dialogue aloud: use roughly 2 to 3 spoken words per second, plus pauses, gasps, and other actions. A multiword sentence normally takes several seconds, not 1 second. Do not count speaker labels, formatting tags, or narration as spoken words.",
+        "Add durations for sequential actions. For simultaneous actions, count their overlapping time only once. Respect explicit durations and time jumps in the story.",
+        "Choose a realistic whole-number duration based on the events, rather than choosing 1 by default or varying the answer arbitrarily. A single brief sound or instantaneous action can take 1 second.",
         "If the story fragment does not provide enough information to determine the time passed, give a rough estimate regardless.",
     ], null);
     const timePassedGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
@@ -201,7 +193,7 @@ export default async function timeForwardsUsingUntimedMessages(engine, character
         {
             system: systemPrompt,
             contextInfoBefore: null,
-            messages: convertMessagesToSimpleList(lastStoryFragment),
+            messages: convertMessagesToSimpleList(untimedFragements),
             contextInfoAfter: null,
         }
     );
@@ -211,7 +203,7 @@ export default async function timeForwardsUsingUntimedMessages(engine, character
         throw new Error("Failed to prime time-forwards agent.");
     }
 
-    const nextQuestion = `According to the last story fragment provided, how much time has passed?`;
+    const nextQuestion = `How much time elapsed across these untimed story fragments, including the time needed to speak the dialogue and perform the actions? Complete the Time Passed answer with only a whole number and its time unit.`;
 
     const answer = await timePassedGenerator.next({
         maxCharacters: 100,
@@ -220,18 +212,21 @@ export default async function timeForwardsUsingUntimedMessages(engine, character
         nextQuestion: nextQuestion,
         stopAt: ["\n", "."],
         stopAfter: [],
-        answerTrail: "Time Passed:\n\n",
+        answerTrail: "Time Passed: ",
         grammar: `root ::= NUMBER " " UNIT\nNUMBER ::= ([1-9] | [1-9] [0-9] | [1-9] [0-9] [0-9])\nUNIT ::= ("seconds" | "second" | "minutes" | "minute" | "hours" | "hour" | "days" | "day" | "weeks" | "week" | "month" | "months" | "year" | "years")`,
     });
 
     // Ensure the generator is properly closed.
     await timePassedGenerator.next(null);
-    if (answer.done || !answer.value) {
+    if (answer.done || !answer.value || !answer.value.text) {
         throw new Error("Failed to get a valid response from time-forwards agent.");
     }
 
+    console.log(untimedFragements);
+    console.log(`Time-Forwards: Time passed response from time-forwards agent: ${answer.value.text.trim()}`);
+
     // now we have to parse this time passed value, into milliseconds
-    const timePassedText = answer.value.trim();
+    const timePassedText = answer.value.text.trim();
     const numberSide = parseInt(timePassedText.split(" ")[0], 10);
 
     let unitSide = timePassedText.split(" ")[1].toLowerCase();
@@ -256,7 +251,7 @@ export default async function timeForwardsUsingUntimedMessages(engine, character
 
     const totalMilliseconds = numberSide * multiplier;
 
-    console.log(`Time-Forwards: Moving time forward by ${totalMilliseconds} milliseconds based on untimed messages from ${character.name} perspective.`);
+    console.log(`Time-Forwards: Moving time forward by ${totalMilliseconds} milliseconds based on untimed messages.`);
 
     const currentTime = engine.deObject.currentTime;
 
@@ -271,23 +266,10 @@ export default async function timeForwardsUsingUntimedMessages(engine, character
     currentTime.minuteOfHour = newCurrentTimeDate.getUTCMinutes();
     currentTime.dayOfWeek = newCurrentTimeDate.getUTCDay();
 
-    // loop over the stateFor object, character key is the record key and value is the state
-    for (const [charKey, charState] of Object.entries(engine.deObject.stateFor)) {
-        const currentState = deepCopyNoHistory(charState);
-        charState.time = { ...currentTime };
-        charState.history.push(currentState);
-    }
-
-    for (const location of Object.values(engine.deObject.world.locations)) {
-        location.internalState.currentWeatherHasBeenOngoingFor.inDays += totalMilliseconds / (24 * 60 * 60 * 1000);
-        location.internalState.currentWeatherHasBeenOngoingFor.inHours += totalMilliseconds / (60 * 60 * 1000);
-        location.internalState.currentWeatherHasBeenOngoingFor.inMinutes += totalMilliseconds / (60 * 1000);
-    }
-
     const storyMasterMessagesToAdd = [];
 
     // reroll world weather
-    const characterState = engine.deObject.stateFor[character.name];
+    const characterState = engine.deObject.stateFor[userCharacter.id];
     const currentWeatherAtLocation = engine.deObject.world.locations[characterState.location].internalState.currentWeather;
 
     const duration = millisecondsToDuration(totalMilliseconds);
@@ -303,23 +285,7 @@ export default async function timeForwardsUsingUntimedMessages(engine, character
         storyMasterMessagesToAdd.push(`The weather at ${characterState.location} has changed from ${currentWeatherAtLocation} to ${newWeatherAtLocation}.`);
     }
 
-    for (const message of lastStoryFragment) {
-        if (!message.storyMaster) {
-            if (message.conversationId && message.id) {
-                const messageObj = engine.deObject.conversations[message.conversationId].messages.find(m => m.id === message.id);
-                if (messageObj) {
-                    messageObj.endTime = timeNow;
-
-                    const messageStartTimeInMs = messageObj.startTime.time;
-                    const messageDurationBasedOnEndTime = messageObj.endTime.time - messageStartTimeInMs;
-                    const duration = millisecondsToDuration(messageDurationBasedOnEndTime);
-                    messageObj.duration = duration;
-                    
-                    messageObj.untimed = false;
-                }
-            }
-        }
-    }
+    await engine.deObject.database.timeUntimedConversationMessages(timeNow);
 
     return storyMasterMessagesToAdd;
 }

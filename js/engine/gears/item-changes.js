@@ -1,6 +1,6 @@
 import { DEngine } from "../index.js";
 import { getBeingCarriedByCharacter, getCharacterExactLocation, getExternalDescriptionOfCharacter } from "../util/character-info.js";
-import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertMessagesToSimpleList, getHistoryFragment } from "../util/messages.js";
 import { getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath } from "../util/weight-and-volume.js";
 import { yesNoGrammar, isYes } from "../util/grammar.js";
 import { getFullItemListAtLocation } from "../util/items.js";
@@ -114,13 +114,13 @@ export default async function calculateItemChanges(engine, character) {
      */
     let itemsInteractedWith = [];
 
-    const lastCycleExpanded = (await getHistoryFragmentForCharacter(engine, character, {
+    const lastCycleExpanded = (await getHistoryFragment(engine, character, {
         includeDebugMessages: false,
         includeRejectedMessages: false,
         msgLimit: "LAST_CYCLE_EXPANDED",
     })).messages;
 
-    const lastCycleMessages = (await getHistoryFragmentForCharacter(engine, character, {
+    const lastCycleMessages = (await getHistoryFragment(engine, character, {
         includeDebugMessages: false,
         includeRejectedMessages: false,
         msgLimit: "LAST_CYCLE",

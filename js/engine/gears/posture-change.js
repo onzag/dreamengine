@@ -2,7 +2,7 @@ import { debug } from "../debug.js";
 import { DEngine } from "../index.js";
 import { getBasicPostures, getExtendedPosturesOf, getExternalDescriptionOfCharacter, getExternalDescriptionOfCharacterPostureOnly, humanReadablePostureToPosture, POSTURE_MAP, postureToText } from "../util/character-info.js";
 import { createGrammarFromList, yesNoGrammar } from "../util/grammar.js";
-import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertMessagesToSimpleList, getHistoryFragment } from "../util/messages.js";
 
 /**
  * @param {DEngine} engine
@@ -50,7 +50,7 @@ export default async function calculatePostureChange(engine, character, knownCha
         characterDescription,
     );
 
-    const lastCycle = await getHistoryFragmentForCharacter(engine, character, {
+    const lastCycle = await getHistoryFragment(engine, character, {
         msgLimit: "LAST_CYCLE",
     });
 

@@ -51,7 +51,7 @@ declare interface DEScriptRegistry {
     };
     "@bond-systems/full-standard-bond-system": DEScript & {
         language: string;
-        setup(DE: DEObject, character: Omit<DECompleteCharacterReference, "id" | "scriptGivenId">, options: FSS4DOptions | FSS4DCreepyOptions): Omit<DECompleteCharacterReference, "id" | "scriptGivenId">;
+        setup(DE: DEObject, character: Omit<DECompleteCharacterReference, "id" | "scriptGivenId" | "bonds">, options: FSS4DOptions | FSS4DCreepyOptions): Omit<DECompleteCharacterReference, "id" | "scriptGivenId">;
     };
     "@bond-systems-preset/aromantic": DEScript & {
         name: string;
