@@ -1290,6 +1290,9 @@ ${nextMessageMustBeInform}
     }
 
     /**
+     * Each generator owns its conversation. Questions append turns by default;
+     * passing newSession: true with a question resets to the initial context.
+     *
      * @param {string} gear the gear that is running this questioning agent
      * @param {{
      *   system: string,
@@ -1311,9 +1314,7 @@ ${nextMessageMustBeInform}
         const before = (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "");
         const after = (contextInfoAfter ? "\n" + contextInfoAfter : "");
 
-        // Build the "prepared" user context once. Unlike the websocket de-server,
-        // there is no stateful prepare step: the context simply becomes the user
-        // turn and each question is appended to it per request.
+        // Prepare the context once, for the first user turn of each conversation.
         let userTrail;
         if (!remarkLastStoryFragmentForAnalysis) {
             const messagesFormatted = messages.map(m => m.message).join("\n\n");
@@ -1339,6 +1340,10 @@ ${nextMessageMustBeInform}
             }
         }
 
+        /** @type {Array<{role: "system" | "user" | "assistant", content: string}>} */
+        const conversation = [{ role: "system", content: system }];
+        const preparedContext = userTrail.trimEnd();
+
         let nextQuestion = yield { text: "ready", thoughts: [], warnings: [] };
         while (nextQuestion !== null) {
             if (typeof nextQuestion === "undefined") {
@@ -1352,10 +1357,15 @@ ${nextMessageMustBeInform}
                 "# Question:\n\n" + nextQuestion.nextQuestion +
                 (nextQuestion.instructions ? ("\n\n# Instructions:\n\n" + nextQuestion.instructions) : "");
 
+            if (nextQuestion.newSession === true) conversation.length = 1;
+
+            // Keep previous turns unchanged for server prefix-cache reuse. Chat
+            // completions still needs the full history on every HTTP request;
+            // actual KV-cache retention is controlled by the server.
             /** @type {Array<{role: "system" | "user" | "assistant", content: string}>} */
             const chatMessages = [
-                { role: "system", content: system },
-                { role: "user", content: userTrail.trimEnd() + "\n\n" + questionText },
+                ...conversation,
+                { role: "user", content: (conversation.length === 1 ? preparedContext + "\n\n" : "") + questionText },
             ];
 
             const deServerOptions = {
@@ -1371,6 +1381,13 @@ ${nextMessageMustBeInform}
             };
 
             const answer = await this.runInference(model, chatMessages, standardOpenAIOptions, deServerOptions);
+
+            // Commit only completed turns and include the assistant prefill that
+            // runInference sent, since answer.text contains only generated text.
+            conversation.push(chatMessages[chatMessages.length - 1], {
+                role: "assistant",
+                content: deServerOptions.trail + answer.text,
+            });
 
             nextQuestion = yield answer;
         }

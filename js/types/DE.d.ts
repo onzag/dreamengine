@@ -2717,19 +2717,32 @@ declare interface DESeenCharacter {
 
 declare type DEPosture =
     "standing" |
+    "standing+fighting_stance" |
     "crawling" |
     "climbing" |
     "sitting" |
     "lying_down" |
     "lying_down+belly_up" |
     "lying_down+belly_down" |
+    "lying_down+sideways" |
+    "lying_down+fetal_position" |
+    "lying_down+sprawled_out" |
+    "lying_down+curled_up" |
+    "lying_down+fighting_stance" |
     "on_all_fours" |
     "crouching" |
     "kneeling" |
     "hanging" |
-    "floating" |
     "flying" |
-    "swimming";
+    "swimming" |
+    "swimming+breaststroke" |
+    "swimming+backstroke" |
+    "swimming+freestyle" |
+    "swimming+butterfly" |
+    "swimming+floating" |
+    "diving" |
+    "sinking" |
+    "squatting";
 
 declare interface DEStateForCharacter {
     /**

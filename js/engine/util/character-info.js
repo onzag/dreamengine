@@ -1301,26 +1301,64 @@ export function postureToText(posture) {
             return "lying down on the back";
         case "on_all_fours":
             return "on all fours";
+        case "lying_down+sideways":
+            return "lying down on the side";
+        case "swimming+breaststroke":
+            return "swimming in a breaststroke";
+        case "swimming+backstroke":
+            return "swimming in a backstroke";
+        case "swimming+freestyle":
+            return "swimming in a freestyle";
+        case "swimming+floating":
+            return "floating";
+        case "swimming+butterfly":
+            return "swimming in a butterfly stroke";
+        case "lying_down+fetal_position":
+            return "lying down in a fetal position";
+        case "lying_down+sprawled_out":
+            return "lying down sprawled out";
+        case "lying_down+curled_up":
+            return "lying down curled up";
+        case "lying_down+fighting_stance":
+            return "lying down in a fighting stance";
+        case "standing+fighting_stance":
+            return "standing in a fighting stance";
         default:
             return posture;
     }
 }
 
+/**
+ * @type {DEPosture[]}
+ */
 const allPostures = [
     "standing",
+    "standing+fighting_stance",
     "crawling",
     "climbing",
     "sitting",
     "lying_down",
     "lying_down+belly_up",
     "lying_down+belly_down",
+    "lying_down+sideways",
+    "lying_down+fetal_position",
+    "lying_down+sprawled_out",
+    "lying_down+curled_up",
+    "lying_down+fighting_stance",
     "on_all_fours",
     "crouching",
     "kneeling",
     "hanging",
-    "floating",
     "flying",
     "swimming",
+    "swimming+breaststroke",
+    "swimming+backstroke",
+    "swimming+freestyle",
+    "swimming+floating",
+    "swimming+butterfly",
+    "diving",
+    "sinking",
+    "squatting",
 ]
 
 export function getBasicPostures() {

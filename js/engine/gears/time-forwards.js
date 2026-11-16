@@ -222,7 +222,6 @@ export default async function timeForwardsUsingUntimedMessages(engine) {
         throw new Error("Failed to get a valid response from time-forwards agent.");
     }
 
-    console.log(untimedFragements);
     console.log(`Time-Forwards: Time passed response from time-forwards agent: ${answer.value.text.trim()}`);
 
     // now we have to parse this time passed value, into milliseconds

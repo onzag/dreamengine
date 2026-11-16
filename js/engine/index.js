@@ -18,6 +18,7 @@ import runAllTriggersFor from "./gears/triggers-run.js";
 import { giveCharacterRandomClothing } from "./util/clothing.js";
 import { BaseDataManager } from "./data-management/base.js";
 import timeForwardsUsingUntimedMessages from "./gears/time-forwards.js";
+import { getHistoryFragment } from "./util/messages.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -1058,6 +1059,20 @@ export class DEngine {
         if (options.moveTimeForwards) {
             addedMessagesForStoryMaster = await timeForwardsUsingUntimedMessages(this);
         }
+
+        const lastMessages = await getHistoryFragment(this, this.deObject.characters[this.deObject.user], {
+            msgLimit: "ALL_UNPROCESSED_MESSAGES_UNTIL_FIRST_PROCESSED_MESSAGE",
+            perspective: "story-master",
+        });
+
+        for (const characterId of lastMessages.mentionedCharacters) {
+            const character = this.deObject.characters[characterId];
+            const messagesByPostureChange = await calculatePostureChange(this, character);
+
+            addedMessagesForStoryMaster.push(...messagesByPostureChange);
+        }
+
+        // TODO process storymaster messages to add
 
         await consumeAccumulatedSideEffectsReadyFunctions();
         await this.informDEObjectUpdated();

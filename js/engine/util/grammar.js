@@ -98,14 +98,10 @@ export function stutteredWordGrammar(word, capitalizeInsensitive = false) {
 }
 
 /**
- * @param {DEngine} engine
  * @param {string[]} list
  * @returns {{grammar: string, stopAfter: string[]}}
  */
-export function createGrammarFromList(engine, list) {
-    if (!engine.inferenceAdapter) {
-        throw new Error("Inference adapter is required to create grammar");
-    }
+export function createGrammarFromList(list) {
     return {
         grammar: `root ::= (${list.map(item => caseInsensitiveGrammar(item)).join(" | ")})`,
         stopAfter: [],

@@ -41,6 +41,7 @@ import { DEngine } from "../index.js";
      * maxCharacters: number,
      * maxCharactersCutOnDot?: boolean,
      * maxSafetyCharacters: number,
+     * newSession?: boolean,
      * } | null>} QuestionAgentGeneratorResponse
      */
 
@@ -143,6 +144,8 @@ export class BaseInferenceAdapter {
      * 
      * The initial yield is {text: "ready", thoughts: [], warnings: []}. Later yields contain complete replies. Giving it a next
      * question will make it keep ongoing, passing null will make it stop after the current answer and the generator will finish.
+     * Questions share conversation history within this generator by default.
+     * Pass newSession: true with a question to reset to the original system prompt and context.
      * 
      * @param {string} gear the gear that is running this questioning agent
      * @param {{

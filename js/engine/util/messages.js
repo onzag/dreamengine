@@ -141,6 +141,7 @@ export function renderNarrationFragmentsToText(fragments) {
  * @property {boolean} untimed whether this message is untimed or not
  * @property {boolean} processed whether this message has been processed or not
  * @property {string | null} onlySeenByCharacterIdName the <id:name> of the character that can see this message, if any, otherwise null
+ * @property {string | null} perspectiveId the id of the last perspective of the fed character, if any, otherwise null
  */
 
 /**
@@ -271,6 +272,7 @@ export async function* getHistory(engine, character, options) {
                 untimed: true,
                 processed: false,
                 onlySeenByCharacterIdName: null,
+                perspectiveId: null,
             };
             if (!keepgoing) {
                 return;
@@ -314,6 +316,9 @@ export async function* getHistory(engine, character, options) {
                     processed: !message.isProcessingSideEffects,
                     onlySeenByCharacterIdName: canOnlyBeSeenByCharacter ?
                         getNameIdentificationForOneCharacterTowardsAnother(engine.getDEObject(), options.perspective === "story-master" ? canOnlyBeSeenByCharacter : character, canOnlyBeSeenByCharacter) : null,
+                    perspectiveId: options.perspective === "character" ? (
+                        message.perspectiveByCharacterId ? message.perspectiveByCharacterId[character.id].after || message.perspectiveByCharacterId[character.id].before || null : null
+                    ) : null,
                 });
                 if (!keepgoing) {
                     return;
@@ -378,6 +383,7 @@ export async function* getHistory(engine, character, options) {
                     untimed: true,
                     processed: false,
                     onlySeenByCharacterIdName: null,
+                    perspectiveId: null,
                 };
                 if (!keepgoing) {
                     return;
@@ -506,7 +512,7 @@ export function convertMessagesToSimpleList(messages) {
  *   enrichedMode?: boolean,
  *   perspective: "character" | "story-master"
  * }} options
- * @returns {Promise<{messages: Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null, onlySeenByCharacterIdName: string | null}>, conversingCharacters: string[], mentionedCharacters: string[]}>}
+ * @returns {Promise<{messages: Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null, onlySeenByCharacterIdName: string | null}>, conversingCharacters: string[], mentionedCharacters: string[], lastPerspectiveId: string | null}>}
  */
 export async function getHistoryFragment(engine, character, options) {
     if (!engine.deObject) {
@@ -539,6 +545,10 @@ export async function getHistoryFragment(engine, character, options) {
     // }
 
     let cycleCount = 0;
+    /**
+     * @type {string | null}
+     */
+    let lastPerspectiveId = null;
     while (!generator.done) {
         if (!generator.value.debug && !generator.value.rejected) {
             let shouldAddMessage = false;
@@ -561,7 +571,12 @@ export async function getHistoryFragment(engine, character, options) {
                 cycleCount++;
             }
 
+            generator.value.characterId
+
             if (shouldAddMessage) {
+                if (!lastPerspectiveId && generator.value.perspectiveId) {
+                    lastPerspectiveId = generator.value.perspectiveId;
+                }
                 messagesToAdd.push({
                     content: content,
                     name: generator.value.name,
@@ -637,5 +652,6 @@ export async function getHistoryFragment(engine, character, options) {
         messages: messagesToAdd,
         conversingCharacters,
         mentionedCharacters,
+        lastPerspectiveId,
     }
 }

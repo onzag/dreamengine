@@ -7,10 +7,9 @@ import { convertMessagesToSimpleList, getHistoryFragment } from "../util/message
 /**
  * @param {DEngine} engine
  * @param {DECompleteCharacterReference} character
- * @param {{ [charName: string]: { reason: string; }}} knownCharactersThatMoved - a map of character names to reasons for why they moved, this is used to help determine if a character's posture might have changed due to them moving
  * @returns {Promise<string[]>} - an array of messages for storymaster
  */
-export default async function calculatePostureChange(engine, character, knownCharactersThatMoved) {
+export default async function calculatePostureChange(engine, character) {
     if (!engine.deObject) {
         throw new Error("DEngine object not initialized");
     } else if (!engine.inferenceAdapter) {
@@ -21,37 +20,27 @@ export default async function calculatePostureChange(engine, character, knownCha
         return [];
     }
 
-    // TODO instead of ask each posture one by one, we can better try asking which posture better describes the character
-
     const basicPostures = getBasicPostures();
+
+    const characterState = engine.deObject.stateFor[character.id];
+    const currentPosture = characterState.posture;
 
     const yesNoGrammarObject = yesNoGrammar(engine);
 
-    const characterState = engine.deObject.stateFor[character.name];
-
-    const characterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
-        character,
-        {
-            // hide the posture in the description, so the agent needs to find it out by itself
-            description: await getExternalDescriptionOfCharacter(engine.deObject, character.name, true, true),
-            externalDescription: null,
-            relationships: [],
-            expressiveStates: [],
-            scenario: null,
-            lore: null,
-        },
-    );
-
     const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
-        "You are an assistant that checks for changes in posture of a character named " + character.name + " in a story, you will be asked questions about the posture and you will answer with yes or not",
+        "You are an assistant that checks for changes in posture of a character named " + character.name + " in a story who is identified with the character id " + JSON.stringify(character.id) + ", you will be asked questions about which basic posture the character has changed to",
         [
             "Answer 'yes' only if the character's posture has been specified to change in the last story fragment, otherwise answer 'no'",
+            "The character might have been referred as its id " + JSON.stringify(character.id) + " in the last story fragment",
+            "Before the story to analyze the character's posture was " + JSON.stringify(currentPosture),
+            "The list of potential postures are " + basicPostures.map(p => JSON.stringify(p)).join(", ") + ".",
         ],
-        characterDescription,
+        null,
     );
 
     const lastCycle = await getHistoryFragment(engine, character, {
-        msgLimit: "LAST_CYCLE",
+        msgLimit: "ALL_UNPROCESSED_MESSAGES_UNTIL_FIRST_PROCESSED_MESSAGE",
+        perspective: "character",
     });
 
     const agent = engine.inferenceAdapter.runQuestioningCustomAgentOn(
@@ -61,7 +50,6 @@ export default async function calculatePostureChange(engine, character, knownCha
             contextInfoBefore: null,
             messages: convertMessagesToSimpleList(lastCycle.messages),
             contextInfoAfter: null,
-            remarkLastStoryFragmentForAnalysis: true,
         },
     );
 
@@ -72,187 +60,108 @@ export default async function calculatePostureChange(engine, character, knownCha
     }
 
     let foundAPostureChange = false;
-    for (const posture of basicPostures) {
-        if (characterState.posture === posture) {
-            continue;
-        }
 
-        if (characterState.posture.startsWith(posture)) {
-            // @ts-ignore
-            const allExtendedPostures = getExtendedPosturesOf(posture);
-            for (const extendedPosture of allExtendedPostures) {
-                if (characterState.posture === extendedPosture) {
-                    continue;
-                }
+    const answer = await agent.next({
+        maxCharacters: 10,
+        maxParagraphs: 1,
+        maxSafetyCharacters: 10,
+        nextQuestion: "Has the character's posture changed from " + JSON.stringify(currentPosture) + " in the last story fragment? Answer 'yes' or 'no'",
+        stopAfter: yesNoGrammarObject.stopAfter,
+        grammar: yesNoGrammarObject.grammar,
+        stopAt: [],
+        instructions: "Make sure to answer 'yes' if it is highly likely that the character posture changed even if it is not explicitly stated in the story fragment, otherwise answer 'no'.",
+    });
 
-                // @ts-ignore
-                const postureHumanReadable = postureToText(extendedPosture);
+    if (answer.done) {
+        throw new Error("Agent finished unexpectedly while asking about posture change");
+    }
 
-                const question = "By the end of the last story fragment, has " + character.name + "'s posture changed to " + postureHumanReadable + "?";
+    if (answer.value.text.trim().toLowerCase() === "yes") {
+        foundAPostureChange = true;
+    }
 
-                const answer = await agent.next({
-                    maxCharacters: 100,
-                    maxParagraphs: 1,
-                    maxSafetyCharacters: 0,
-                    grammar: yesNoGrammarObject.grammar,
-                    nextQuestion: question,
-                    stopAfter: yesNoGrammarObject.stopAfter,
-                    stopAt: [],
-                    instructions: "Answer 'yes' only if the character's posture has been specified to change to " + JSON.stringify(postureHumanReadable) + " in the last story fragment, otherwise answer 'no'",
-                });
-
-                if (answer.done) {
-                    throw new Error("Agent finished unexpectedly while answering question about posture " + posture);
-                }
-
-                const answerText = answer.value.trim().toLowerCase();
-                if (answerText === "yes") {
-                    console.log("Posture change detected for posture " + extendedPosture);
-                    // @ts-ignore
-                    characterState.posture = extendedPosture;
-                    foundAPostureChange = true;
-                    break;
-                }
-            }
-
-            continue;
-        }
-
-        // @ts-ignore
-        const postureHumanReadable = postureToText(posture);
-
-        const question = "By the end of the last story fragment, has " + character.name + "'s posture changed to " + postureHumanReadable + "?";
-
+    if (foundAPostureChange) {
+        const basicPosturesGrammar = createGrammarFromList(basicPostures);
         const answer = await agent.next({
             maxCharacters: 100,
             maxParagraphs: 1,
-            maxSafetyCharacters: 0,
-            grammar: yesNoGrammarObject.grammar,
-            nextQuestion: question,
-            stopAfter: yesNoGrammarObject.stopAfter,
+            maxSafetyCharacters: 100,
+            nextQuestion: "What is the new posture of the character? Answer with the most likely posture from the list of potential postures.",
+            stopAfter: basicPosturesGrammar.stopAfter,
+            grammar: basicPosturesGrammar.grammar,
             stopAt: [],
-            instructions: "Answer 'yes' only if the character's posture has been specified to change to " + JSON.stringify(postureHumanReadable) + " in the last story fragment, otherwise answer 'no'",
+            instructions: "Make sure to answer with one of the following postures: " + basicPostures.map(p => JSON.stringify(p)).join(", "),
+            answerTrail: "The new posture of the character is: ",
         });
 
         if (answer.done) {
-            throw new Error("Agent finished unexpectedly while answering question about posture " + posture);
+            throw new Error("Agent finished unexpectedly while asking about new posture");
         }
 
-        const answerText = answer.value.trim().toLowerCase();
+        /** @type {DEPosture} */
+        let newPosture = /** @type {DEPosture} */ (answer.value.text.trim().toLowerCase());
+        if (!basicPostures.includes((newPosture))) {
+            throw new Error("Agent returned an invalid posture: " + JSON.stringify(newPosture));
+        }
 
-        if (answerText === "yes") {
-            console.log("Posture change detected for posture " + posture);
-            // @ts-ignore
-            characterState.posture = posture;
-            foundAPostureChange = true;
+        if (newPosture === currentPosture) {
+            // If the agent says the posture is the same, we can assume it didn't change
+            foundAPostureChange = false;
+        }
 
-            // @ts-ignore
-            const extendedPostures = getExtendedPosturesOf(posture);
-
-            for (const extendedPosture of extendedPostures) {
+        if (foundAPostureChange) {
+            // let's see if it has a specific
+            const extendedPostures = getExtendedPosturesOf(newPosture);
+            if (extendedPostures.length > 0) {
+                const extendedPosturesGrammar = createGrammarFromList(extendedPostures);
                 // @ts-ignore
-                const postureHumanReadable = postureToText(extendedPosture);
-
-                const question = "By the end of the last story fragment, has " + character.name + "'s posture changed to " + postureHumanReadable + "?";
+                extendedPostures.push(newPosture + "+unspecified");
+                // @ts-ignore
+                extendedPostures.push(newPosture + "+unknown");
+                // @ts-ignore
+                extendedPostures.push(newPosture + "+unclear");
+                // @ts-ignore
+                extendedPostures.push(newPosture + "+default");
 
                 const answer = await agent.next({
                     maxCharacters: 100,
                     maxParagraphs: 1,
-                    maxSafetyCharacters: 0,
-                    grammar: yesNoGrammarObject.grammar,
-                    nextQuestion: question,
-                    stopAfter: yesNoGrammarObject.stopAfter,
+                    maxSafetyCharacters: 100,
+                    nextQuestion: "Choose from a further specification of the posture " + JSON.stringify(newPosture) + " from the list of potential postures. Answer with the most likely posture from the list of potential postures " + extendedPostures.map(p => JSON.stringify(p)).join(", ") + ".",
+                    stopAfter: extendedPosturesGrammar.stopAfter,
+                    grammar: extendedPosturesGrammar.grammar,
                     stopAt: [],
-                    instructions: "Answer 'yes' only if the character's posture has been specified to change to " + JSON.stringify(postureHumanReadable) + " in the last story fragment, otherwise answer 'no'",
+                    instructions: "Make sure to answer with one of the following postures: " + extendedPostures.map(p => JSON.stringify(p)).join(", "),
+                    answerTrail: "The new specific posture of the character is: ",
                 });
 
                 if (answer.done) {
-                    throw new Error("Agent finished unexpectedly while answering question about posture " + posture);
+                    throw new Error("Agent finished unexpectedly while asking about specific new posture");
                 }
 
-                const answerText = answer.value.trim().toLowerCase();
-                if (answerText === "yes") {
-                    console.log("Posture change detected for posture " + extendedPosture);
-                    // @ts-ignore
-                    characterState.posture = extendedPosture;
-                    foundAPostureChange = true;
-                    break;
+                /** @type {DEPosture} */
+                const specificNewPosture = /** @type {DEPosture} */ (answer.value.text.trim().toLowerCase());
+
+                if (!extendedPostures.includes((specificNewPosture))) {
+                    throw new Error("Agent returned an invalid specific posture: " + JSON.stringify(specificNewPosture));
+                } else {
+                    // update the newPosture to the specific one only if non-unspecified
+                    if (!specificNewPosture.endsWith("+unspecified") && !specificNewPosture.endsWith("+unknown") && !specificNewPosture.endsWith("+unclear") && !specificNewPosture.endsWith("+default")) {
+                        newPosture = specificNewPosture;
+                    }
+
+                    if (newPosture === currentPosture) {
+                        // If the agent says the posture is the same, we can assume it didn't change
+                        foundAPostureChange = false;
+                    }
                 }
-            }
-        }
-    }
-
-    // end the agent
-    await agent.next(null);
-
-    if (!foundAPostureChange) {
-        console.log("No posture change detected by questioning agent for character " + character.name);
-        if (knownCharactersThatMoved[character.name]) {
-            console.log("However, " + character.name + " is known to have moved due to " + knownCharactersThatMoved[character.name].reason + ", so we will assume their posture has changed as well.");
-
-            const allPosturesAndExtended = Object.values(POSTURE_MAP);
-
-            const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
-                "You are an assistant that figures out the most likely posture of " + character.name + " in a story, you will be asked questions about the most likely posture and you will answer with one",
-                [
-                    "The list of potential postures are " + allPosturesAndExtended.map(p => JSON.stringify(p)).join(", ") + ".",
-                ],
-                characterDescription,
-            );
-
-            const agent = engine.inferenceAdapter.runQuestioningCustomAgentOn(
-                "posture-change",
-                {
-                    system: systemPrompt,
-                    contextInfoBefore: null,
-                    messages: convertMessagesToSimpleList(lastCycle.messages),
-                    contextInfoAfter: null,
-                    remarkLastStoryFragmentForAnalysis: true,
-                },
-            );
-
-            // prime the agent
-            const ready = await agent.next();
-            if (ready.done) {
-                throw new Error("Agent finished unexpectedly while priming for most likely posture");
-            }
-
-            const question = "Given that " + character.name + " is known to have moved in the last story fragment due to " + JSON.stringify(knownCharactersThatMoved[character.name].reason) + ", what is the most likely posture of " + character.name + " by the end of the last story fragment?";
-
-            const listGrammar = createGrammarFromList(engine, allPosturesAndExtended);
-
-            const answer = await agent.next({
-                maxCharacters: 100,
-                maxParagraphs: 1,
-                maxSafetyCharacters: 0,
-                grammar: listGrammar.grammar,
-                nextQuestion: question,
-                stopAfter: listGrammar.stopAfter,
-                stopAt: [],
-                answerTrail: "Most likely posture:\n\n",
-                instructions: "Answer with the most likely posture of " + character.name + " by the end of the last story fragment, given that they are known to have moved. The list of potential postures are " + allPosturesAndExtended.map(p => JSON.stringify(p)).join(", ") + ".",
-            });
-
-            if (answer.done) {
-                throw new Error("Agent finished unexpectedly while answering question about most likely posture");
-            }
-
-            const answerText = answer.value.trim();
-
-            const postureMatched = humanReadablePostureToPosture(answerText);
-            if (postureMatched) {
-                console.log("Most likely posture detected as " + postureMatched + " for character " + character.name);
-                // @ts-ignore
-                characterState.posture = postureMatched;
-            } else {
-                console.log("Failed to parse posture from agent answer, received answer was: " + answerText);
             }
         }
     }
 
     if (foundAPostureChange) {
         return [
-            getExternalDescriptionOfCharacterPostureOnly(engine.deObject, character.name, false),
+            getExternalDescriptionOfCharacterPostureOnly(engine.deObject, character.id, character.id, false),
         ]
     };
 

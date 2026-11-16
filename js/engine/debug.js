@@ -19,7 +19,7 @@ debug.ENABLED_TRIGGERS = false;
 debug.ENABLED_WANDER = false;
 debug.ENABLED_STATE_CHANGE = false;
 debug.ENABLED_RULES = false;
-debug.ENABLED_POSTURE_CHANGE = false;
+// debug.ENABLED_POSTURE_CHANGE = false;
 debug.ENABLED_ITEM_CHANGE = false;
 debug.ENABLED_FEASIBILITY_CHECK = false;
 
