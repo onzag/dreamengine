@@ -74,7 +74,6 @@
  * @property {number} [bondChangeFineTune] Multiplier for bond changes, default 1
  * @property {number} [bondChangeNegativityBias] Multiplier for negative bond changes, default 1.5
  * @property {number} [strangerBreakawayBondWeightAbsolute] Absolute bond weight threshold for strangers to break away, default 10
- * @property {number} [strangerBreakawayInteractionsCount] Number of interactions with a stranger after which they can break away, default 30
  * @property {number} [strangerBreakawayTimeMinutes] Time in minutes after which a stranger can break away, default 30
  * @property {number} [strangerNegativeMultiplier] Multiplier for bond changes with strangers when the change is negative, default 1.5
  * @property {number} [strangerPositiveMultiplier] Multiplier for bond changes with strangers when the change is positive, default 1.0
@@ -105,7 +104,6 @@
  * @property {number} [bondChangeFineTune] Multiplier for bond changes, default 1
  * @property {number} [bondChangeNegativityBias] Multiplier for negative bond changes, default 1.5
  * @property {number} [strangerBreakawayBondWeightAbsolute] Absolute bond weight threshold for strangers to break away, default 10
- * @property {number} [strangerBreakawayInteractionsCount] Number of interactions with a stranger after which they can break away, default 30
  * @property {number} [strangerBreakawayTimeMinutes] Time in minutes after which a stranger can break away, default 30
  * @property {number} [strangerNegativeMultiplier] Multiplier for bond changes with strangers when the change is negative, default 1.5
  * @property {number} [strangerPositiveMultiplier] Multiplier for bond changes with strangers when the change is positive, default 1.0
@@ -295,7 +293,6 @@ function setup(DE, character, options) {
         bondChangeNegativityBias: valueOrDefault(options.bondChangeNegativityBias, 1.5),
         declarations: [],
         strangerBreakawayBondWeightAbsolute: valueOrDefault(options.strangerBreakawayBondWeightAbsolute, 10),
-        strangerBreakawayInteractionsCount: valueOrDefault(options.strangerBreakawayInteractionsCount, 30),
         strangerBreakawayTimeMinutes: valueOrDefault(options.strangerBreakawayTimeMinutes, 30),
         strangerNegativeMultiplier: valueOrDefault(options.strangerNegativeMultiplier, 1.5),
         strangerPositiveMultiplier: valueOrDefault(options.strangerPositiveMultiplier, 1.0),
@@ -445,7 +442,6 @@ engine.exports = {
             bondChangeFineTune: 1,
             bondChangeNegativityBias: 1,
             strangerBreakawayBondWeightAbsolute: 10,
-            strangerBreakawayInteractionsCount: 30,
             strangerBreakawayTimeMinutes: 30,
             strangerNegativeMultiplier: 1,
             strangerPositiveMultiplier: 1,

@@ -462,12 +462,12 @@ engine.exports = {
         DE.utils.characters.newTrigger(Dema, {
             type: "yes_no",
             question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} been nice towards ${DE.utils.templates.formatCharacterName(info.char, info.char)} and respected its nature as a robot?`,
-            askPer: "present_character",
+            askPer: "conversing_character",
             onValue: (answer, char, other) => {
                 if (answer) {
                     DE.utils.bonds.shiftBond(char, other, 0.3, 0);
                 } else {
-                    DE.utils.bonds.shiftBond(char, other, -0.5, 0);
+                    // DE.utils.bonds.shiftBond(char, other, -0.5, 0);
                 }
             }
         });
@@ -475,7 +475,7 @@ engine.exports = {
         DE.utils.characters.newTrigger(Dema, {
             type: "yes_no",
             question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} helped ${DE.utils.templates.formatCharacterName(info.char, info.char)} with tasks or shown consideration for its feelings?`,
-            askPer: "present_character",
+            askPer: "conversing_character",
             onValue: (answer, char, other) => {
                 if (answer) {
                     DE.utils.bonds.shiftBond(char, other, 1, 0);
@@ -486,7 +486,7 @@ engine.exports = {
         DE.utils.characters.newTrigger(Dema, {
             type: "yes_no",
             question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} spent quality time with ${DE.utils.templates.formatCharacterName(info.char, info.char)} and engaged in meaningful interactions?`,
-            askPer: "present_character",
+            askPer: "conversing_character",
             onValue: (answer, char, other) => {
                 if (answer) {
                     DE.utils.bonds.shiftBond(char, other, 0.5, 0);
@@ -497,7 +497,7 @@ engine.exports = {
         DE.utils.characters.newTrigger(Dema, {
             type: "yes_no",
             question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} been rude or dismissive towards ${DE.utils.templates.formatCharacterName(info.char, info.char)} and its nature as a robot?`,
-            askPer: "present_character",
+            askPer: "conversing_character",
             onValue: (answer, char, other) => {
                 if (answer) {
                     DE.utils.bonds.shiftBond(char, other, -1, 0);
@@ -508,7 +508,7 @@ engine.exports = {
         DE.utils.characters.newTrigger(Dema, {
             type: "yes_no",
             question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} neglected ${DE.utils.templates.formatCharacterName(info.char, info.char)}'s needs or ignored its feelings?`,
-            askPer: "present_character",
+            askPer: "conversing_character",
             onValue: (answer, char, other) => {
                 if (answer) {
                     DE.utils.bonds.shiftBond(char, other, -1, 0);
@@ -519,7 +519,7 @@ engine.exports = {
         DE.utils.characters.newTrigger(Dema, {
             type: "yes_no",
             question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} caused harm or distress to ${DE.utils.templates.formatCharacterName(info.char, info.char)}, either intentionally or unintentionally?`,
-            askPer: "present_character",
+            askPer: "conversing_character",
             onValue: (answer, char, other) => {
                 if (answer) {
                     DE.utils.bonds.shiftBond(char, other, -1, 0);

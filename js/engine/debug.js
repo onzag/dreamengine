@@ -13,9 +13,9 @@ const debug = {
 
 // Comment out the following lines to disable specific debug features
 debug.ENABLED_TALK = false;
-debug.ENABLED_BOND_CHANGE = false;
+// debug.ENABLED_BOND_CHANGE = false;
 // debug.ENABLED_TIME_FORWARD = false;
-debug.ENABLED_TRIGGERS = false;
+// debug.ENABLED_TRIGGERS = false;
 debug.ENABLED_WANDER = false;
 // debug.ENABLED_STATE_CHANGE = false;
 debug.ENABLED_RULES = false;

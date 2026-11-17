@@ -177,6 +177,23 @@ export function calculateLocationVisitHistory(previousPerspective, locationId, c
 }
 
 /**
+ * Preserve lifetime history, deriving the known encounter for legacy snapshots.
+ * @param {DEPerspectiveCharacter | DEPerspectiveCharacterMemory | null} character
+ * @param {DETimeDescription} fallbackTime
+ */
+function characterLifetimeHistory(character, fallbackTime) {
+    const duration = character?.timeSpentTogetherTotal ?? (character && 'nameSimple' in character
+        ? character.hasSeenFor : character?.lastSeenDuration) ?? millisecondsToDuration(0);
+    const firstSeen = character?.firstSeen ?? (character && 'nameSimple' in character
+        ? character.hasSeenSince ?? fallbackTime
+        : character ? millisecondsToTime(character.lastSeen.time - (character.lastSeenDuration?.inSeconds ?? 0) * 1000) : fallbackTime);
+    return {
+        firstSeen: { ...firstSeen },
+        timeSpentTogetherTotal: { ...duration },
+    };
+}
+
+/**
  * Derive encounter history exclusively from the observer's saved snapshot. A
  * continuous sighting keeps its start time; a remembered encounter starts anew.
  * lastSeen describes the previous snapshot or the last remembered encounter.
@@ -184,7 +201,7 @@ export function calculateLocationVisitHistory(previousPerspective, locationId, c
  * @param {DEPerspective | null} previousPerspective
  * @param {string} characterId
  * @param {DETimeDescription} currentTime
- * @returns {Pick<DEPerspectiveCharacter, 'hasSeenFor' | 'hasSeenSince' | 'lastSeen' | 'lastSeenDuration' | 'lastSeenLocationId' | 'lastSeenLocationName' | 'lastSeenWithCharacters' | 'lastSeenOtherRememberedLocations'>}
+ * @returns {Pick<DEPerspectiveCharacter, 'hasSeenFor' | 'hasSeenSince' | 'timeSpentTogetherTotal' | 'firstSeen' | 'lastSeen' | 'lastSeenDuration' | 'lastSeenLocationId' | 'lastSeenLocationName' | 'lastSeenWithCharacters' | 'lastSeenOtherRememberedLocations'>}
  */
 export function calculateCharacterSightingHistory(previousPerspective, characterId, currentTime) {
     const known = findCharacterInPerspective(previousPerspective, characterId);
@@ -195,7 +212,11 @@ export function calculateCharacterSightingHistory(previousPerspective, character
     const previousTime = previousPerspective?.timeOfPerspective;
     const continuous = previous && previousTime && currentTime.time >= previousTime.time;
     const hasSeenSince = { ...(continuous ? previous.hasSeenSince ?? previousTime : currentTime) };
+    const lifetime = characterLifetimeHistory(previous ?? remembered ?? null, previousTime ?? currentTime);
     const history = {
+        ...lifetime,
+        timeSpentTogetherTotal: millisecondsToDuration(Math.max(0, lifetime.timeSpentTogetherTotal.inSeconds * 1000) +
+            (continuous ? currentTime.time - previousTime.time : 0)),
         hasSeenSince,
         hasSeenFor: millisecondsToDuration(Math.max(0, currentTime.time - hasSeenSince.time)),
         lastSeen: remembered ? { ...remembered.lastSeen } : null,
@@ -331,6 +352,7 @@ export function convertCharacterToMemory(character, perspective) {
         });
     }
     const memory = structuredClone({
+        ...characterLifetimeHistory(character, perspective.timeOfPerspective),
         memory: character.memory,
         characterId: character.characterId,
         characterNameComplex: character.nameComplex,
@@ -402,7 +424,10 @@ export function passPerspectiveThroughMemory(DE, perspective, previousPerspectiv
         const isPresentInCurrentPerspective = perspective.perspectiveCharacters.some(c => c.characterId === oldCharacterMemory.characterId);
         const isAlreadyInRemembered = perspective.rememberedCharacters.some(c => c.characterId === oldCharacterMemory.characterId);
         if (!isPresentInCurrentPerspective && !isAlreadyInRemembered) {
-            perspective.rememberedCharacters.push(oldCharacterMemory);
+            perspective.rememberedCharacters.push({
+                ...oldCharacterMemory,
+                ...characterLifetimeHistory(oldCharacterMemory, previousPerspective.timeOfPerspective),
+            });
         }
     }
 

@@ -393,6 +393,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      */
     async runInference(model, messages, standardOpenAIOptions, deServerOptions) {
         if (this.useExperimentalTestMode) return this.runInferenceInTestMode(deServerOptions);
+
         const finalMessages = messages.slice();
         if (deServerOptions.trail) finalMessages.push({ role: "assistant", content: deServerOptions.trail });
         /** @type {Record<string, any>} */
@@ -1380,7 +1381,11 @@ ${nextMessageMustBeInform}
                 gear,
             };
 
+            console.log("Asking question :", nextQuestion.nextQuestion);
+
             const answer = await this.runInference(model, chatMessages, standardOpenAIOptions, deServerOptions);
+
+            console.log("Answer received :", answer.text);
 
             // Commit only completed turns and include the assistant prefill that
             // runInference sent, since answer.text contains only generated text.

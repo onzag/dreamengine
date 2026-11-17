@@ -2440,6 +2440,13 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     return;
                 }
 
+                console.log(
+                    `Shifting bond from ${char1Ref.name} towards ${towardsRef.name} by primary=%c${effectivePrimary}%c, secondary=%c${effectiveSecondary}`,
+                    effectivePrimary >= 0 ? 'color: green; font-weight: bold' : 'color: red; font-weight: bold',
+                    'color: unset; font-weight: normal',
+                    effectiveSecondary >= 0 ? 'color: green; font-weight: bold' : 'color: red; font-weight: bold'
+                );
+
                 bond.bond += effectivePrimary;
                 bond.bond2 += effectiveSecondary;
 

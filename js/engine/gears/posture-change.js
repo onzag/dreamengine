@@ -30,7 +30,7 @@ export default async function calculatePostureChange(engine, character) {
         "You are an assistant that checks for changes in posture of a character named " + character.name + " in a story who is identified with the character id " + JSON.stringify(character.id) + ", you will be asked questions about which basic posture the character has changed to",
         [
             "Answer 'yes' only if the character's posture has been specified to change in the last story fragment, otherwise answer 'no'",
-            "The character might have been referred as its id " + JSON.stringify(character.id) + " in the last story fragment",
+            "The character might have been referred as its id " + JSON.stringify(character.id) + " in the last story fragment, as the id part of an <id:name> identifier, if the id is the same, the character is the same, make sure to check for that as well.",
             "Before the story to analyze the character's posture was " + JSON.stringify(currentPosture),
             "The list of potential postures are " + basicPostures.map(p => JSON.stringify(p)).join(", ") + ".",
         ],
@@ -64,7 +64,7 @@ export default async function calculatePostureChange(engine, character) {
         maxCharacters: 10,
         maxParagraphs: 1,
         maxSafetyCharacters: 10,
-        nextQuestion: "Has the character's posture changed from " + JSON.stringify(currentPosture) + " in the last story fragment? Answer 'yes' or 'no'",
+        nextQuestion: "Has " + engine.deObject.utils.templates.formatCharacterName(character) + " posture changed from " + JSON.stringify(currentPosture) + " in the last story fragment? Answer 'yes' or 'no'",
         stopAfter: yesNoGrammarObject.stopAfter,
         grammar: yesNoGrammarObject.grammar,
         stopAt: [],

@@ -1575,12 +1575,6 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          */
         strangerBreakawayBondWeightAbsolute: number;
         /**
-         * The amount of interactions required with a stranger to break away from a stranger bond to a regular bond
-         * once the character has interacted enough with a stranger and the interaction count surpasses this value
-         * the bond type changes from stranger bond to regular bond
-         */
-        strangerBreakawayInteractionsCount: number;
-        /**
          * The amount of time in minutes required with a stranger to break away from a stranger bond to a regular bond
          * once the character has spent enough time with a stranger and the time spent surpasses this value
          * the bond type changes from stranger bond to regular bond
@@ -1860,7 +1854,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
     triggers: Array<DECharacterYesNoQuestion | DECharacterNumericQuestion | DECharacterTextQuestion>;
 }
 
-declare type DEAskPerTypeCharacters = "present_character" | "conversing_character" | "potential_character_causants_of_state" | "character_causants_of_state" | "present_family_members";
+declare type DEAskPerTypeCharacters = "conversing_or_mentioned_character" | "conversing_character" | "potential_character_causants_of_state" | "character_causants_of_state" | "conversing_family_members";
 
 declare interface DECharacterQuestionBase {
     /**
@@ -1873,15 +1867,11 @@ declare interface DECharacterQuestionBase {
     runIf?: (character: DECompleteCharacterReference) => PromiseOrNot<boolean>;
 }
 
-declare type DECharacterQuestionWithAskPerForCharacters = DECharacterQuestionBase & {
+declare type DECharacterQuestionWithAskPerForCharacters = {
     /**
      * The question to run, has access to {{other}} and {{other_family_relation}}
      */
     question: DEStringTemplateCharAndOther;
-    /**
-     * Now the question has access to {{other}} and {{other_family_relation}}
-     */
-    askPer: DEAskPerTypeCharacters;
     /**
      * Run the question only if this condition is met
      * @param character 
@@ -1890,7 +1880,10 @@ declare type DECharacterQuestionWithAskPerForCharacters = DECharacterQuestionBas
      * @returns 
      */
     runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference, otherFamilyRelation: DEFamilyRelation | null) => PromiseOrNot<boolean>;
-};
+} & (
+    | { askPer: Exclude<DEAskPerTypeCharacters, "potential_character_causants_of_state" | "character_causants_of_state"> }
+    | { askPer: "potential_character_causants_of_state" | "character_causants_of_state"; askPerState: string }
+);
 
 declare type DECharacterQuestionWithAskPerForCharactersWithLikelyhoodAndCorrection = DECharacterQuestionWithAskPerForCharacters & {
     /**
@@ -1903,28 +1896,12 @@ declare type DECharacterQuestionWithAskPerForCharactersWithLikelyhoodAndCorrecti
     correction: DEStringTemplateCharAndOther;
 };
 
-declare type DECharacterQuestionWithAskPerForCausants = DECharacterQuestionBase & {
-    /**
-     * The question to run, has access to {{other}
-     * Note that {{other_family_relation}} does not make sense in this context as the other is an object, so it should not be used in the question template
-     */
-    question: DEStringTemplateCharAndItem;
-    /**
-     * Now the question has {{item}}
-     */
-    askPer: "character_causants_of_state";
-    askPerState: string;
-    /**
-     * Run the question only if this condition is met
-     * @param character 
-     * @param otherChar 
-     * @param otherFamilyRelation 
-     * @returns 
-     */
-    runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference, otherFamilyRelation: DEFamilyRelation | null) => PromiseOrNot<boolean>;
-};
+declare type DECharacterQuestionWithAskPerForCausants = Extract<
+    DECharacterQuestionWithAskPerForCharacters,
+    { askPer: "potential_character_causants_of_state" | "character_causants_of_state" }
+>;
 
-declare type DECharacterQuestionWithAskPerForObjects = DECharacterQuestionBase & {
+declare type DECharacterQuestionWithAskPerForObjects = {
     /**
      * The question to run, has access to {{other}
      * Note that {{other_family_relation}} does not make sense in this context as the other is an object, so it should not be used in the question template
@@ -1942,7 +1919,7 @@ declare type DECharacterQuestionWithAskPerForObjects = DECharacterQuestionBase &
      * @param otherFamilyRelation 
      * @returns 
      */
-    runIf?: (character: DECompleteCharacterReference, item: string) => PromiseOrNot<boolean>;
+    runIf?: (character: DECompleteCharacterReference, item: DEStateCauseCausantObject) => PromiseOrNot<boolean>;
 };
 
 declare type DECharacterQuestionWithoutAskPer = DECharacterQuestionBase & {
@@ -1952,6 +1929,21 @@ declare type DECharacterQuestionWithoutAskPer = DECharacterQuestionBase & {
     question: DEStringTemplateCharOnly;
     askPer?: undefined;
 };
+
+/**
+ * Remove inherited routing from each question variant without collapsing its answer type.
+ * Chained questions use the parent's character/item context, including for nested chains.
+ */
+declare type DEChainedQuestion<TQuestion> = TQuestion extends unknown
+    ? Omit<TQuestion, "askPer" | "askPerState"> & { askPer?: never; askPerState?: never }
+    : never;
+
+declare type DEQuestionChain<TAskPer extends DEAskPerTypeCharacters | "object_causants_of_state" | undefined = undefined> = (
+    trigger: DEChainedQuestion<Extract<
+        DECharacterYesNoQuestion | DECharacterNumericQuestion | DECharacterTextQuestion,
+        [TAskPer] extends [undefined] ? { askPer?: undefined } : { askPer: TAskPer }
+    >>,
+) => Promise<void>;
 
 declare type DECharacterYesNoQuestion =
     | (DECharacterQuestionWithAskPerForCharacters & {
@@ -1968,6 +1960,7 @@ declare type DECharacterYesNoQuestion =
             otherChar: DECompleteCharacterReference | null,
             otherFamilyRelation: DEFamilyRelation | null,
             otherRelationship: string | null,
+            chain: DEQuestionChain<DEAskPerTypeCharacters>,
         ) => Promise<void> | void;
     }) | (DECharacterQuestionWithAskPerForObjects & {
         question: DEStringTemplateCharAndItem;
@@ -1980,6 +1973,7 @@ declare type DECharacterYesNoQuestion =
             answer: boolean,
             character: DECompleteCharacterReference,
             item: string,
+            chain: DEQuestionChain<"object_causants_of_state">,
         ) => Promise<void> | void;
     }) | (
         DECharacterQuestionWithAskPerForCausants & {
@@ -1995,6 +1989,7 @@ declare type DECharacterYesNoQuestion =
                 otherChar: DECompleteCharacterReference | null,
                 otherFamilyRelation: DEFamilyRelation | null,
                 otherRelationship: string | null,
+                chain: DEQuestionChain<DEAskPerTypeCharacters>,
             ) => Promise<void> | void;
         }
     )
@@ -2003,6 +1998,7 @@ declare type DECharacterYesNoQuestion =
 declare type DEYesNoQuestionCallback = (
     answer: boolean,
     character: DECompleteCharacterReference,
+    chain: DEQuestionChain
 ) => Promise<void> | void;
 
 declare type DECharacterNumericQuestion =
@@ -2014,6 +2010,7 @@ declare type DECharacterNumericQuestion =
             otherChar: DECompleteCharacterReference | null,
             otherFamilyRelation: DEFamilyRelation | null,
             otherRelationship: string | null,
+            chain: DEQuestionChain<DEAskPerTypeCharacters>,
         ) => Promise<void> | void;
     }) | (DECharacterQuestionWithAskPerForObjects & {
         question: DEStringTemplateCharAndItem;
@@ -2021,16 +2018,18 @@ declare type DECharacterNumericQuestion =
             answer: number,
             character: DECompleteCharacterReference,
             item: string,
+            chain: DEQuestionChain<"object_causants_of_state">,
         ) => Promise<void> | void;
     }) | (
         DECharacterQuestionWithAskPerForCausants & {
             question: DEStringTemplateCharAndOther;
-            type: "yes_no"; onValue: (
+            type: "numeric"; onNumber: (
                 answer: number,
                 character: DECompleteCharacterReference,
                 otherChar: DECompleteCharacterReference | null,
                 otherFamilyRelation: DEFamilyRelation | null,
                 otherRelationship: string | null,
+                chain: DEQuestionChain<DEAskPerTypeCharacters>,
             ) => Promise<void> | void;
         }
     )
@@ -2039,6 +2038,7 @@ declare type DECharacterNumericQuestion =
 declare type DENumericQuestionCallback = (
     answer: number,
     character: DECompleteCharacterReference,
+    chain: DEQuestionChain,
 ) => Promise<void> | void;
 
 declare type DECharacterTextQuestion =
@@ -2050,6 +2050,7 @@ declare type DECharacterTextQuestion =
             otherChar: DECompleteCharacterReference | null,
             otherFamilyRelation: DEFamilyRelation | null,
             otherRelationship: string | null,
+            chain: DEQuestionChain<DEAskPerTypeCharacters>,
         ) => Promise<void> | void;
     }) | (DECharacterQuestionWithAskPerForObjects & {
         question: DEStringTemplateCharAndItem;
@@ -2057,16 +2058,18 @@ declare type DECharacterTextQuestion =
             answer: string,
             character: DECompleteCharacterReference,
             item: string,
+            chain: DEQuestionChain<"object_causants_of_state">,
         ) => Promise<void> | void;
     }) | (
         DECharacterQuestionWithAskPerForCausants & {
             question: DEStringTemplateCharAndOther;
-            type: "yes_no"; onValue: (
+            type: "text"; grammar?: string; onText: (
                 answer: string,
                 character: DECompleteCharacterReference,
                 otherChar: DECompleteCharacterReference | null,
                 otherFamilyRelation: DEFamilyRelation | null,
                 otherRelationship: string | null,
+                chain: DEQuestionChain<DEAskPerTypeCharacters>,
             ) => Promise<void> | void;
         }
     )
@@ -2075,6 +2078,7 @@ declare type DECharacterTextQuestion =
 declare type DETextQuestionCallback = (
     answer: string,
     character: DECompleteCharacterReference,
+    chain: DEQuestionChain,
 ) => Promise<void> | void;
 
 declare type DEFamilyRelation = "parent" | "sibling" | "child" | "spouse" | "cousin" | "uncle" | "aunt" | "grandparent" | "grandchild" | "niece" | "nephew" | "other" | "step parent" | "step child" | "step sibling" | "half sibling" | "step grandparent" | "step grandchild";
@@ -2187,8 +2191,17 @@ declare interface DENamePool {
 }
 
 declare interface DEUndoableShift {
+    /**
+     * id of the undoable shift
+     */
     id: string;
+    /**
+     * The amount of the primary bond change that was shifted
+     */
     amountBond: number;
+    /**
+     * The amount of the secondary bond change that was shifted
+     */
     amountBond2: number;
     /**
      * The question that should receive a yes answer for the shift to be undone
@@ -2197,6 +2210,11 @@ declare interface DEUndoableShift {
      * You may specify null to just leave the registry of this id and handle it yourself
      */
     undoQuestion: string | null;
+    /**
+     * Whether the undo question requires the precenese of the other character, for example:
+     * has {{char}} learned that the betrayal was a lie? // might not require the other character to be present, but if it does, the question will not be asked if the other character is not present
+     */
+    undoQuestionRequiresPrescenceOfOtherCharacter?: boolean;
     /**
      * The percentage of the bond change that is recovered when the shift is undone, for example, if the bond change was -10 and the recovery rate is 0.5, when the shift is undone, the bond will recover 5 points, so the new bond change will be -5 instead of -10
      */
@@ -2304,6 +2322,7 @@ declare interface DEStateCauseCausantCharacter {
 }
 
 declare interface DEStateCauseCausantObject {
+    id: string;
     name: string;
     type: "object";
 }
@@ -4161,6 +4180,10 @@ declare interface DEPerspectiveCharacter {
 
     hasSeenFor: DETimeDurationDescription;
     hasSeenSince: DETimeDescription;
+    /** Total time in view across all known encounters, excluding time apart. */
+    timeSpentTogetherTotal: DETimeDurationDescription;
+    /** Earliest known sighting, preserved across subsequent encounters. */
+    firstSeen: DETimeDescription;
 
     // taken from DEPerspectiveCharacterMemory, but optional because the character might not have seen this character yet before
     lastSeen: DETimeDescription | null;
@@ -4182,6 +4205,10 @@ declare interface DEPerspectiveCharacter {
 }
 
 declare interface DEPerspectiveCharacterMemory {
+    /** Total time in view across all known encounters, excluding time apart. */
+    timeSpentTogetherTotal: DETimeDurationDescription;
+    /** Earliest known sighting, preserved across subsequent encounters. */
+    firstSeen: DETimeDescription;
     /** Memory retention of this sighting, using the same levels as items. */
     memory: DEPerspectiveMemory;
     /**

@@ -130,6 +130,7 @@ export function renderNarrationFragmentsToText(fragments) {
  * @property {string | null} characterId the id of the character that actually generated the message, if this message belongs to an actual character, otherwise null
  * @property {Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>} content the message content, can be a narrative or a dialogue
  * @property {string | null} conversationId the id of the conversation this message belongs to, if any, otherwise null
+ * @property {string[]} conversationParticipants the ids of the characters that participated in this conversation, if any, otherwise an empty array
  * @property {string | null} id the id of the message, if this is a conversation message, otherwise null
  * @property {boolean} debug whether this is a debug message
  * @property {boolean} rejected whether this message was rejected by the story master or not
@@ -262,6 +263,7 @@ export async function* getHistory(engine, character, options) {
                 characterId: null,
                 id: null,
                 conversationId: currentConversationId,
+                conversationParticipants: currentConversationObject.participants,
                 debug: false,
                 rejected: false,
                 storyMaster: true,
@@ -305,6 +307,7 @@ export async function* getHistory(engine, character, options) {
                     id: message.id,
                     characterId: message.characterId,
                     conversationId: currentConversationId,
+                    conversationParticipants: currentConversationObject.participants,
                     debug: message.isDebugMessage,
                     rejected: message.isRejectedMessage,
                     storyMaster: message.isStoryMasterMessage,
@@ -373,6 +376,7 @@ export async function* getHistory(engine, character, options) {
                     id: null,
                     characterId: null,
                     conversationId: currentConversationId,
+                    conversationParticipants: currentConversationObject.participants,
                     debug: false,
                     rejected: false,
                     storyMaster: true,
@@ -586,12 +590,21 @@ export async function getHistoryFragment(engine, character, options) {
                     conversationId: generator.value.conversationId,
                     onlySeenByCharacterIdNames: generator.value.onlySeenByCharacterIdNames,
                 });
+                
                 if (generator.value.characterId) {
                     if (!conversingCharacters.includes(generator.value.characterId) && !generator.value.storyMaster) {
                         conversingCharacters.push(generator.value.characterId);
                         if (!mentionedCharacters.includes(generator.value.characterId)) {
                             mentionedCharacters.push(generator.value.characterId);
                         }
+                    }
+                }
+                for (const charId of generator.value.conversationParticipants) {
+                    if (!mentionedCharacters.includes(charId)) {
+                        mentionedCharacters.push(charId);
+                    }
+                    if (!conversingCharacters.includes(charId)) {
+                        conversingCharacters.push(charId);
                     }
                 }
                 for (const charId of generator.value.interactingCharacters) {

@@ -3,7 +3,7 @@ import { consumeAccumulatedSideEffectsReadyFunctions, deEngineUtilsFn } from "./
 import { commands } from "./commands.js";
 import { BaseInferenceAdapter } from "./inference/base.js";
 import calculateStateChange from "./gears/state-change.js";
-import calculateBondsChangesDueToMessages from "./gears/bond-change.js";
+import calculateBondsChange from "./gears/bond-change.js";
 import testWorldRulesOn from "./gears/rules-enforce.js";
 import testMessageFeasibilityForCharacter from "./gears/feasibility-check.js";
 import { getCharacterVolume, getCharacterWeight, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage } from "./util/weight-and-volume.js";
@@ -15,6 +15,7 @@ import { talk } from "./gears/talk.js";
 import { millisecondsToTime } from "./util/time.js";
 import { regenerateDEFromSavedDE, removeUnnecessaryPropertiesFromDE } from "./util/save-de.js";
 import runAllTriggersFor from "./gears/triggers-run.js";
+import deleteTemp from "./gears/delete-temp.js";
 import { giveCharacterRandomClothing } from "./util/clothing.js";
 import { BaseDataManager } from "./data-management/base.js";
 import timeForwardsUsingUntimedMessages from "./gears/time-forwards.js";
@@ -224,7 +225,6 @@ export function createCharacterFromUser(user) {
             bondChangeFineTune: 1.0,
             bondChangeNegativityBias: 1.0,
             strangerBreakawayBondWeightAbsolute: 10,
-            strangerBreakawayInteractionsCount: 10,
             strangerBreakawayTimeMinutes: 30,
             strangerNegativeMultiplier: 1.0,
             strangerPositiveMultiplier: 1.0,
@@ -816,7 +816,6 @@ export class DEngine {
                         seenCharacters: [],
                         seenItems: [],
                         states: [],
-                        time: this.deObject.initialTime,
                         wearing: [],
                         heardIdentifiers: [],
                     }
@@ -1019,7 +1018,6 @@ export class DEngine {
             location: location,
             locationSlot: locationSlot,
             states: [],
-            time: this.deObject.initialTime,
             conversationId: null,
             posture: "standing",
 
@@ -1051,7 +1049,7 @@ export class DEngine {
         } else if (!this.dataManager) {
             throw new Error("Data manager not set");
         }
-
+        
         if (options.moveTimeForwards) {
             await timeForwardsUsingUntimedMessages(this);
         }
@@ -1061,11 +1059,16 @@ export class DEngine {
             perspective: "story-master",
         });
 
-        for (const characterId of lastMessages.mentionedCharacters) {
+        // this will include everyone involved in the conversation
+        for (const characterId of lastMessages.conversingCharacters) {
             const character = this.deObject.characters[characterId];
+            await runAllTriggersFor(this, character);
             await calculatePostureChange(this, character);
             await calculateStateChange(this, character);
+            await calculateBondsChange(this, character);
         }
+
+        await deleteTemp(this);
 
         await consumeAccumulatedSideEffectsReadyFunctions();
         await this.informDEObjectUpdated();
@@ -1320,7 +1323,8 @@ export class DEngine {
                     await calculateStateChange(this, participant, lastItemChangesInfo.interactedCharacters);
 
                     this.informCycleState("info", "Pre-calculating initial bonds for " + participant.name + " with id " + participant.id + "...");
-                    await calculateBondsChangesDueToMessages(this, participant, lastItemChangesInfo.interactedCharacters);
+                    await calculateBondsChange(this, participant, lastItemChangesInfo.interactedCharacters);
+                    await deleteTemp(this);
 
                     /**
                      * @type {string[]}
@@ -1400,7 +1404,8 @@ export class DEngine {
             await calculateStateChange(this, this.deObject.characters[this.deObject.user], lastItemChangesInfo.interactedCharacters);
 
             this.informCycleState("info", "Pre-calculating initial bonds for your character...");
-            await calculateBondsChangesDueToMessages(this, this.deObject.characters[this.deObject.user], lastItemChangesInfo.interactedCharacters);
+            await calculateBondsChange(this, this.deObject.characters[this.deObject.user], lastItemChangesInfo.interactedCharacters);
+            await deleteTemp(this);
 
             await this.informDEObjectUpdated();
 
@@ -1521,7 +1526,8 @@ export class DEngine {
 
         this.informCycleState("info", `Next character to talk: ${character.name}`);
         await calculateStateChange(this, character);
-        await calculateBondsChangesDueToMessages(this, character, lastItemChangesInfo.interactedCharacters);
+        await calculateBondsChange(this, character, lastItemChangesInfo.interactedCharacters);
+        await deleteTemp(this);
         await talk(character);
 
         const feasibilityResults = await testMessageFeasibilityForCharacter(this, character, previouslyLeftOrderOfInteraction);
