@@ -13,7 +13,6 @@ import { DEngine } from "../index.js";
 /**
  * @typedef {Object} DEServerPayload
  * @property {Array<{role: "system" | "user" | "assistant", content: string}>} messages
- * @property {string} trail
  * @property {number} maxParagraphs
  * @property {number} maxCharacters
  * @property {boolean} maxCharactersCutOnDot - Whether to cut on dot when max characters is reached, not just newline, default false
@@ -30,7 +29,6 @@ import { DEngine } from "../index.js";
 
 /**
  * @typedef {AsyncGenerator<InferenceResponse, void, {
-     * answerTrail?: string,
      * grammar?: string,
      * contextInfo?: string,
      * instructions?: string,
@@ -42,6 +40,7 @@ import { DEngine } from "../index.js";
      * maxCharactersCutOnDot?: boolean,
      * maxSafetyCharacters: number,
      * newSession?: boolean,
+     * thinkingEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max",
      * } | null>} QuestionAgentGeneratorResponse
      */
 

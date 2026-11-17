@@ -196,6 +196,9 @@ function replaceMultipleNewLines(text) {
  * @typedef {{
  *   id: string;
  *   tags: Array<string>;
+ *   thinkingTags: Array<string> | null;
+ *   reasoningField: string | null;
+ *   nativeReasoning: boolean | null;
  *   maxModelLen?: number;
  * }} OpenAIModelEntry
  */
@@ -204,6 +207,51 @@ function replaceMultipleNewLines(text) {
  * @typedef {Object<string, OpenAIModelEntry>} GearModelMap
  * Map of gear name to the sub-model designated for that gear.
  */
+
+/** @param {string} grammar @param {string[]} tags @param {boolean} useUnderscores */
+function wrapThinkingGrammar(grammar, [open, close], useUnderscores) {
+    if (!open || !close) throw new Error("Thinking grammar requires nonempty opening and closing tags.");
+    // llama.cpp only accepts letters, digits and hyphens in rule names.
+    let prefix = useUnderscores ? "_DE_THINKING" : "de-thinking";
+    if (!useUnderscores) {
+        while (grammar.includes(prefix)) prefix += "-x";
+    }
+    const answer = prefix + (useUnderscores ? "_ANSWER" : "-answer");
+    // Rename references as well as the definition, leaving literals, classes and comments intact.
+    const renamed = grammar.replace(/"(?:\\.|[^"\\])*"|\[(?:\\.|[^\]\\])*\]|#[^\n]*|[\w-]+/g,
+        token => token === "root" ? answer : token);
+
+    // State i has matched i characters of the closing tag. Only its first full
+    // match can end the block, even when delimiter prefixes overlap.
+    const chars = Array.from(close);
+    const alphabet = [...new Set(chars)];
+    const excluded = alphabet.map(c => {
+        const point = c.codePointAt(0);
+        if (point === undefined) throw new Error("Expected a closing tag character.");
+        return "\\U" + point.toString(16).padStart(8, "0");
+    }).join("");
+    /** @param {number} i */
+    const state = i => useUnderscores
+        ? (i === 0 ? "_DE_THINKING_TAG" : `_DE_THINKING_TAG_${i}`)
+        : prefix + "-tag" + "-part".repeat(i);
+    const rules = [`root ::= ${JSON.stringify(open)} ${state(0)} ${answer}`, renamed];
+    const prefixes = chars.map((_, i) => chars.slice(0, i).join(""));
+    for (let i = 0; i < chars.length; i++) {
+        const choices = [`[^${excluded}] ${state(0)}`];
+        for (const c of alphabet) {
+            const suffix = prefixes[i] + c;
+            let term = JSON.stringify(c);
+            if (suffix !== close) {
+                let next = Math.min(i + 1, chars.length - 1);
+                while (!suffix.endsWith(prefixes[next])) next--;
+                term += " " + state(next);
+            }
+            choices.push(term);
+        }
+        rules.push(`${state(i)} ::= ${choices.join(" | ")}`);
+    }
+    return rules.join("\n");
+}
 
 export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
     /**
@@ -227,11 +275,16 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      *   analysisModel?: string;
      *   embeddingModel?: string;
      *   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
+     *   advanced: Record<string, {
+     *    thinkingTags?: string[] | null;
+     *    reasoningField?: string | null;
+     *    nativeReasoning?: boolean | null;
+     *   }>
      * }} options
      */
     constructor(parent, options) {
         super(parent);
-        /** @type {{ host?: string; embeddingHost?: string; apiKey?: string; embeddingApiKey?: string; temperature?: number; topP?: number; topK?: number; repetitionPenalty?: number; analysisTemperature?: number; analysisTopP?: number; analysisTopK?: number; analysisRepetitionPenalty?: number; analysisReasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max"; model?: string; analysisModel?: string; embeddingModel?: string; useExperimentalTestMode?: boolean; reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max"; }} */
+        /** @type {typeof options} */
         this.options = options;
 
         /**
@@ -366,10 +419,39 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
     }
 
     /**
+     * 
+     * @param {Array<{role: "system" | "user" | "assistant", content: string, thoughts: string[], _raw?: string}>} messages
+     * @param {OpenAIModelEntry} modelEntry
+     * @returns {*}
+     */
+    processMessagesByModel(messages, modelEntry) {
+        return messages.map(msg => {
+            /**
+             * @type {*}
+             */
+            const copy = { ...msg };
+            if (msg.thoughts?.length) {
+                if (modelEntry.nativeReasoning) {
+                    copy[modelEntry.reasoningField || "reasoning_content"] = msg.thoughts.join("\n");
+                } else {
+                    if (copy._raw) {
+                        copy.content = copy._raw;
+                    } else {
+                        const thinkingTags = modelEntry.thinkingTags || ["<think>", "</think>"];
+                        copy.content = msg.thoughts.map(t => `${thinkingTags[0]}${t}${thinkingTags[1]}`).join("\n") + msg.content;
+                    }
+                }
+            }
+            delete copy._raw;
+            return copy;
+        });
+    }
+
+    /**
      * Fetches a complete reply.
      * 
      * @param {string} model
-     * @param {Array<{role: "system" | "user" | "assistant", content: string}>} messages
+     * @param {Array<{role: "system" | "user" | "assistant", content: string, thoughts: string[], _raw?: string;}>} messages
      * @param {{
      *   temperature?: number,
      *   topP?: number,
@@ -385,29 +467,55 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      *   maxCharactersCutOnDot?: boolean,
      *   stopAt?: string[],
      *   stopAfter?: string[],
-     *   trail?: string,
      *   grammar?: string,
      *   gear?: string,
+     *   thinkingEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max",
      * }} deServerOptions
-     * @returns {Promise<import('./base.js').InferenceResponse>}
+     * @returns {Promise<{role: "system" | "user" | "assistant", content: string, thoughts: string[], _raw?: string;}>}
      */
     async runInference(model, messages, standardOpenAIOptions, deServerOptions) {
+        if (deServerOptions.grammar && !deServerOptions.grammar.startsWith("root ::=")) {
+            throw new Error("Grammar must start with 'root ::= ...', it is a limitation of the non-native modes so it is always enforced");
+        }
+        if (deServerOptions.grammar && /^[^\S\r\n]*_/m.test(deServerOptions.grammar)) {
+            throw new Error("Grammar lines cannot start with '_' after indentation. This prefix is reserved for generated rules.");
+        }
         if (this.useExperimentalTestMode) return this.runInferenceInTestMode(deServerOptions);
 
+        const modelEntry = this.availableModels.find(m => m.id === model);
+
+        if (!modelEntry) {
+            throw new Error(`Model "${model}" not found`);
+        }
+
         const finalMessages = messages.slice();
-        if (deServerOptions.trail) finalMessages.push({ role: "assistant", content: deServerOptions.trail });
         /** @type {Record<string, any>} */
-        const payload = { model, messages: finalMessages, stream: true };
+        const payload = { model, messages: this.processMessagesByModel(finalMessages, modelEntry), stream: true };
         if (standardOpenAIOptions.temperature != null) payload.temperature = standardOpenAIOptions.temperature;
         if (standardOpenAIOptions.topP != null) payload.top_p = standardOpenAIOptions.topP;
         if (standardOpenAIOptions.topK != null) payload.top_k = standardOpenAIOptions.topK;
         if (standardOpenAIOptions.repetitionPenalty != null) payload.repetition_penalty = standardOpenAIOptions.repetitionPenalty;
         if (standardOpenAIOptions.maxTokens != null) payload.max_tokens = standardOpenAIOptions.maxTokens;
-        if (deServerOptions.stopAt?.length) payload.stop = deServerOptions.stopAt;
-        this.addExtraOptions(payload, deServerOptions);
-        this.setReasoningEffort(payload, standardOpenAIOptions.reasoningEffort || "medium");
+
+        let reasoningEffortToUse = standardOpenAIOptions.reasoningEffort || "medium";
+
+        if (deServerOptions.thinkingEffort) {
+            reasoningEffortToUse = deServerOptions.thinkingEffort;
+        }
+
+        this.setReasoningEffort(payload, reasoningEffortToUse);
+
+        const { grammar } = deServerOptions;
+        if (grammar && reasoningEffortToUse !== "none" && modelEntry.nativeReasoning === false) {
+            const inlineTags = modelEntry.thinkingTags ?? ["<think>", "</think>"];
+            this.addExtraOptions(payload, { ...deServerOptions, grammar: wrapThinkingGrammar(grammar, inlineTags, this.serverType === "vllm") });
+        } else {
+            // Match stops locally: even native models may emit inline thoughts.
+            this.addExtraOptions(payload, deServerOptions);
+        }
+
         // Inspect incoming text so generation stops before the server finishes.
-        const reply = await this._chatCompletion(payload, (text) => {
+        const reply = await this._chatCompletion(payload, modelEntry, (text) => {
             let cutoff = Infinity;
             for (const stop of deServerOptions.stopAt || []) {
                 const index = stop ? text.indexOf(stop) : -1;
@@ -448,7 +556,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      * Experimental test mode. Produces random dummy text locally
      * (no server involved), optionally constrained by a GBNF grammar using the
      * optional `gbnf` dependency. It honours the same stop semantics as the
-     * completion path (maxParagraphs / maxCharacters / maxCharactersCutOnDot / maxSafetyCharacters / stopAt / stopAfter).
+        * completion path (maxParagraphs / maxCharacters / maxCharactersCutOnDot / maxSafetyCharacters / stopAt / stopAfter).
      *
      * Ported from the de-server adapter's test mode so any OpenAI-compatible
      * subclass gets the same developer test behaviour for free.
@@ -463,7 +571,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      *   grammar?: string | null,
      *   gear?: string,
      * }} deServerOptions
-     * @returns {Promise<import('./base.js').InferenceResponse>}
+     * @returns {Promise<{role: "system" | "user" | "assistant", content: string, thoughts: string[], _raw?: string;}>}
      */
     async runInferenceInTestMode(deServerOptions) {
         const GBNF = await gbnfModulePromise;
@@ -650,16 +758,17 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
             currentTextCharLen += nextChar.length;
         }
 
-        return { text: contentsGenerated, thoughts: [], warnings: [] };
+        return { content: contentsGenerated, thoughts: ["I am thinking, believe me!"], role: "assistant", _raw: contentsGenerated };
     }
 
     /**
      * Buffers server deltas into one reply, cancelling as soon as a limit is met.
      * @param {Record<string, any>} payload
+     * @param {OpenAIModelEntry} modelEntry
      * @param {(text: string) => number | null} [stopAt]
-     * @returns {Promise<import('./base.js').InferenceResponse>}
+     * @returns {Promise<{role: "system" | "user" | "assistant", content: string, thoughts: string[], _raw?: string;}>}
      */
-    async _chatCompletion(payload, stopAt = () => null) {
+    async _chatCompletion(payload, modelEntry, stopAt = () => null) {
         const baseUrl = (this.options.host || 'http://127.0.0.1:8765').replace(/\/$/, '');
         const headers = /** @type {Record<string, string>} */ ({ 'Content-Type': 'application/json' });
         if (this.options.apiKey) headers.Authorization = 'Bearer ' + this.options.apiKey;
@@ -679,8 +788,22 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
         let buffer = '';
         let text = '';
         let thought = '';
+        const open = modelEntry.thinkingTags?.[0] || '<think>';
+        const close = modelEntry.thinkingTags?.[1] || '</think>';
+        let raw = '';
+        let pending = '';
+        let inlineThought = '';
+        let insideThought = false;
         /** @type {string[]} */
         const thoughts = [];
+        /** @param {string} part */
+        const appendVisible = part => {
+            text += part;
+            const cutoff = stopAt(text);
+            if (cutoff === null) return false;
+            text = text.slice(0, cutoff);
+            return true;
+        };
         /** @param {string} data */
         const consume = (data) => {
             if (data === '[DONE]') return true;
@@ -699,11 +822,31 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
                     thoughts.push(thought);
                     thought = '';
                 }
-                text += delta.content;
-                const cutoff = stopAt(text);
-                if (cutoff !== null) {
-                    text = text.slice(0, cutoff);
-                    return true;
+                raw += delta.content;
+                pending += delta.content;
+                while (pending) {
+                    const tag = insideThought ? close : open;
+                    const match = pending.indexOf(tag);
+                    let end = match;
+                    if (match < 0) {
+                        // Hold only a possible delimiter prefix for the next delta.
+                        let held = Math.min(tag.length - 1, pending.length);
+                        while (held && !pending.endsWith(tag.slice(0, held))) held--;
+                        end = pending.length - held;
+                    }
+                    const part = pending.slice(0, end);
+                    pending = pending.slice(match < 0 ? end : end + tag.length);
+                    if (insideThought) inlineThought += part;
+                    else if (part && appendVisible(part)) {
+                        pending = '';
+                        return true;
+                    }
+                    if (match < 0) break;
+                    if (insideThought) {
+                        thoughts.push(inlineThought);
+                        inlineThought = '';
+                    }
+                    insideThought = !insideThought;
                 }
             }
             return choice?.finish_reason != null;
@@ -740,7 +883,9 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
             reader.releaseLock();
         }
         if (thought) thoughts.push(thought);
-        return { text, thoughts, warnings: [] };
+        if (insideThought) throw new Error("Generation ended before the thinking block was complete.");
+        if (pending) appendVisible(pending);
+        return { role: "assistant", content: text, thoughts, _raw: raw };
     }
 
     /**
@@ -752,7 +897,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      * server works without grammar support.
      *
      * @param {Record<string, any>} _payload the payload about to be sent (mutate in place)
-     * @param {{ grammar?: string | null, trail?: string } & Record<string, any>} _deServerOptions
+     * @param {{ grammar?: string | null } & Record<string, any>} _deServerOptions
      * @returns {void}
      */
     addExtraOptions(_payload, _deServerOptions) {
@@ -832,11 +977,43 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
 
         // ── Step 2: parse models, preserving tags ──
         /** @type {Array<OpenAIModelEntry>} */
-        const models = (modelsJson?.data ?? []).map((/** @type {any} */ m) => ({
-            id: String(m.id),
-            tags: Array.isArray(m.tags) ? m.tags.map(String) : [],
-            maxModelLen: typeof m.max_model_len === 'number' ? m.max_model_len : undefined,
-        }));
+        const models = (modelsJson?.data ?? []).map((/** @type {any} */ m) => {
+            /**
+             * @type {Array<string>}
+             */
+            const tags = Array.isArray(m.tags) ? m.tags.map(String) : [];
+
+            const hasNativeReasoningTag = tags.some((t) => t === 'native-reasoning:true');
+            const hasNonNativeReasoningTag = tags.some((t) => t === 'native-reasoning:false');
+
+            /** @type {OpenAIModelEntry} */
+            const result = {
+                id: String(m.id),
+                tags: Array.isArray(m.tags) ? m.tags.map(String) : [],
+                maxModelLen: typeof m.max_model_len === 'number' ? m.max_model_len : undefined,
+                nativeReasoning: hasNativeReasoningTag ? true : hasNonNativeReasoningTag ? false : null,
+                reasoningField: tags?.find((t) => t.startsWith('reasoning-field:'))?.slice('reasoning-field:'.length) || null,
+                thinkingTags: tags?.filter((t) => t.startsWith('thinking-tags:')).map((t) => t.slice('thinking-tags:'.length).split(',').map((s) => s.trim())).flat() || null,
+            };
+
+            const advancedHasInfo = this.options.advanced[result.id];
+            if (advancedHasInfo) {
+                if (advancedHasInfo.thinkingTags != null && Array.isArray(advancedHasInfo.thinkingTags)) {
+                    console.warn(`InferenceServerOpenAICompatible: Model "${result.id}" has thinkingTags overridden by advanced config: ${JSON.stringify(advancedHasInfo.thinkingTags)}`);
+                    result.thinkingTags = advancedHasInfo.thinkingTags;
+                }
+                if (advancedHasInfo.reasoningField != null && typeof advancedHasInfo.reasoningField === 'string') {
+                    console.warn(`InferenceServerOpenAICompatible: Model "${result.id}" has reasoningField overridden by advanced config: ${JSON.stringify(advancedHasInfo.reasoningField)}`);
+                    result.reasoningField = advancedHasInfo.reasoningField;
+                }
+                if (advancedHasInfo.nativeReasoning != null && typeof advancedHasInfo.nativeReasoning === 'boolean') {
+                    console.warn(`InferenceServerOpenAICompatible: Model "${result.id}" has nativeReasoning overridden by advanced config: ${JSON.stringify(advancedHasInfo.nativeReasoning)}`);
+                    result.nativeReasoning = advancedHasInfo.nativeReasoning;
+                }
+            }
+
+            return result;
+        });
 
         this.availableModels = models;
 
@@ -976,7 +1153,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
         // ── Step 5: detect server flavour ──
         this.serverType = await this._detectServerType(baseUrl, headers);
 
-        await this._ensureGrammar();
+        await this._ensureGrammarAndThinking();
 
         // ── Step 6: resolve the model's context window size ──
         await this._resolveContextWindowSize(baseUrl, headers);
@@ -987,8 +1164,8 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
         console.log(`InferenceServerOpenAICompatible: Connected to ${baseUrl}, server type: ${this.serverType}, context window: ${this.contextWindowSize}`);
     }
 
-    async _ensureGrammar() {
-        // no-op by default; subclasses may override to fetch grammar metadata from the server
+    async _ensureGrammarAndThinking() {
+        // no-op by default; subclasses may override to fetch grammar and thinking metadata from the server
     }
 
     /**
@@ -1251,14 +1428,10 @@ ${nextMessageMustBeInform}
 
         const storyUserPrompt = `# Story to continue:\n\n${storySoFar}\n\n`;
 
-        const assistantPromptTrail = `# ${options.narration ?
-            "Continuing the story with narrative 3rd person paragraph" :
-            `Continuing the story with spoken dialogue of ${character.name}`}:\n\n${getLastParagraphChunkOf(storySoFar)}\n\n`;
-
-        /** @type {Array<{role: "system" | "user" | "assistant", content: string}>} */
+        /** @type {Array<{role: "system" | "user" | "assistant", content: string, thoughts: string[], _raw?: string}>} */
         const chatMessages = [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: storyUserPrompt + continuationRequestPrompt },
+            { role: "system", content: systemPrompt, thoughts: [] },
+            { role: "user", content: storyUserPrompt + continuationRequestPrompt, thoughts: [] },
         ];
 
         const deServerOptions = {
@@ -1272,7 +1445,6 @@ ${nextMessageMustBeInform}
             // paragraph and is bounded by maxParagraphs instead.
             stopAt: /** @type {string[]} */ (options.narration ? [] : ["\n"]),
             stopAfter: /** @type {string[]} */ ([]),
-            trail: assistantPromptTrail,
             grammar: grammar || undefined,
         };
 
@@ -1287,7 +1459,11 @@ ${nextMessageMustBeInform}
         }
 
         const result = await this.runInference(model, chatMessages, this._standardOpenAIOptions(), deServerOptions);
-        return { ...result, warnings: [...warnings, ...result.warnings] };
+        return {
+            text: result.content,
+            thoughts: result.thoughts || [],
+            warnings: [],
+        };
     }
 
     /**
@@ -1341,8 +1517,8 @@ ${nextMessageMustBeInform}
             }
         }
 
-        /** @type {Array<{role: "system" | "user" | "assistant", content: string}>} */
-        const conversation = [{ role: "system", content: system }];
+        /** @type {Array<{role: "system" | "user" | "assistant", content: string, thoughts: string[], _raw?: string}>} */
+        const conversation = [{ role: "system", content: system, thoughts: [] }];
         const preparedContext = userTrail.trimEnd();
 
         let nextQuestion = yield { text: "ready", thoughts: [], warnings: [] };
@@ -1363,10 +1539,10 @@ ${nextMessageMustBeInform}
             // Keep previous turns unchanged for server prefix-cache reuse. Chat
             // completions still needs the full history on every HTTP request;
             // actual KV-cache retention is controlled by the server.
-            /** @type {Array<{role: "system" | "user" | "assistant", content: string}>} */
+            /** @type {Array<{role: "system" | "user" | "assistant", content: string, thoughts: string[]}>} */
             const chatMessages = [
                 ...conversation,
-                { role: "user", content: (conversation.length === 1 ? preparedContext + "\n\n" : "") + questionText },
+                { role: "user", content: (conversation.length === 1 ? preparedContext + "\n\n" : "") + questionText, thoughts: [] },
             ];
 
             const deServerOptions = {
@@ -1376,25 +1552,35 @@ ${nextMessageMustBeInform}
                 maxSafetyCharacters: nextQuestion.maxSafetyCharacters,
                 stopAt: nextQuestion.stopAt,
                 stopAfter: nextQuestion.stopAfter,
-                trail: "# Answer:\n\n" + (nextQuestion.answerTrail || ""),
                 grammar: nextQuestion.grammar || undefined,
                 gear,
+                thinkingEffort: nextQuestion.thinkingEffort || standardOpenAIOptions.reasoningEffort || "medium",
             };
 
             console.log("Asking question :", nextQuestion.nextQuestion);
 
             const answer = await this.runInference(model, chatMessages, standardOpenAIOptions, deServerOptions);
 
-            console.log("Answer received :", answer.text);
+            console.log("Answer received :", answer.content);
 
             // Commit only completed turns and include the assistant prefill that
             // runInference sent, since answer.text contains only generated text.
+            // Preserve reasoning separately so the chat template can reconstruct
+            // the assistant's thinking block on subsequent requests.
             conversation.push(chatMessages[chatMessages.length - 1], {
                 role: "assistant",
-                content: deServerOptions.trail + answer.text,
+                content: answer.content,
+                thoughts: answer.thoughts || [],
+                _raw: answer._raw || undefined,
             });
 
-            nextQuestion = yield answer;
+            const asResponse = {
+                text: answer.content,
+                thoughts: answer.thoughts || [],
+                warnings: [],
+            };
+
+            nextQuestion = yield asResponse;
         }
     }
 

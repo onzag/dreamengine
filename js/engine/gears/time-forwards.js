@@ -218,8 +218,8 @@ export default async function timeForwardsUsingUntimedMessages(engine) {
         nextQuestion: nextQuestion,
         stopAt: ["\n", "."],
         stopAfter: [],
-        answerTrail: "Time Passed: ",
-        grammar: `root ::= NUMBER " " UNIT\nNUMBER ::= ([1-9] | [1-9] [0-9] | [1-9] [0-9] [0-9])\nUNIT ::= ("seconds" | "second" | "minutes" | "minute" | "hours" | "hour" | "days" | "day" | "weeks" | "week" | "month" | "months" | "year" | "years")`,
+        thinkingEffort: "none",
+        grammar: `root ::= "Time Passed: " NUMBER " " UNIT\nNUMBER ::= ([1-9] | [1-9] [0-9] | [1-9] [0-9] [0-9])\nUNIT ::= ("seconds" | "second" | "minutes" | "minute" | "hours" | "hour" | "days" | "day" | "weeks" | "week" | "month" | "months" | "year" | "years")`,
     });
 
     // Ensure the generator is properly closed.
@@ -231,7 +231,7 @@ export default async function timeForwardsUsingUntimedMessages(engine) {
     console.log(`Time-Forwards: Time passed response from time-forwards agent: ${answer.value.text.trim()}`);
 
     // now we have to parse this time passed value, into milliseconds
-    const timePassedText = answer.value.text.trim();
+    const timePassedText = answer.value.text.trim().split("Time Passed: ")[1];
     const numberSide = parseInt(timePassedText.split(" ")[0], 10);
 
     let unitSide = timePassedText.split(" ")[1].toLowerCase();

@@ -102,7 +102,7 @@ export default async function calculateBondsChange(engine, character) {
         "questions-run",
         {
             system: engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemPrompt, [
-                "The character might have been referred as its id " + JSON.stringify(character.id) + " in the last story fragment, as the id part of an <id:name> identifier, if the id is the same, the character is the same, make sure to check for that as well.",
+                "The character might have been referred as its id " + JSON.stringify(character.id) + " in the story to analyze, as the id part of an <id:name> identifier, if the id is the same, the character is the same, make sure to check for that as well.",
             ], null),
             contextInfoBefore: null,
             messages: convertMessagesToSimpleList(allUnprocessedMessages.messages),

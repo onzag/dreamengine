@@ -11,7 +11,6 @@ import { mergeVoicesFrom, reweightVoiceForEmotion, selectForcedVoiceEffects } fr
  * @param {DEngine} engine 
  * @param {DECompleteCharacterReference} character
  * @param {{
- *   doNotMove: boolean, // if true, the character will not be allowed to change location
  *   injectedActions: Array<DEActionPromptInjection<DEStringTemplateCharOnly>>,
  *   microInjections: string[], // these are messages that are injected into the context of the inference adapter for this talk, but are not shown to the story master, they are meant to be used for micro-injections of information that the character would know but the story master doesn't need to know, such as "I see a monster in the bushes" or "I have a knife in my pocket", which can then be used by the inference adapter to generate more accurate dialogue and narration, but doesn't need to be shown to the story master
  *   microVoices: DEVoiceDescription[] // limits for the micro-injections voice
@@ -30,7 +29,6 @@ export async function talk(engine, character, options) {
 
     if (!debug.ENABLED_TALK) {
         return {
-            addedMessagesForStoryMaster: [],
             hasDeadEnded: false,
             hasDied: false,
             /** @type {DEEmotionNames} */
@@ -55,83 +53,61 @@ export async function talk(engine, character, options) {
 
     const ourCharacterName = getNameIdentificationForOneCharacterTowardsAnother(engine.deObject, character, character);
 
-    const addedMessagesForStoryMaster = [];
-    let hasDeadEnded = false;
-    let hasDied = false;
-
     const characterSystemPrompt = await getSysPromptForCharacter(engine, character.id);
     const characterCanSee = await getCharacterSurroundingInformation(engine.deObject, character.id);
 
-    let actions = (await Promise.all(characterSystemPrompt.internalDescription.actions.map(async (action) => {
-        if (action.action.action) {
-            if (typeof action.action.probability === "number" && Math.random() > action.action.probability) {
-                return null;
-            }
-            const text = typeof action.action.action === "string" ? action.action.action : await action.action.action(
-                {
-                    char: character,
-                    causes: action.applyingState?.causes || null,
-                }
-            );
-            const narrativeAction = typeof action.action.narrativeAction === "string" ? action.action.narrativeAction : (action.action.narrativeAction ? await action.action.narrativeAction(
-                {
-                    char: character,
-                    causes: action.applyingState?.causes || null,
-                },
-            ) : null);
-            const narrativeActionTrimmed = narrativeAction ? narrativeAction.trim() : null;
-            const trimmed = text.trim();
-            if (!trimmed && !narrativeActionTrimmed) {
-                return null;
-            }
-            return {
-                text: trimmed || null,
-                narrativeAction: narrativeActionTrimmed,
-                action,
-            }
+    /**
+     * @type {string[]}
+     */
+    const effects = [];
+    let actions = (await Promise.all([...characterSystemPrompt.internalDescription.actions, ...options.injectedActions].map(async (action) => {
+        if (typeof action.probability === "number" && Math.random() > action.probability) {
+            return null;
         }
-        return null;
+        const text = action.action ? (typeof action.action === "string" ? action.action : await action.action(
+            {
+                char: character,
+            }
+        )) : "";
+        const narrativeAction = typeof action.narrativeAction === "string" ? action.narrativeAction : (action.narrativeAction ? await action.narrativeAction(
+            {
+                char: character,
+            },
+        ) : "");
+        const narrativeEffect = typeof action.narrativeEffect === "string" ? action.narrativeEffect : (action.narrativeEffect ? await action.narrativeEffect(
+            {
+                char: character,
+            }
+        ) : "");
+        const narrativeActionTrimmed = narrativeAction.trim();
+        const trimmed = text.trim();
+
+        if (narrativeEffect) {
+            // narrative effects are separate
+            effects.push(narrativeEffect);
+        }
+
+        if (!trimmed && !narrativeActionTrimmed) {
+            return null;
+        }
+
+        return {
+            actionObject: action,
+            action: trimmed || null,
+            narrativeAction: narrativeActionTrimmed || null,
+        }
     }))).filter((action) => !!action);
 
-    if (options.injectedActions) {
-        const injectedActionsProcessed = (await Promise.all(options.injectedActions.map(async (a) => ({
-            text: typeof a.action === "string" ? a.action : a.action ? await a.action({
-                char: character,
-            }) : null,
-            narrativeAction: typeof a.narrativeAction === "string" ? a.narrativeAction : a.narrativeAction ? await a.narrativeAction({
-                char: character,
-            }) : null,
-            action: {
-                applyingState: null,
-                action: a,
-                stateInfo: null,
-            }
-        })))).filter((action) => !!action.text || !!action.narrativeAction);
-        // @ts-ignore typescript doesn't know how to merge these two types of actions, but we know they are compatible
-        actions = injectedActionsProcessed.concat(actions);
-    }
+    const deadEndAction = actions.find((action) => action.actionObject.isDeadEndScenario);
 
-    let deadEndAction = actions.find((action) => action.action.action.isDeadEndScenario && action.action.action.deadEndIsDeath);
-    if (!deadEndAction) {
-        deadEndAction = actions.find((action) => action.action.action.isDeadEndScenario);
-    }
-
+    let characterHasDied = false;
     if (deadEndAction) {
-        console.log(`Dead end scenario detected for character ${ourCharacterName} with action: ${deadEndAction.text}`);
-        if (deadEndAction.action.action.deadEndIsDeath) {
-            hasDied = true;
+        console.log(`Dead end scenario detected for character ${ourCharacterName} with action: ${deadEndAction.action}`);
+        if (deadEndAction.actionObject.deadEndIsDeath) {
+            characterHasDied = true;
         }
         // limiting to that one only
         actions = [deadEndAction];
-    }
-
-    let actionsAsText = actions.map((action) => action.text).filter((a) => !!a).join("\n - ");
-    if (actionsAsText) {
-        if (deadEndAction && deadEndAction.action.action.deadEndIsDeath) {
-            actionsAsText = "# IMPORTANT: The following action will be executed by " + ourCharacterName + " and will result in death:\n\n - " + actionsAsText;
-        } else {
-            actionsAsText = "# IMPORTANT: The following actions must be executed by " + ourCharacterName + ":\n\n - " + actionsAsText;
-        }
     }
 
     let microInjectionsAsText = "";
@@ -167,7 +143,6 @@ export async function talk(engine, character, options) {
     const activeStates = [];
 
     for (const state of characterSystemPrompt.internalDescription.activeStates) {
-
         activeStates.push({
             state: state.applyingState.state,
             dominance: state.stateInfo.dominance,
@@ -359,10 +334,6 @@ export async function talk(engine, character, options) {
 
     if (emotionalRange.length > 0) {
         narrativeEffects.push(`'${character}' response emotions should also include ${emotionalRange.join(", ")}`);
-    }
-
-    if (options.doNotMove) {
-        narrativeEffects.push(`${character} must not walk away or go to another location`);
     }
 
     if (baseVoice?.mute && !baseVoice?.description) {

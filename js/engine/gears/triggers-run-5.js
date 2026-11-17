@@ -125,6 +125,9 @@ export async function runAffectionActions(context, proneToInitiateAffectionProba
                             await runQuestion(engine, character, {
                                 type: "yes_no",
                                 question: questionValue,
+                                /**
+                                 * @param {boolean} answer 
+                                 */
                                 onValue: async (answer) => {
                                     smallQuestionsCache[questionValue] = answer;
                                 },
@@ -167,6 +170,9 @@ export async function runAffectionActions(context, proneToInitiateAffectionProba
                                 await runQuestion(engine, character, {
                                     type: "yes_no",
                                     question: questionAmbigous,
+                                    /**
+                                     * @param {boolean} answer 
+                                     */
                                     onValue: async (answer) => {
                                         smallQuestionsCache[questionAmbigous] = answer;
                                     },
@@ -196,6 +202,9 @@ export async function runAffectionActions(context, proneToInitiateAffectionProba
                                     await runQuestion(engine, character, {
                                         type: "yes_no",
                                         question: question,
+                                        /**
+                                         * @param {boolean} answer 
+                                         */
                                         onValue: async (answer) => {
                                             smallQuestionsCache[question] = answer;
                                         },

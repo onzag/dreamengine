@@ -1,8 +1,8 @@
 import { debug } from "../debug.js";
 import { DEngine } from "../index.js";
 import { getExternalDescriptionOfCharacter, getSurroundingCharacters } from "../util/character-info.js";
-import { isYes } from "../util/grammar.js";
-import { describeItemsAvailableToCharacterForInference, getFullItemListAtLocation } from "../util/items.js";
+// import { isYes } from "../util/grammar.js";
+// import { describeItemsAvailableToCharacterForInference, getFullItemListAtLocation } from "../util/items.js";
 import { convertMessagesToSimpleList, getHistoryFragment } from "../util/messages.js";
 
 /**
@@ -145,7 +145,7 @@ export default async function testWorldRulesOn(engine, character) {
         throw new Error("Inference adapter questioning generator for character interactions ended unexpectedly.");
     }
 
-    const nextQuestion = `Considering the list of present characters ${contextInfoSurroundingCharacters.availableCharactersAt}, has the last story fragment specified new characters as being physically present?`;
+    const nextQuestion = `Considering the list of present characters ${contextInfoSurroundingCharacters.availableCharactersAt}, has the story to analyze specified new characters as being physically present?`;
 
     const spawnedMissingCharacters = await characterInteractionGenerator.next({
         maxSafetyCharacters: 500,

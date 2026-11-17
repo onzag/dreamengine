@@ -354,50 +354,6 @@ export function describeItemsAvailableToCharacterForInference(engine, characterI
     return { complete: message, cheapList, usedRangedMode };
 }
 
-/**
- * @param {DEngine} engine
- * @param {string} locationId
- * @returns {Array<{id: string, name: string}>}
- */
-export function getFullItemListAtLocation(engine, locationId) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-    const location = engine.deObject.world.locations[locationId];
-    if (!location) {
-        throw new Error(`Location ${locationId} not found.`);
-    }
-    /**
-     * @type {Array<{id: string, name: string}>}
-     */
-    const items = [];
-    /**
-     * 
-     * @param {DEItem[]} itemList 
-     */
-    const processItemList = (itemList) => {
-        for (const item of itemList) {
-            if (!items.find(i => i.name === item.name)) {
-                items.push({ id: item.id, name: item.name });
-            }
-            processItemList(item.containing);
-            processItemList(item.ontop);
-        }
-    }
-    for (const locationSlotName in location.slots) {
-        const locationSlot = location.slots[locationSlotName];
-        processItemList(locationSlot.items);
-    }
-    // @ts-ignore
-    const charactersAtLocation = Object.keys(engine.deObject.stateFor).filter(charName => engine.deObject.stateFor[charName].location === locationId);
-    for (const charName of charactersAtLocation) {
-        const charState = engine.deObject.stateFor[charName];
-        processItemList(charState.wearing);
-        processItemList(charState.carrying);
-    }
-    return items;
-}
-
 const irregularPlurals = {
     // Inanimate objects/items only
     "axis": "axes",

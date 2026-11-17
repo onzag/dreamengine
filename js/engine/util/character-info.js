@@ -1460,6 +1460,8 @@ export function humanReadablePostureToPosture(humanReadable) {
  * this is meant to be used in the prompt settings, as the inference should know everything
  * about the location, even if the character cannot see it.
  * 
+ * TODO no get rid of this actually, we should use perspective instead
+ * 
  * @param {DEObject} deObject 
  * @param {string} characterId 
  */

@@ -33,7 +33,7 @@ export async function runStateTriggers(context) {
                     }
                     const causantCharacter = deObject.characters[cause.causant.id];
                     const causantName = causantCharacter
-                        ? deObject.utils.templates.formatCharacterName(causantCharacter)
+                        ? deObject.utils.templates.formatCharacterName(causantCharacter, character)
                         : `<${cause.causant.id}:Unknown Character>`;
                     if (cause.causant.apologizable) {
                         const question = "Has " + causantName + " apologized to " + characterName + " for causing them to become " + stateForCharacter.state + ": " + JSON.stringify(characterName + " " + cause.description) + " (done by " + causantName + ")?";
@@ -41,6 +41,9 @@ export async function runStateTriggers(context) {
                             await runQuestion(engine, character, {
                                 type: "yes_no",
                                 question: question,
+                                /**
+                                 * @param {boolean} answer 
+                                 */
                                 onValue: async (answer) => {
                                     smallQuestionsCache[question] = answer;
                                 },
@@ -70,26 +73,4 @@ export async function runStateTriggers(context) {
             }
         }
     }
-
-    const sexualFullfillmentQuestion = "Has " + characterName + " had an orgasm or completed a sexual act in the last story fragment?";
-    await runQuestion(engine, character, {
-        type: "yes_no",
-        question: sexualFullfillmentQuestion,
-        onValue: async (answer) => {
-            smallQuestionsCache[sexualFullfillmentQuestion] = answer;
-        },
-    }, {
-        lastCycleMessagesInfo,
-        questioningAgent,
-        initializeAgent,
-    });
-
-    const isSexuallyFullfiled = smallQuestionsCache[sexualFullfillmentQuestion];
-
-    if (isSexuallyFullfiled) {
-        character.state["last_sexual_fullfillment_act"] = deObject.currentTime.time;
-    }
-
-    // TODO force an orgasm sometimes if already engaged in sex
-    // TODO add vocalizations for intimate acts and sexual acts if not defined one, using the default system
 }

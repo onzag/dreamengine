@@ -9,7 +9,6 @@ import testMessageFeasibilityForCharacter from "./gears/feasibility-check.js";
 import { getCharacterVolume, getCharacterWeight, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage } from "./util/weight-and-volume.js";
 import { DEJSEngine } from "../jsengine/index.js";
 import calculatePostureChange from "./gears/posture-change.js";
-import calculateItemChanges from "./gears/item-changes.js";
 import timeForwardsUsingLastMessage, { rerollWorldWeather, timeForwardsToNewTime } from "./gears/time-forwards.js";
 import { talk } from "./gears/talk.js";
 import { millisecondsToTime } from "./util/time.js";
@@ -20,6 +19,7 @@ import { giveCharacterRandomClothing } from "./util/clothing.js";
 import { BaseDataManager } from "./data-management/base.js";
 import timeForwardsUsingUntimedMessages from "./gears/time-forwards.js";
 import { getHistoryFragment } from "./util/messages.js";
+import calculatePhysicalChanges from "./gears/physical-changes.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -1059,6 +1059,8 @@ export class DEngine {
             perspective: "story-master",
         });
 
+        const { destroyedItemIds: destroyedItems } = await calculatePhysicalChanges(this);
+
         // this will include everyone involved in the conversation
         for (const characterId of lastMessages.conversingCharacters) {
             const character = this.deObject.characters[characterId];
@@ -1070,7 +1072,7 @@ export class DEngine {
 
         await deleteTemp(this);
 
-        await consumeAccumulatedSideEffectsReadyFunctions();
+        await consumeAccumulatedSideEffectsReadyFunctions(destroyedItems);
         await this.informDEObjectUpdated();
     }
 

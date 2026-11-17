@@ -370,6 +370,14 @@ let INFERENCE_ADAPTER_ERROR = null;
  * @type {string|null}
  */
 let INFERENCE_ADAPTER_WARNING = null;
+
+/** @param {string} text */
+function escapeHTML(text) {
+    return String(text).replace(/[&<>"']/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[character]));
+}
+
 async function initialChecks() {
     // Check if the engine has any API keys configured, if not show the settings overlay
     const host = await window.API.getConfigValue('host');
@@ -384,7 +392,7 @@ async function initialChecks() {
     if (error) {
         const dialog = document.createElement('app-dialog');
         dialog.setAttribute('dialog-title', error.title);
-        dialog.innerHTML = `<p tabindex="0" data-de-aria-text="true">${error.message}</p>`;
+        dialog.innerHTML = `<p tabindex="0" data-de-aria-text="true" style="white-space: pre-wrap; overflow-wrap: anywhere;">${escapeHTML(error.message)}</p>`;
         dialog.setAttribute("confirmation", "true");
         dialog.setAttribute("confirm-text", "Open Settings");
         dialog.setAttribute("cancel-text", "Ignore");
@@ -410,10 +418,11 @@ async function initialChecks() {
     } else if (INFERENCE_ADAPTER_ERROR) {
         const dialog = document.createElement('app-dialog');
         dialog.setAttribute('dialog-title', 'Could not Connect to Server');
-        dialog.innerHTML = `<p tabindex="0" data-de-aria-text="true">Failed to initialize the inference adapter. Please check your API key and host configuration, and ensure that your API key has the necessary permissions.</p><br><p tabindex="0" data-de-aria-text="true">Error details: ${INFERENCE_ADAPTER_ERROR.message}</p>`;
+        dialog.innerHTML = `<p tabindex="0" data-de-aria-text="true">Failed to initialize the inference adapter. Please check your API key and host configuration, and ensure that your API key has the necessary permissions.</p><br><p tabindex="0" data-de-aria-text="true" style="white-space: pre-wrap; overflow-wrap: anywhere;">Error details: ${escapeHTML(INFERENCE_ADAPTER_ERROR.message)}</p>`;
 
         if (window.API.mode === "web" && host.startsWith("wss")) {
-            dialog.innerHTML += `<br><br><p tabindex="0" data-de-aria-text="true">Since you are using the web version and connecting to a secure WebSocket (wss://), you may need to accept the self-signed certificate in your browser before the connection can be established, at <a tabindex="0" data-de-aria-key="l" href="https://${host.replace("wss://", "")}" target="_blank">https://${host.replace("wss://", "")}</a> then restart the app</p>`;
+            const certificateUrl = escapeHTML(`https://${host.replace("wss://", "")}`);
+            dialog.innerHTML += `<br><br><p tabindex="0" data-de-aria-text="true">Since you are using the web version and connecting to a secure WebSocket (wss://), you may need to accept the self-signed certificate in your browser before the connection can be established, at <a tabindex="0" data-de-aria-key="l" href="${certificateUrl}" target="_blank">${certificateUrl}</a> then restart the app</p>`;
         }
 
         dialog.setAttribute("confirmation", "true");
@@ -435,7 +444,7 @@ async function initialChecks() {
     } else if (INFERENCE_ADAPTER_WARNING) {
         const dialog = document.createElement('app-dialog');
         dialog.setAttribute('dialog-title', 'Warning');
-        dialog.innerHTML = `<p tabindex="0" data-de-aria-text="true">There was a warning while initializing the inference adapter: ${INFERENCE_ADAPTER_WARNING}</p>`;
+        dialog.innerHTML = `<p tabindex="0" data-de-aria-text="true" style="white-space: pre-wrap; overflow-wrap: anywhere;">There was a warning while initializing the inference adapter: ${escapeHTML(INFERENCE_ADAPTER_WARNING)}</p>`;
         dialog.setAttribute("confirmation", "true");
         dialog.setAttribute("confirm-text", "Open Settings");
         dialog.setAttribute("cancel-text", "Ignore");

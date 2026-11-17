@@ -24,10 +24,38 @@ export async function runBondTriggers(context) {
         initializeAgent, microInjections, microVoices, smallQuestionsCache,
     } = context;
 
+    // TODO this needs to be refactored to what is sex fullfillment for the character?
+    // we don't know what it is, this question is too generic
+
+    const sexualFullfillmentQuestion = "Has " + characterName + " had an orgasm or completed a sexual act in the story to analyze?";
+    await runQuestion(engine, character, {
+        type: "yes_no",
+        question: sexualFullfillmentQuestion,
+        /**
+         * @param {boolean} answer 
+         */
+        onValue: async (answer) => {
+            smallQuestionsCache[sexualFullfillmentQuestion] = answer;
+        },
+    }, {
+        lastCycleMessagesInfo,
+        questioningAgent,
+        initializeAgent,
+    });
+
+    const isSexuallyFullfiled = smallQuestionsCache[sexualFullfillmentQuestion];
+
+    if (isSexuallyFullfiled) {
+        character.state["last_sexual_fullfillment_act"] = deObject.currentTime.time;
+    }
+
+    // TODO force an orgasm sometimes if already engaged in sex
+    // TODO add vocalizations for intimate acts and sexual acts if not defined one, using the default system
+
     for (const bond of deObject.bonds[character.id].active) {
         if (lastCycleMessagesInfo.mentionedCharacters.includes(bond.towards)) {
             const otherName = deObject.characters[bond.towards]
-                ? deObject.utils.templates.formatCharacterName(bond.towards)
+                ? deObject.utils.templates.formatCharacterName(bond.towards, character)
                 : `<${bond.towards}:Unknown Character>`;
             let rejectIntimacy = character.temp["rejectIntimacy_" + bond.towards];
             if (rejectIntimacy) {
@@ -99,6 +127,9 @@ export async function runBondTriggers(context) {
                         await runQuestion(engine, character, {
                             type: "yes_no",
                             question: questionText,
+                            /**
+                             * @param {boolean} answer 
+                             */
                             onValue: async (answer) => {
                                 smallQuestionsCache[questionText] = answer;
                             },
@@ -137,8 +168,8 @@ export async function runBondTriggers(context) {
                     "very": "very",
                 }
 
-                const questionOfSex = "In the last story fragment, has " + characterName + " engaged in sexual activities or sexual acts?";
-                const questionOfProposedSex = "In the last story fragment, has " + otherName + " proposed to engage in sexual activities or sexual acts with " + characterName + "?";
+                const questionOfSex = "In the story to analyze, has " + characterName + " engaged in sexual activities or sexual acts?";
+                const questionOfProposedSex = "In the story to analyze, has " + otherName + " proposed to engage in sexual activities or sexual acts with " + characterName + "?";
 
                 const characterLibido = character.libido || 0;
 
@@ -169,6 +200,9 @@ export async function runBondTriggers(context) {
                     await runQuestion(engine, character, {
                         type: "yes_no",
                         question: questionOfSex,
+                        /**
+                         * @param {boolean} answer 
+                         */
                         onValue: async (answer) => {
                             smallQuestionsCache[questionOfSex] = answer;
                         },
@@ -185,6 +219,9 @@ export async function runBondTriggers(context) {
                     await runQuestion(engine, character, {
                         type: "yes_no",
                         question: questionOfProposedSex,
+                        /**
+                         * @param {boolean} answer 
+                         */
                         onValue: async (answer) => {
                             smallQuestionsCache[questionOfProposedSex] = answer;
                         },
@@ -219,12 +256,15 @@ export async function runBondTriggers(context) {
                         }
                     }
 
-                    const questionOfIntimateAffection = "In the last story fragment, has " + characterName + " received intimate affection from " + otherName + "? eg. kissing with arousing/sexual intent, making out, intimate actions with romantic/sexual interest, etc.";
+                    const questionOfIntimateAffection = "In the story to analyze, has " + characterName + " received intimate affection from " + otherName + "? eg. kissing with arousing/sexual intent, making out, intimate actions with romantic/sexual interest, etc.";
 
                     if (!smallQuestionsCache[questionOfIntimateAffection]) {
                         await runQuestion(engine, character, {
                             type: "yes_no",
                             question: questionOfIntimateAffection,
+                            /**
+                             * @param {boolean} answer 
+                             */
                             onValue: async (answer) => {
                                 smallQuestionsCache[questionOfIntimateAffection] = answer;
                             },
@@ -235,7 +275,7 @@ export async function runBondTriggers(context) {
                         });
                     }
 
-                    const questionOfProposedIntimateAffection = "In the last story fragment, has " + characterName + " proposed to receive intimate affection from " + otherName + "? eg. kissing with arousing/sexual intent, making out, intimate actions with romantic/sexual interest, etc.";
+                    const questionOfProposedIntimateAffection = "In the story to analyze, has " + characterName + " proposed to receive intimate affection from " + otherName + "? eg. kissing with arousing/sexual intent, making out, intimate actions with romantic/sexual interest, etc.";
 
                     const receivedIntimateAffection = smallQuestionsCache[questionOfIntimateAffection];
 
@@ -243,6 +283,9 @@ export async function runBondTriggers(context) {
                         await runQuestion(engine, character, {
                             type: "yes_no",
                             question: questionOfProposedIntimateAffection,
+                            /**
+                             * @param {boolean} answer 
+                             */
                             onValue: async (answer) => {
                                 smallQuestionsCache[questionOfProposedIntimateAffection] = answer;
                             }
@@ -275,12 +318,15 @@ export async function runBondTriggers(context) {
                             }
                         }
 
-                        const questionOfAffection = "In the last story fragment, has " + characterName + " received affection from " + otherName + "? eg. hugging, caressing, holding hands, affectionate words, etc.";
+                        const questionOfAffection = "In the story to analyze, has " + characterName + " received affection from " + otherName + "? eg. hugging, caressing, holding hands, affectionate words, etc.";
 
                         if (!smallQuestionsCache[questionOfAffection]) {
                             await runQuestion(engine, character, {
                                 type: "yes_no",
                                 question: questionOfAffection,
+                                /**
+                                 * @param {boolean} answer 
+                                 */
                                 onValue: async (answer) => {
                                     smallQuestionsCache[questionOfAffection] = answer;
                                 },
@@ -293,12 +339,15 @@ export async function runBondTriggers(context) {
 
                         const receivedAffection = smallQuestionsCache[questionOfAffection];
 
-                        const questionOfProposedAffection = "In the last story fragment, has " + characterName + " proposed to receive affection from " + otherName + "? eg. hugging, caressing, holding hands, affectionate words, etc.";
+                        const questionOfProposedAffection = "In the story to analyze, has " + characterName + " proposed to receive affection from " + otherName + "? eg. hugging, caressing, holding hands, affectionate words, etc.";
 
                         if (!receivedAffection && !smallQuestionsCache[questionOfProposedAffection] && character.speciesType !== "animal") {
                             await runQuestion(engine, character, {
                                 type: "yes_no",
                                 question: questionOfProposedAffection,
+                                /**
+                                 * @param {boolean} answer 
+                                 */
                                 onValue: async (answer) => {
                                     smallQuestionsCache[questionOfProposedAffection] = answer;
                                 },

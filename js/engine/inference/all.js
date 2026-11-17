@@ -55,21 +55,21 @@ export const INFERENCE_ADAPTERS = {
             },
             model: {
                 label: "Model",
-                description: "The model to use for inference. This should match the model name on the vLLM server.",
+                description: "The model to use for inference. This should match the model name on the vLLM/Llama server.",
                 default: "",
                 type: "string",
                 placeholder: "Enter model name, or leave blank for default",
             },
             analysisModel: {
                 label: "Analysis Model",
-                description: "The model to use for prompt analysis. This should match the model name on the vLLM server.",
+                description: "The model to use for prompt analysis. This should match the model name on the vLLM/Llama server.",
                 default: "",
                 type: "string",
                 placeholder: "Enter analysis model name, or leave blank for default",
             },
             embeddingModel: {
                 label: "Embedding Model",
-                description: "The model to use for embeddings. This should match the embedding model name on the vLLM server.",
+                description: "The model to use for embeddings. This should match the embedding model name on the vLLM/Llama server.",
                 default: "",
                 type: "string",
                 placeholder: "Enter embedding model name, or leave blank for default",
@@ -160,6 +160,13 @@ export const INFERENCE_ADAPTERS = {
                     { value: "max", label: "Maximum" },
                 ],
             },
+            advancedVLLMLLAMA: {
+                label: "Advanced Model Configuration",
+                description: "Overrides to use for specific models. This is an advanced feature and should only be used if you know what you're doing. The format is a JSON object where keys are model IDs and values are objects with the following optional properties: `thinkingTags` (array of strings), `reasoningField` (string), and `nativeReasoning` (boolean).",
+                default: "",
+                type: "string",
+                placeholder: "Enter manual thinking tags, or leave blank for auto-detection",
+            },
             useExperimentalTestMode: await gbnfDetectionPromise.then(() => (gbnfAvailable ? {
                 label: "Use Experimental Test Mode",
                 placeholder: "Enable experimental test mode",
@@ -189,6 +196,7 @@ export const INFERENCE_ADAPTERS = {
             analysisModel: await getConfigValue("analysisModel"),
             embeddingModel: await getConfigValue("embeddingModel"),
             reasoningEffort: await getConfigValue("reasoningEffort") || "medium",
+            advanced: JSON.parse((await getConfigValue("advancedVLLMLLAMA")) || "{}"),
         }),
         buildConfig: async (getConfigValue) => {
             const host = await getConfigValue("host");
@@ -211,6 +219,7 @@ export const INFERENCE_ADAPTERS = {
                 analysisModel: await getConfigValue("analysisModel"),
                 embeddingModel: await getConfigValue("embeddingModel"),
                 reasoningEffort: await getConfigValue("reasoningEffort") || "medium",
+                advancedVLLMLLAMA: await getConfigValue("advancedVLLMLLAMA"),
             };
         },
         checkConfig: async (getConfigValue) => {

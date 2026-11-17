@@ -285,7 +285,7 @@ function getRepresentativeItems(items) {
 }
 
 /**
- * @type {Array<() => Promise<void>>}
+ * @type {Array<(destroyedItemsId: string[]) => Promise<void>>}
  */
 let ACCUMULATED_SIDE_EFFECTS_READY_FUNCTIONS = [];
 
@@ -313,11 +313,15 @@ async function cachedGetPerspective(DE, character, destroyedItemsIds, relatedCon
     return [perspective, beforePerspective];
 }
 
-export async function consumeAccumulatedSideEffectsReadyFunctions() {
+/**
+ * 
+ * @param {string[]} destroyedItemsIds 
+ */
+export async function consumeAccumulatedSideEffectsReadyFunctions(destroyedItemsIds) {
     CACHED_PERSPECTIVE.clear();
     for (const fn of ACCUMULATED_SIDE_EFFECTS_READY_FUNCTIONS) {
         try {
-            await fn();
+            await fn(destroyedItemsIds);
         } catch (error) {
             console.error("Error in side effects ready function:", error);
         }
@@ -1454,7 +1458,10 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 throw new Error(`Failed to add message to conversation ${conversationId}`);
             }
 
-            const sideEffectsReady = async () => {
+            /**
+             * @param {string[]} destroyedItemsId 
+             */
+            const sideEffectsReady = async (destroyedItemsId) => {
                 for (const participantId of conversationObject.participants) {
                     const participantChar = DE.characters[participantId];
                     if (!participantChar) {
@@ -1481,7 +1488,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     const perspective = await getPerspective(
                         DE,
                         participantChar,
-                        [],
+                        destroyedItemsId,
                         addedMessage,
                         beforePerspectivePerCharacterId[participantId],
                     );

@@ -28,6 +28,11 @@ export class InferenceAdapterVLLandLlamaMUncensored extends InferenceServerOpenA
      *   analysisModel?: string;
      *   embeddingModel?: string;
      *   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
+     *   advanced: Record<string, {
+     *     thinkingTags?: string[] | null;
+     *     reasoningField?: string | null;
+     *     nativeReasoning?: boolean | null;
+     *   }>;
      * }} options
      */
     constructor(parent, options) {
@@ -106,20 +111,14 @@ export class InferenceAdapterVLLandLlamaMUncensored extends InferenceServerOpenA
     /**
      * Attaches server-specific fields to the outgoing chat completion payload.
      * This is where the difference between vLLM and llama.cpp grammar / guided
-     * decoding, and assistant `trail` continuation, is expressed, keeping
-     * deServerStreamEmulator vendor-agnostic.
-     *
-     * The base emulator always appends the `trail` as a final assistant message;
-     * here we add the per-server flags that make the model *continue* that
-     * message (assistant prefill) rather than open a brand new assistant turn.
+     * decoding,
      *
      * @param {Record<string, any>} payload the payload about to be sent (mutated in place)
-     * @param {{ grammar?: string | null, trail?: string } & Record<string, any>} deServerOptions
+     * @param {{ grammar?: string | null } & Record<string, any>} deServerOptions
      * @returns {void}
      */
     addExtraOptions(payload, deServerOptions) {
         const grammar = deServerOptions.grammar;
-        const trail = deServerOptions.trail;
 
         if (this.serverType === 'vllm') {
             // vLLM exposes GBNF guided decoding via `structured_outputs.grammar`. Our grammars
@@ -127,22 +126,22 @@ export class InferenceAdapterVLLandLlamaMUncensored extends InferenceServerOpenA
             if (grammar) {
                 payload.structured_outputs = { grammar };
             }
-            if (trail) {
-                // Continue the final assistant message instead of starting a new turn.
-                payload.continue_final_message = true;
-                payload.add_generation_prompt = false;
-            }
+            // if (trail) {
+            //     // Continue the final assistant message instead of starting a new turn.
+            //     payload.continue_final_message = true;
+            //     payload.add_generation_prompt = false;
+            // }
         } else if (this.serverType === 'llama.cpp') {
             // llama.cpp accepts a raw GBNF `grammar` field.
             if (grammar) payload.grammar = grammar;
-            if (trail) {
-                // Suppress the generation prompt so the model continues the final
-                // assistant message (assistant prefill) rather than opening a new
-                // turn. llama.cpp also understands `continue_final_message`; both
-                // are set for robustness across versions and are ignored if unknown.
-                payload.add_generation_prompt = false;
-                payload.continue_final_message = true;
-            }
+            // if (trail) {
+            //     // Suppress the generation prompt so the model continues the final
+            //     // assistant message (assistant prefill) rather than opening a new
+            //     // turn. llama.cpp also understands `continue_final_message`; both
+            //     // are set for robustness across versions and are ignored if unknown.
+            //     payload.add_generation_prompt = false;
+            //     payload.continue_final_message = true;
+            // }
 
             // Enable llama.cpp's prompt KV-cache. When consecutive requests share
             // the same system prompt + conversation history prefix, llama.cpp
@@ -256,23 +255,15 @@ export class InferenceAdapterVLLandLlamaMUncensored extends InferenceServerOpenA
     }
 
     /**
-     * Probes the server to confirm that grammar-constrained decoding is actually
-     * being *enforced* (it can be compiled out of llama.cpp, omitted from vLLM,
-     * or silently ignored when the guided-decoding backend does not support the
-     * grammar). Sends a short completion constrained by a grammar that forces a
-     * distinctive literal, and verifies the model actually produced exactly that
-     * literal — the only reliable proof that the grammar was honoured.
-     *
-     * - Output equals the forced literal → grammar works.
-     * - A 4xx/5xx response whose body mentions "grammar"/"guided" → hard failure.
-     * - A 2xx response whose output does NOT equal the literal → the grammar was
-     *   accepted but silently ignored → hard failure (this is exactly the vLLM
-     *   case where the "Name: " prefix went missing).
-     * - Network errors are ignored so transient issues don't block init.
+     * Verifies grammar enforcement and separately exposed reasoning together,
+     * using the same streaming inference path as normal requests. A distinctive
+     * forced literal detects ignored grammars; nonempty thoughts confirm that
+     * reasoning is available separately from the constrained answer. Checks
+     * each distinct main, analysis, and gear override model once.
      *
      * @returns {Promise<void>}
      */
-    async _ensureGrammar() {
+    async _ensureGrammarAndThinking() {
         if (this.serverType !== 'vllm' && this.serverType !== 'llama.cpp') {
             const msg = `Grammar-constrained decoding is not supported by the detected server type: "${this.serverType}". ` +
                 `Only "vllm" and "llama.cpp" servers are supported.`;
@@ -281,79 +272,101 @@ export class InferenceAdapterVLLandLlamaMUncensored extends InferenceServerOpenA
             throw new Error(msg);
         }
 
-        const baseUrl = (this.options.host || 'http://127.0.0.1:8765').replace(/\/$/, '');
-        const headers = /** @type {Record<string, string>} */ ({ 'Content-Type': 'application/json' });
-        if (this.options.apiKey) {
-            headers['Authorization'] = `Bearer ${this.options.apiKey}`;
-        }
-
-        // A distinctive literal that an unconstrained model would essentially
-        // never emit for the trivial prompt below. If the output equals this
-        // exactly, the grammar was genuinely enforced. The grammar also uses a
-        // negated char class and a wildcard so that an engine which only partly
-        // supports GBNF (and would mishandle our real dialogue grammar) fails
-        // here rather than silently later.
-        const forcedLiteral = 'GRAMMAR_OK';
-        const probeGrammar = `root ::= "GRAMMAR_OK"`;
-
-        const probePayload = /** @type {Record<string, any>} */ ({
-            messages: [{ role: 'user', content: 'Say anything.' }],
-            max_tokens: 256,
-            temperature: 0,
-            stream: false,
-        });
-        if (this.selectedModel?.id) {
-            probePayload.model = this.selectedModel.id;
-        }
-        this.addExtraOptions(probePayload, { grammar: probeGrammar });
-        this.setReasoningEffort(probePayload, 'none');
-
-        const r = await fetch(`${baseUrl}/v1/chat/completions`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(probePayload),
-        }).catch(() => null);
-
-        // Network-level failure: cannot determine, let init continue.
-        if (!r) return;
-
-        const data = await r.json().catch(() => null);
-
-        if (!r.ok) {
-            // Parse the error body and check whether it is grammar-specific.
-            const errorText = [
-                data?.message,
-                data?.detail,
-                typeof data === 'string' ? data : null,
-            ].filter(Boolean).join(' ');
-
-            if (/structured[_\s-]?outputs|guided[_\s-]?decoding|grammar|xgrammar|outlines/i.test(errorText)) {
-                const hint = this.serverType === 'vllm'
-                    ? 'Ensure vLLM is started with structured-outputs enabled and accepts the `structured_outputs.grammar` field with GBNF grammars.'
-                    : 'Ensure llama.cpp is compiled with grammar support.';
-                const msg = `Grammar-constrained decoding is not available on this server: ${errorText} — ${hint}`;
-                this.reason = msg;
-                this.triggerOnConnectionStatusChange(false, msg);
-                throw new Error(msg);
-            }
-            // Unrelated HTTP error (e.g. transient) — don't block init.
-            return;
-        }
-
-        // 2xx: verify the grammar was actually enforced by inspecting the output.
-        const produced = (data?.choices?.[0]?.message?.content ?? '').trim();
-        if (produced !== forcedLiteral) {
-            const hint = this.serverType === 'vllm'
-                ? 'The server accepted the request but did not constrain generation. Ensure vLLM honours the `structured_outputs.grammar` field with GBNF grammars.'
-                : 'The server accepted the request but did not constrain generation. Ensure llama.cpp is built with grammar support.';
-            const msg = `Grammar-constrained decoding is not being enforced on this server: ` +
-                `expected the forced output "${forcedLiteral}" but got "${produced}". ${hint}`;
+        if (!this.selectedModel) {
+            const msg = 'No model selected; cannot verify grammar-constrained decoding and reasoning.';
             this.reason = msg;
             this.triggerOnConnectionStatusChange(false, msg);
             throw new Error(msg);
         }
 
-        console.log(`InferenceAdapterVLLandLlamaMUncensored: Grammar-constrained decoding verified (${this.serverType}).`);
+        if (!this.analysisModel) {
+            const msg = 'No analysis model selected; cannot verify grammar-constrained decoding and reasoning.';
+            this.reason = msg;
+            this.triggerOnConnectionStatusChange(false, msg);
+            throw new Error(msg);
+        }
+
+        const modelIds = new Set([this.selectedModel.id]);
+        const allModels = Object.values(this.gearModels).concat(Object.values(this.analysisGearModels)).concat([this.analysisModel]).concat([this.selectedModel]);
+        if (this.analysisModel) modelIds.add(this.analysisModel.id);
+        for (const model of Object.values(this.gearModels)) modelIds.add(model.id);
+        for (const model of Object.values(this.analysisGearModels)) modelIds.add(model.id);
+
+        const forcedLiteral = 'GRAMMAR_OK';
+        for (const modelId of modelIds) {
+            const nativeExample = JSON.stringify({ [modelId]: { nativeReasoning: true, reasoningField: 'reasoning_content' } });
+            const taggedExample = JSON.stringify({ [modelId]: { nativeReasoning: false, thinkingTags: ['<think>', '</think>'] } });
+            const reasoningConfigHelp = `In "Advanced Model Configuration", merge an entry for this model into the JSON object. ` +
+                `If the server returns reasoning in a separate field, use ${nativeExample} and replace "reasoning_content" with the actual response delta field (for example, "reasoning"). ` +
+                `If thinking is embedded in content, use ${taggedExample} and replace the tags with the model's actual opening and closing delimiters (for MiniMax-M3, "<mm:think>" and "</mm:think>").`;
+            const modelRelevant = allModels.find(m => m.id === modelId);
+            if (!modelRelevant) {
+                const msg = `Model "${modelId}" not found in gear or analysis models; cannot verify grammar-constrained decoding and reasoning.`;
+                this.reason = msg;
+                this.triggerOnConnectionStatusChange(false, msg);
+                throw new Error(msg);
+            }
+
+            if (modelRelevant.nativeReasoning === null) {
+                const msg = `Model "${modelId}" has no nativeReasoning tag; cannot verify grammar-constrained decoding and reasoning. ${reasoningConfigHelp}`;
+                this.reason = msg;
+                this.triggerOnConnectionStatusChange(false, msg);
+                throw new Error(msg);
+            }
+
+            if (modelRelevant.nativeReasoning && !modelRelevant.reasoningField) {
+                const msg = `Model "${modelId}" is marked as native reasoning but has no reasoningField; cannot verify grammar-constrained decoding and reasoning. ${reasoningConfigHelp}`;
+                this.reason = msg;
+                this.triggerOnConnectionStatusChange(false, msg);
+                throw new Error(msg);
+            }
+
+            if (!modelRelevant.nativeReasoning && !modelRelevant.thinkingTags) {
+                const msg = `Model "${modelId}" is marked as non-native reasoning but has no thinkingTags; cannot verify grammar-constrained decoding and reasoning. ${reasoningConfigHelp}`;
+                this.reason = msg;
+                this.triggerOnConnectionStatusChange(false, msg);
+                throw new Error(msg);
+            }
+
+            let reply;
+            try {
+                reply = await this.runInference(
+                    modelId,
+                    [{ role: 'user', content: 'Think briefly about cats before answering.', thoughts: [] }],
+                    { temperature: 0, maxTokens: 2048, reasoningEffort: 'low' },
+                    { grammar: `root ::= "${forcedLiteral}"` },
+                );
+            } catch (error) {
+                const detail = error instanceof Error ? error.message : String(error);
+                const msg = `Grammar and thinking verification failed for model "${modelId}": ${detail}`;
+                this.reason = msg;
+                this.triggerOnConnectionStatusChange(false, msg);
+                throw new Error(msg);
+            }
+
+            const produced = reply.content.trim();
+            if (produced !== forcedLiteral) {
+                const hint = this.serverType === 'vllm'
+                    ? 'Ensure vLLM honours the `structured_outputs.grammar` field with GBNF grammars and exposes reasoning separately from content.'
+                    : 'Ensure llama.cpp is built with grammar support and exposes reasoning separately from content.';
+                const msg = `Grammar-constrained decoding verification failed for model "${modelId}": ` +
+                    `expected the forced output "${forcedLiteral}" but got "${produced}". ${hint}`;
+                this.reason = msg;
+                this.triggerOnConnectionStatusChange(false, msg);
+                throw new Error(msg);
+            }
+
+            if (!reply.thoughts.some(thought => thought.trim().length > 0)) {
+                const msg = `Thinking verification failed for model "${modelId}": no thoughts were received with low reasoning effort and grammar enabled. ` +
+                    'Ensure the model supports thinking and the server exposes it through reasoning or reasoning_content deltas. Grammar-constrained decoding was nevertheless honored. ' +
+                    reasoningConfigHelp;
+                this.reason = msg;
+                this.triggerOnConnectionStatusChange(false, msg);
+                throw new Error(msg);
+            }
+
+            console.log(`InferenceAdapterVLLandLlamaMUncensored: Grammar-constrained decoding and thinking verified for model "${modelId}" (${this.serverType}).`);
+        }
     }
 
     /**

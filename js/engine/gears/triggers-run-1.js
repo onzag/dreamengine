@@ -281,8 +281,9 @@ export async function runQuestion(engine, character, question, options) {
                 stopAfter: yesNoGrammarObject.stopAfter,
                 stopAt: [],
                 grammar: yesNoGrammarObject.grammar,
-                instructions: "Answer with 'yes' or 'no'",
+                instructions: "Answer with 'yes' or 'no', think shortly and in one sentence only, do not overthink",
                 newSession: true,
+                thinkingEffort: "low",
             });
 
             if (answer.done) {
