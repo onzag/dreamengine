@@ -1933,17 +1933,23 @@ declare type DECharacterQuestionWithoutAskPer = DECharacterQuestionBase & {
 /**
  * Remove inherited routing from each question variant without collapsing its answer type.
  * Chained questions use the parent's character/item context, including for nested chains.
+ * Answer callbacks are optional for chained questions.
  */
 declare type DEChainedQuestion<TQuestion> = TQuestion extends unknown
-    ? Omit<TQuestion, "askPer" | "askPerState"> & { askPer?: never; askPerState?: never }
+    ? Omit<TQuestion, "askPer" | "askPerState" | "onValue" | "onNumber" | "onText">
+        & Partial<Pick<TQuestion, Extract<keyof TQuestion, "onValue" | "onNumber" | "onText">>>
+        & { askPer?: never; askPerState?: never }
     : never;
 
-declare type DEQuestionChain<TAskPer extends DEAskPerTypeCharacters | "object_causants_of_state" | undefined = undefined> = (
-    trigger: DEChainedQuestion<Extract<
+declare type DEQuestionAnswer = { yes_no: boolean; numeric: number; text: string };
+
+/** Returns the parsed answer, or undefined if the question is skipped or its numeric answer is invalid. */
+declare type DEQuestionChain<TAskPer extends DEAskPerTypeCharacters | "object_causants_of_state" | undefined = undefined> = <
+    TQuestion extends DEChainedQuestion<Extract<
         DECharacterYesNoQuestion | DECharacterNumericQuestion | DECharacterTextQuestion,
         [TAskPer] extends [undefined] ? { askPer?: undefined } : { askPer: TAskPer }
     >>,
-) => Promise<void>;
+>(trigger: TQuestion) => Promise<DEQuestionAnswer[TQuestion["type"]] | undefined>;
 
 declare type DECharacterYesNoQuestion =
     | (DECharacterQuestionWithAskPerForCharacters & {

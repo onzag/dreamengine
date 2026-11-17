@@ -1,5 +1,11 @@
 // Question dispatch and potential state causants.
 /** @typedef {import("../index.js").DEngine} DEngine */
+/** @typedef {DECharacterYesNoQuestion | DECharacterTextQuestion | DECharacterNumericQuestion} Question */
+/**
+ * @template {DEAskPerTypeCharacters | "object_causants_of_state" | undefined} TContext
+ * @typedef {DEChainedQuestion<Extract<Question, TContext extends undefined ? {askPer?: undefined} : {askPer: TContext}>>} ContextQuestion
+ */
+/** @typedef {{type: "character", id: string, name: string} | DEStateCauseCausantObject | null} QuestionTarget */
 import { getFamilyBondRelation, getRelationship } from "../util/character-info.js";
 import { isYes, numberGrammar, yesNoGrammar } from "../util/grammar.js";
 import { getHistoryFragment } from "../util/messages.js";
@@ -71,12 +77,14 @@ function determinePotentialCharacterCausants(
 /**
  * @param {DEngine} engine
  * @param {DECompleteCharacterReference} character
- * @param {DECharacterYesNoQuestion | DECharacterTextQuestion | DECharacterNumericQuestion} question
+ * @param {DECharacterYesNoQuestion | DECharacterTextQuestion | DECharacterNumericQuestion | DEChainedQuestion<DECharacterYesNoQuestion | DECharacterTextQuestion | DECharacterNumericQuestion>} question
  * @param {{
  *    lastCycleMessagesInfo?: Awaited<ReturnType<typeof getHistoryFragment>>,
  *    questioningAgent: ReturnType<NonNullable<DEngine["inferenceAdapter"]>["runQuestioningCustomAgentOn"]>,
  *    initializeAgent: () => Promise<void>,
+ *    othersOverride?: [QuestionTarget],
  * }} options
+ * @returns {Promise<boolean | number | string | undefined>} The answer for a chain; undefined for top-level or skipped questions.
  */
 export async function runQuestion(engine, character, question, options) {
     if (!engine.deObject) {
@@ -104,10 +112,13 @@ export async function runQuestion(engine, character, question, options) {
     const numberGrammarObject = numberGrammar(engine);
 
     /**
-     * @type {Array<{type: "character", id: string, name: string} | DEStateCauseCausantObject | null>}
+     * @type {QuestionTarget[]}
      */
     let others = [null];
-    if (question.askPer) {
+    if (options.othersOverride !== undefined) {
+        // A chain keeps exactly the current target, including an explicit null target.
+        others = options.othersOverride;
+    } else if (question.askPer) {
         if (question.askPer === "conversing_or_mentioned_character") {
             // mentioned characters in last cycle info actually includes mentioned in the narration line
             // so it will include them all
@@ -203,22 +214,37 @@ export async function runQuestion(engine, character, question, options) {
     for (const other of uniqueOthers) {
         const otherCharacter = other?.type === "character" ? deObject.characters[other.id] : null;
         const otherObject = other?.type === "object" ? other : null;
-        if (question.askPer && question.askPer !== "object_causants_of_state" && !otherCharacter) {
-            console.warn(`Question has askPer set to ${question.askPer} but other character ${other?.id} not found in DE object, skipping`);
+        if (other?.type === "character" && !otherCharacter) {
+            console.warn(`Question target character ${other.id} not found in DE object, skipping`);
             continue;
         }
         const otherFamilyRelationship = otherCharacter ? getFamilyBondRelation(character, otherCharacter) : null;
         const relationship = otherCharacter ? await getRelationship(deObject, character, otherCharacter) : null;
 
+        /** @param {DEChainedQuestion<DECharacterYesNoQuestion | DECharacterTextQuestion | DECharacterNumericQuestion>} trigger */
+        const chain = (trigger) => runQuestion(engine, character, trigger, {
+            ...options,
+            lastCycleMessagesInfo,
+            othersOverride: [other],
+        });
+
+        // Target selection supplies the context that chained questions omit from askPer.
+        // Narrow at this boundary so templates and callbacks keep their own signatures.
+        const objectQuestion = /** @type {ContextQuestion<"object_causants_of_state">} */ (question);
+        const characterQuestion = /** @type {ContextQuestion<DEAskPerTypeCharacters>} */ (question);
+        const selfQuestion = /** @type {ContextQuestion<undefined>} */ (question);
+        const objectChain = /** @type {DEQuestionChain<"object_causants_of_state">} */ (chain);
+        const characterChain = /** @type {DEQuestionChain<DEAskPerTypeCharacters>} */ (chain);
+        const selfChain = /** @type {DEQuestionChain} */ (chain);
+
         if (question.runIf) {
             let shouldRun = false;
-            if (question.askPer === "object_causants_of_state") {
-                if (!otherObject) continue;
-                shouldRun = await question.runIf(character, otherObject);
-            } else if (question.askPer) {
-                shouldRun = !!otherCharacter && await question.runIf(character, otherCharacter, otherFamilyRelationship);
+            if (otherObject) {
+                shouldRun = !!(await objectQuestion.runIf?.(character, otherObject));
+            } else if (otherCharacter) {
+                shouldRun = !!(await characterQuestion.runIf?.(character, otherCharacter, otherFamilyRelationship));
             } else {
-                shouldRun = await question.runIf(character);
+                shouldRun = !!(await selfQuestion.runIf?.(character));
             }
             if (!shouldRun) {
                 console.warn(`Question has runIf condition that returned false for character ${character.name} and other ${other?.id ?? null}, skipping`);
@@ -231,21 +257,21 @@ export async function runQuestion(engine, character, question, options) {
         let questionText;
         if (typeof question.question === "string") {
             questionText = question.question;
-        } else if (question.askPer === "object_causants_of_state") {
-            if (!otherObject) continue;
-            questionText = await question.question({ char: character, item: `<${otherObject.id}:${otherObject.name}>` });
-        } else if (question.askPer) {
-            if (!otherCharacter) continue;
-            questionText = await question.question({
+        } else if (otherObject) {
+            questionText = await (/** @type {Exclude<DEStringTemplateCharAndItem, string>} */ (objectQuestion.question))({ char: character, item: `<${otherObject.id}:${otherObject.name}>` });
+        } else if (otherCharacter) {
+            questionText = await (/** @type {Exclude<DEStringTemplateCharAndOther, string>} */ (characterQuestion.question))({
                 char: character,
                 other: otherCharacter,
                 otherFamilyRelation: otherFamilyRelationship,
                 otherRelationship: relationship,
             });
         } else {
-            questionText = await question.question({ char: character });
+            questionText = await (/** @type {Exclude<DEStringTemplateCharOnly, string>} */ (selfQuestion.question))({ char: character });
         }
 
+        /** @type {boolean | number | string | undefined} */
+        let output;
         if (question.type === "yes_no") {
             const answer = await options.questioningAgent.next({
                 maxCharacters: 0,
@@ -265,14 +291,14 @@ export async function runQuestion(engine, character, question, options) {
 
             const answerText = answer.value.text.trim().toLowerCase();
             const isYesAnswer = isYes(answerText);
+            output = isYesAnswer;
 
-            if (question.askPer === "object_causants_of_state") {
-                if (!otherObject) continue;
-                await question.onValue(isYesAnswer, character, otherObject.name);
-            } else if (question.askPer) {
-                await question.onValue(isYesAnswer, character, otherCharacter, otherFamilyRelationship, relationship);
+            if (otherObject) {
+                await (/** @type {Extract<ContextQuestion<"object_causants_of_state">, {type: "yes_no"}>} */ (objectQuestion)).onValue?.(isYesAnswer, character, otherObject.name, objectChain);
+            } else if (otherCharacter) {
+                await (/** @type {Extract<ContextQuestion<DEAskPerTypeCharacters>, {type: "yes_no"}>} */ (characterQuestion)).onValue?.(isYesAnswer, character, otherCharacter, otherFamilyRelationship, relationship, characterChain);
             } else {
-                await question.onValue(isYesAnswer, character);
+                await (/** @type {Extract<ContextQuestion<undefined>, {type: "yes_no"}>} */ (selfQuestion)).onValue?.(isYesAnswer, character, selfChain);
             }
         } else if (question.type === "text") {
 
@@ -291,14 +317,14 @@ export async function runQuestion(engine, character, question, options) {
             }
 
             const answerText = answer.value.text.trim();
+            output = answerText;
 
-            if (question.askPer === "object_causants_of_state") {
-                if (!otherObject) continue;
-                await question.onText(answerText, character, otherObject.name);
-            } else if (question.askPer) {
-                await question.onText(answerText, character, otherCharacter, otherFamilyRelationship, relationship);
+            if (otherObject) {
+                await (/** @type {Extract<ContextQuestion<"object_causants_of_state">, {type: "text"}>} */ (objectQuestion)).onText?.(answerText, character, otherObject.name, objectChain);
+            } else if (otherCharacter) {
+                await (/** @type {Extract<ContextQuestion<DEAskPerTypeCharacters>, {type: "text"}>} */ (characterQuestion)).onText?.(answerText, character, otherCharacter, otherFamilyRelationship, relationship, characterChain);
             } else {
-                await question.onText(answerText, character);
+                await (/** @type {Extract<ContextQuestion<undefined>, {type: "text"}>} */ (selfQuestion)).onText?.(answerText, character, selfChain);
             }
         } else if (question.type === "numeric") {
             const answer = await options.questioningAgent.next({
@@ -323,15 +349,19 @@ export async function runQuestion(engine, character, question, options) {
                 console.warn(`Received answer that is not a valid number for numeric question: ${answerText}, skipping onValue callback`);
                 continue;
             }
+            output = parsedNumber;
 
-            if (question.askPer === "object_causants_of_state") {
-                if (!otherObject) continue;
-                await question.onNumber(parsedNumber, character, otherObject.name);
-            } else if (question.askPer) {
-                await question.onNumber(parsedNumber, character, otherCharacter, otherFamilyRelationship, relationship);
+            if (otherObject) {
+                await (/** @type {Extract<ContextQuestion<"object_causants_of_state">, {type: "numeric"}>} */ (objectQuestion)).onNumber?.(parsedNumber, character, otherObject.name, objectChain);
+            } else if (otherCharacter) {
+                await (/** @type {Extract<ContextQuestion<DEAskPerTypeCharacters>, {type: "numeric"}>} */ (characterQuestion)).onNumber?.(parsedNumber, character, otherCharacter, otherFamilyRelationship, relationship, characterChain);
             } else {
-                await question.onNumber(parsedNumber, character);
+                await (/** @type {Extract<ContextQuestion<undefined>, {type: "numeric"}>} */ (selfQuestion)).onNumber?.(parsedNumber, character, selfChain);
             }
+        }
+        // Only a chain has one target and an answer to return to its caller.
+        if (options.othersOverride !== undefined) {
+            return output;
         }
     }
 }

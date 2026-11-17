@@ -15,7 +15,7 @@ import { talk } from "./gears/talk.js";
 import { millisecondsToTime } from "./util/time.js";
 import { regenerateDEFromSavedDE, removeUnnecessaryPropertiesFromDE } from "./util/save-de.js";
 import runAllTriggersFor from "./gears/triggers-run.js";
-import deleteTemp from "./gears/delete-temp.js";
+import deleteTemp from "./gears/temp.js";
 import { giveCharacterRandomClothing } from "./util/clothing.js";
 import { BaseDataManager } from "./data-management/base.js";
 import timeForwardsUsingUntimedMessages from "./gears/time-forwards.js";
@@ -1049,7 +1049,7 @@ export class DEngine {
         } else if (!this.dataManager) {
             throw new Error("Data manager not set");
         }
-        
+
         if (options.moveTimeForwards) {
             await timeForwardsUsingUntimedMessages(this);
         }

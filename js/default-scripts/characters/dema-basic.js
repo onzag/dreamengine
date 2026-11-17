@@ -463,66 +463,52 @@ engine.exports = {
             type: "yes_no",
             question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} been nice towards ${DE.utils.templates.formatCharacterName(info.char, info.char)} and respected its nature as a robot?`,
             askPer: "conversing_character",
-            onValue: (answer, char, other) => {
+            onValue: async (answer, char, other, o, f, chain) => {
                 if (answer) {
                     DE.utils.bonds.shiftBond(char, other, 0.3, 0);
                 } else {
-                    // DE.utils.bonds.shiftBond(char, other, -0.5, 0);
-                }
-            }
-        });
+                    const hasHelped = await chain({
+                        type: "yes_no",
+                        question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} helped ${DE.utils.templates.formatCharacterName(info.char, info.char)} with tasks or shown consideration for its feelings?`,
+                    });
 
-        DE.utils.characters.newTrigger(Dema, {
-            type: "yes_no",
-            question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} helped ${DE.utils.templates.formatCharacterName(info.char, info.char)} with tasks or shown consideration for its feelings?`,
-            askPer: "conversing_character",
-            onValue: (answer, char, other) => {
-                if (answer) {
-                    DE.utils.bonds.shiftBond(char, other, 1, 0);
-                }
-            }
-        });
+                    if (hasHelped) {
+                        DE.utils.bonds.shiftBond(char, other, 1, 0);
+                    } else {
+                        const hasSpentQualityTime = await chain({
+                            type: "yes_no",
+                            question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} spent quality time with ${DE.utils.templates.formatCharacterName(info.char, info.char)} and engaged in meaningful interactions?`,
+                        });
 
-        DE.utils.characters.newTrigger(Dema, {
-            type: "yes_no",
-            question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} spent quality time with ${DE.utils.templates.formatCharacterName(info.char, info.char)} and engaged in meaningful interactions?`,
-            askPer: "conversing_character",
-            onValue: (answer, char, other) => {
-                if (answer) {
-                    DE.utils.bonds.shiftBond(char, other, 0.5, 0);
-                }
-            }
-        });
+                        if (hasSpentQualityTime) {
+                            DE.utils.bonds.shiftBond(char, other, 0.5, 0);
+                        } else {
+                            const hasBeenDismissive = await chain({
+                                type: "yes_no",
+                                question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} been rude or dismissive towards ${DE.utils.templates.formatCharacterName(info.char, info.char)} and its nature as a robot?`,
+                            });
+                            if (hasBeenDismissive) {
+                                DE.utils.bonds.shiftBond(char, other, -1, 0);
+                            } else {
+                                const hasNeglected = await chain({
+                                    type: "yes_no",
+                                    question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} neglected ${DE.utils.templates.formatCharacterName(info.char, info.char)}'s needs or ignored its feelings?`,
+                                });
 
-        DE.utils.characters.newTrigger(Dema, {
-            type: "yes_no",
-            question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} been rude or dismissive towards ${DE.utils.templates.formatCharacterName(info.char, info.char)} and its nature as a robot?`,
-            askPer: "conversing_character",
-            onValue: (answer, char, other) => {
-                if (answer) {
-                    DE.utils.bonds.shiftBond(char, other, -1, 0);
-                }
-            }
-        });
-
-        DE.utils.characters.newTrigger(Dema, {
-            type: "yes_no",
-            question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} neglected ${DE.utils.templates.formatCharacterName(info.char, info.char)}'s needs or ignored its feelings?`,
-            askPer: "conversing_character",
-            onValue: (answer, char, other) => {
-                if (answer) {
-                    DE.utils.bonds.shiftBond(char, other, -1, 0);
-                }
-            }
-        });
-
-        DE.utils.characters.newTrigger(Dema, {
-            type: "yes_no",
-            question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} caused harm or distress to ${DE.utils.templates.formatCharacterName(info.char, info.char)}, either intentionally or unintentionally?`,
-            askPer: "conversing_character",
-            onValue: (answer, char, other) => {
-                if (answer) {
-                    DE.utils.bonds.shiftBond(char, other, -1, 0);
+                                if (hasNeglected) {
+                                    DE.utils.bonds.shiftBond(char, other, -1, 0);
+                                } else {
+                                    const hasCausedHarm = await chain({
+                                        type: "yes_no",
+                                        question: (info) => `Has ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })} caused harm or distress to ${DE.utils.templates.formatCharacterName(info.char, info.char)}, either intentionally or unintentionally?`,
+                                    });
+                                    if (hasCausedHarm) {
+                                        DE.utils.bonds.shiftBond(char, other, -1, 0);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         });
