@@ -470,7 +470,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 }
 
                 // lastly we must check if the observer is insideOrAtop the item recursively
-                const observerExactLocation = getCharacterExactLocation(DE, observer.id);
+                const observerExactLocation = getCharacterExactLocation(DE, observer);
                 if (observerExactLocation.accumulatedItems.some(itemInPath => itemInPath.id === resolvedItem.id)) {
                     return sizeVisibility === "invisible" ? "perceived" : sizeVisibility;
                 }
@@ -586,8 +586,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (!resolvedSlot) throw new Error(`Location slot ${slot} not found`);
             return Object.keys(DE.stateFor).filter(id => {
                 const state = DE.stateFor[id];
-                if (state.deadEnded || !DE.characters[id]) return false;
-                const location = getCharacterExactLocation(DE, id);
+                if ((state.deadEnded && !state.dead) || !DE.characters[id]) return false;
+                const location = getCharacterExactLocation(DE, DE.characters[id]);
                 const slotId = location.itemPath?.[0] === 'slots' ? location.itemPath[1]
                     : location.beingCarriedById ? DE.stateFor[location.beingCarriedById].locationSlot : state.locationSlot;
                 return slotId === resolvedSlot.id;
@@ -747,6 +747,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             const result = [];
             for (const charId of Object.keys(DE.stateFor)) {
                 if (DE.stateFor[charId].location === locationId) {
+                    if (DE.stateFor[charId].deadEnded && !DE.stateFor[charId].dead) continue;
                     const charRef = DE.characters[charId];
                     if (charRef) result.push(charRef);
                 }
@@ -1106,6 +1107,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
             return typeof conversationId === "string" ? DE.database.getConversation(conversationId) : conversationId;
         },
         getAllConversationsAtLocation: async function (locationId) {
+            // this already removes dead ended characters
             const allCharactersAtLocation = DE.utils.world.allCharactersAtLocation(locationId);
             const allConversationIds = new Set();
             for (const character of allCharactersAtLocation) {
@@ -1115,8 +1117,18 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 }
             }
             const conversations = (await Promise.all(Array.from(allConversationIds).map(id => DE.database.getConversation(id)))).filter(c => c !== null);
-            const foundCharacters = allCharactersAtLocation.map(character => character.id);
-            const groupedCharacters = new Set(conversations.flatMap(c => c.participants));
+
+            /**
+             * @param {string} charId 
+             * @returns 
+             */
+            const filterByNotDeadEnded = (charId) => {
+                const charState = DE.stateFor[charId];
+                const isDeadEnded = charState && charState.deadEnded && !charState.dead;
+                return !isDeadEnded;
+            };
+            const foundCharacters = allCharactersAtLocation.map(character => character.id).filter(filterByNotDeadEnded);
+            const groupedCharacters = new Set(conversations.flatMap(c => c.participants).filter(filterByNotDeadEnded));
             return {
                 conversations,
                 foundCharacters,
@@ -1290,7 +1302,13 @@ export const deEngineUtilsFn = (DE, engine) => ({
                         endedConversation.nextConversationIdsPerParticipant[participantId] = addedConversation.id;
                     }
                 }
-                const participantsLeft = endedConversation.participants.filter(p => !participants.includes(p));
+                const participantsLeft = endedConversation.participants.filter(p => {
+                    const isDeadEnded = DE.stateFor[p].deadEnded && !DE.stateFor[p].dead;
+                    if (isDeadEnded) {
+                        return false;
+                    }
+                    return !participants.includes(p);
+                });
 
                 if (participantsLeft.length !== 0) {
                     /** @type {Omit<DEConversation, "id">} */
@@ -1398,6 +1416,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     // must be a ghost participant, skip perspective generation
                     continue;
                 }
+
+                // Yes we want to keep updating the perspective of deadEnded characters
 
                 const isOminicientUser = participantId === DE.user && DE.userMode === "debug";
                 const canReadThoughts = participantChar.canReadThoughts || false;
@@ -1578,6 +1598,20 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 }
             }
 
+            // filter out any dead-ended or dead participants from the newParticipants array
+            newParticipants = newParticipants.filter(p => {
+                const participantChar = DE.stateFor[p];
+                if (!participantChar) {
+                    return false;
+                }
+                const isDeadEnded = (participantChar.deadEnded && !participantChar.dead);
+                if (isDeadEnded) {
+                    return false;
+                }
+
+                return true;
+            });
+
             // now let's calculate the newLocationsOfParticipants based on the newParticipants and their current locations
             for (const participantId of newParticipants) {
                 if (participantId === message.characterId && typeof options.messageCommunicator === "object" && options.messageCommunicator.type !== "inherit") {
@@ -1715,7 +1749,12 @@ export const deEngineUtilsFn = (DE, engine) => ({
 
             messagesToBroadcast.forEach(async m => {
                 // Keys in stateFor are character ids
-                const allCharactersInLocation = Object.keys(DE.stateFor).filter(charId => DE.stateFor[charId].location === m.location);
+                // this will also filter out dead-ended characters but not dead, we need to filter again
+                const allCharactersInLocation = DE.utils.world.allCharactersAtLocation(m.location).filter(char => {
+                    const charState = DE.stateFor[char.id];
+                    return !charState.deadEnded && !charState.dead;
+                }).map(char => char.id);
+
                 const allRelevantConversationIds = new Set();
                 const charactersWithoutConversation = new Set();
                 for (const charId of allCharactersInLocation) {
@@ -1769,8 +1808,13 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (inPerspectiveOf && !observer) throw new Error(`Character ${inPerspectiveOf} not found`);
             if (observer?.id === target.id) return "visible";
 
+            const targetState = DE.stateFor[target.id];
+
+            if (targetState.deadEnded && !targetState.dead) {
+                return "invisible";
+            }
+
             if (observer) {
-                const targetState = DE.stateFor[target.id];
                 const observerState = DE.stateFor[observer.id];
 
                 // if the target and observer are not in the same location, then the target is invisible to the observer
@@ -1782,8 +1826,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
             const sizeVisibility = getSizeVisibility(target.weightKg, observer || null);
 
             if (observer) {
-                const characterLocation = getCharacterExactLocation(DE, target.id);
-                const observerLocation = getCharacterExactLocation(DE, observer.id);
+                const characterLocation = getCharacterExactLocation(DE, target);
+                const observerLocation = getCharacterExactLocation(DE, observer);
 
                 // if our observer is carrying the target or vice-versa, then they can perceive them regardless of size visibility
                 if (characterLocation.beingCarriedById === observer.id || observerLocation.beingCarriedById === target.id) {
@@ -1885,13 +1929,21 @@ export const deEngineUtilsFn = (DE, engine) => ({
             const char1Location = DE.stateFor[char1Ref.id].location;
             const char2Location = DE.stateFor[char2Ref.id].location;
 
+            const char1DeadEnded = DE.stateFor[char1Ref.id].deadEnded && !DE.stateFor[char1Ref.id].dead;
+            const char2DeadEnded = DE.stateFor[char2Ref.id].deadEnded && !DE.stateFor[char2Ref.id].dead;
+
+            if (char1DeadEnded || char2DeadEnded) {
+                console.warn(`Cannot check if alone with because one of the characters has deadEnded and is not dead`);
+                return false;
+            }
+
             if (char1Location !== char2Location) {
                 return false;
             }
 
             for (const memberId of Object.keys(DE.stateFor)) {
                 if (memberId !== char1Ref.id && memberId !== char2Ref.id) {
-                    if (DE.stateFor[memberId].location === char1Location) {
+                    if (DE.stateFor[memberId].location === char1Location && !(DE.stateFor[memberId].deadEnded && !DE.stateFor[memberId].dead)) {
                         return false;
                     }
                 }
@@ -1934,6 +1986,11 @@ export const deEngineUtilsFn = (DE, engine) => ({
 
             for (const memberId of Object.keys(DE.stateFor)) {
                 if (memberId !== char1Ref.id && !excludesAsAssuredArray.includes(memberId) && (options.excludeFamily ? !char1Ref.familyTies[memberId] : true)) {
+                    // here we will consider if they are alive as well
+                    const isDeadEndedOrDead = DE.stateFor[memberId].deadEnded;
+                    if (isDeadEndedOrDead) {
+                        continue;
+                    }
                     if (DE.stateFor[memberId].location === char1Location) {
                         const bondTowards = DE.bonds[char1Ref.id].active.find(b => b.towards === memberId);
                         if (!bondTowards) {
@@ -1964,6 +2021,10 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     continue;
                 }
                 if (DE.stateFor[memberId].location === char1Location) {
+                    const isDeadEndedOrDead = DE.stateFor[memberId].deadEnded;
+                    if (isDeadEndedOrDead) {
+                        continue;
+                    }
                     // familyTies keyed by character id
                     const familyTie = char1Ref.familyTies[memberId];
                     if (familyTie) {
@@ -2070,9 +2131,12 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 console.warn(`Character reference for ${char} not found when checking if gone`);
                 return false;
             }
-            const exbonds = DE.bonds[charRef.id]?.ex;
-            if (!exbonds) return false;
-            return exbonds.length > 0;
+            const charState = DE.stateFor[charRef.id];
+            if (!charState) {
+                console.warn(`Character state for ${charRef.name} not found when checking if gone`);
+                return false;
+            }
+            return charState.deadEnded;
         },
         isIndoors(char) {
             const charRef = resolveCharacter(DE, char);
@@ -2120,15 +2184,12 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 return "";
             }
 
+            const isCharDeadEnded = DE.stateFor[charRef.id].deadEnded && !DE.stateFor[charRef.id].dead;
             // If char is currently at povChar's location, povChar knows where char is
-            if (DE.stateFor[charRef.id].location === DE.stateFor[povRef.id].location) {
+            if (!isCharDeadEnded && DE.stateFor[charRef.id].location === DE.stateFor[povRef.id].location) {
                 return DE.stateFor[charRef.id].location;
             }
 
-            const currentState = DE.stateFor[povRef.id];
-            if (currentState.seenCharacters.some(seen => seen.id === charRef.id)) {
-                return currentState.location;
-            }
             const perspective = await DE.database.getLatestPerspectiveWithCharacter(povRef.id, charRef.id);
             return perspective?.ownLocationId ?? "";
         },
@@ -2518,6 +2579,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
             }
             const currentLocation = DE.world.currentLocation;
             const socialGroup = DE.bonds[charRef.id].active.filter(bond => {
+                const isDeadEnded = DE.stateFor[bond.towards].deadEnded && !DE.stateFor[bond.towards].dead;
+                if (isDeadEnded) return false;
                 return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
             }).map(bond => bond.towards);
             // bond.towards is a character id; stateFor keyed by id
@@ -2534,9 +2597,15 @@ export const deEngineUtilsFn = (DE, engine) => ({
             const conversation = await DE.database.getConversation(conversationId);
             if (!conversation) return [];
             if (minBondLevel === -100 && maxBondLevel === 100 && min2BondLevel === 0 && max2BondLevel === 100) {
-                return conversation.participants.filter(memberId => memberId !== charRef.id);
+                return conversation.participants.filter(memberId => {
+                    const isDeadEnded = DE.stateFor[memberId].deadEnded && !DE.stateFor[memberId].dead;
+                    if (isDeadEnded) return false;
+                    return memberId !== charRef.id;
+                });
             }
             const socialGroup = DE.bonds[charRef.id].active.filter(bond => {
+                const isDeadEnded = DE.stateFor[bond.towards].deadEnded && !DE.stateFor[bond.towards].dead;
+                if (isDeadEnded) return false;
                 return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
             }).map(bond => bond.towards);
             return conversation.participants.filter(memberId => socialGroup.includes(memberId));
@@ -2549,7 +2618,11 @@ export const deEngineUtilsFn = (DE, engine) => ({
             }
             const currentLocation = DE.world.currentLocation;
             const socialGroup = DE.bonds[charRef.id].active.map(bond => bond.towards);
-            const presentSocialGroup = socialGroup.filter(memberId => DE.stateFor[memberId].location === currentLocation);
+            const presentSocialGroup = socialGroup.filter(memberId => {
+                const isDeadEnded = DE.stateFor[memberId].deadEnded && !DE.stateFor[memberId].dead;
+                if (isDeadEnded) return false;
+                return DE.stateFor[memberId].location === currentLocation;
+            });
             return list.map(member => typeof member === "string" ? member : member.id)
                 .filter(id => !presentSocialGroup.includes(id));
         },
@@ -3182,23 +3255,84 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
         })).trim());
     if (deadEndPotential) {
         console.log(`State ${stateName} on character ${character.name} triggers dead-end, the character will now be removed from the story.`);
-        deObject.stateFor[character.id].deadEnded = true;
-        deObject.stateFor[character.id].deadEndReason = deadEndPotential;
-        if (characterStateDescription.deadEndIsDeath) {
-            console.log(`Character ${character.name} has died due to state ${stateName}.`);
-            deObject.stateFor[character.id].dead = true;
-        }
-
-        console.log(`The user character ${character.name} has reached a dead-end: ${deadEndPotential}, game over.`);
 
         if (characterStateDescription.deadEndIsDeath) {
             await makeCharacterConversationStoryMasterMessage(deObject, stateName, characterStateDescription, character, `${characterName} has died.\n\n${deadEndPotential}.`);
         } else {
-            await makeCharacterConversationStoryMasterMessage(deObject, stateName, characterStateDescription, character, `${characterName} is gone.\n\n${deadEndPotential}.`);
+            await makeCharacterConversationStoryMasterMessage(deObject, stateName, characterStateDescription, character, `${characterName} is forever gone.\n\n${deadEndPotential}.`);
         }
 
+        markCharacterAsDeadEnded(deObject, character, deadEndPotential, characterStateDescription.deadEndIsDeath || false);
+    }
+}
+
+/**
+ * 
+ * @param {DEObject} deObject 
+ * @param {DECompleteCharacterReference} character 
+ * @param {string} reason 
+ * @param {boolean} isDeath 
+ */
+export function markCharacterAsDeadEnded(deObject, character, reason, isDeath) {
+    deObject.stateFor[character.id].deadEnded = true;
+    deObject.stateFor[character.id].dead = isDeath;
+    deObject.stateFor[character.id].deadEndReason = reason;
+
+    if (deObject.user && deObject.user === character.id) {
+        console.log(`The user character ${character.name} has reached a dead-end: ${reason}, game over.`);
         markGameOver(deObject);
     }
+
+    if (!isDeath && deObject.stateFor[character.id].location) {
+        console.log(`Character ${character.name} has reached a dead-end: ${reason}`);
+        /**
+         * Removes the character from any item list.
+         * @param {DEItem[]} items 
+         */
+        const removeCharFromAnyItemList = (items) => {
+            for (const item of items) {
+                if (item.containingCharacters.some(c => c.id === character.id)) {
+                    item.containingCharacters = item.containingCharacters.filter((char) => char.id !== character.id);
+                }
+                if (item.ontopCharacters.some(c => c.id === character.id)) {
+                    item.ontopCharacters = item.ontopCharacters.filter((char) => char.id !== character.id);
+                }
+                removeCharFromAnyItemList(item.containing);
+                removeCharFromAnyItemList(item.ontop);
+            }
+        };
+
+        // yes the removal only happens at the current slot because that is exactly where the character should be
+        // if it is somewhere else that is up to some state corruption more than anything else
+        removeCharFromAnyItemList(deObject.world.locations[deObject.stateFor[character.id].location].slots[deObject.stateFor[character.id].locationSlot].items);
+
+        for (const charId in deObject.characters) {
+            const otherCharacterState = deObject.stateFor[charId];
+            if (otherCharacterState.location === deObject.stateFor[character.id].location && otherCharacterState.locationSlot === deObject.stateFor[character.id].locationSlot) {
+                removeCharFromAnyItemList(otherCharacterState.carrying);
+                removeCharFromAnyItemList(otherCharacterState.wearing);
+                if (otherCharacterState.carryingCharactersDirectly.some(c => c.id === character.id)) {
+                    otherCharacterState.carryingCharactersDirectly = otherCharacterState.carryingCharactersDirectly.filter((c) => c.id !== character.id);
+                }
+            }
+        }
+    } else {
+
+    }
+
+    deObject.party = deObject.party.filter((charId) => charId !== character.id);
+
+    const socialBonds = deObject.bonds;
+    for (const charName in socialBonds) {
+        const charBonds = socialBonds[charName];
+        const existingBond = charBonds.active.find((bond) => bond.towards === character.id);
+        if (existingBond) {
+            charBonds.active = charBonds.active.filter((bond) => bond.towards !== character.id);
+            charBonds.ex.push(existingBond);
+        }
+    }
+
+    // the dead ended characters will actually remain in the conversation that still occurs
 }
 
 /**

@@ -10,6 +10,8 @@ import { BaseInferenceAdapter } from './base.js';
 import { emotions } from '../util/emotions.js';
 import { generateGrammarForVoice } from '../util/grammar.js';
 import { parseDialogue, parseNarration } from '../util/narration-and-dialogue.js';
+import { whatIsWeatherLikeForCharacter } from '../util/character-info.js';
+import { makeTimestamp } from '../util/messages.js';
 
 const DUMMY_SENTENCES = [
     "The wind carried whispers of forgotten names across the empty plaza.",
@@ -1350,7 +1352,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      * @param {DEObject} DE
      * @param {DECompleteCharacterReference} character
      * @param {{
-     *   messages: Array<{message: string, author: string, storyMaster: boolean}>,
+     *   messages: Array<{message: string, author: string, storyMaster: boolean, unprocessed: boolean}>,
      *   perspective: DEPerspective,
      *   narrativeEffects: string[],
      *   followingAction?: string|null,
@@ -1364,6 +1366,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      *   forcedMode: string|null,
      *   forcedSounds: Array<string>,
      *   mute: boolean,
+     *   additionalInjections: Array<string>,
      * }} options
      * @returns {Promise<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>}
      */
@@ -1375,7 +1378,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
         const includeThirdPersonBeat = options.type === "dialogue" && Math.random() >= 0.5;
         const nextMessageInstructions = buildNextMessageInstructions(character.name, options, includeThirdPersonBeat);
 
-        const { system: systemPrompt, user: userPrompt } = this.buildPrompt(DE, character, {
+        const { system: systemPrompt, user: userPrompt } = await this.buildPrompt(DE, character, {
             characterRules: await Promise.all(Object.values(character.characterRules).map(rule => typeof rule.rule === "string" ? rule.rule : rule.rule({
                 char: character,
             }))),
@@ -1396,6 +1399,8 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
             primaryEmotion: options.primaryEmotion,
             emotionalRange: options.emotionalRange,
             mute: options.mute,
+            additionalInjections: options.additionalInjections,
+            perspective: options.perspective,
         });
 
         const nameFormatted = DE.utils.templates.formatCharacterName(character.name);
@@ -1480,14 +1485,14 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      * @param {{
      *   system: string,
      *   contextInfoBefore: string|null,
-     *   messages: Array<{message: string, author: string, storyMaster: boolean}>,
+     *   messages: Array<{message: string, author: string, storyMaster: boolean, unprocessed: boolean}>,
      *   contextInfoAfter: string|null,
-     *   remarkLastStoryFragmentForAnalysis?: boolean,
+     *   remarkUnprocessedMessagesForAnalysis?: boolean,
      * }} options
      * @returns {import('./base.js').QuestionAgentGeneratorResponse}
      */
     async *runQuestioningCustomAgentOn(gear, options) {
-        const { system, contextInfoBefore, messages, contextInfoAfter, remarkLastStoryFragmentForAnalysis } = options;
+        const { system, contextInfoBefore, messages, contextInfoAfter, remarkUnprocessedMessagesForAnalysis } = options;
 
         await this.ensureInitialized();
 
@@ -1499,16 +1504,14 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
 
         // Prepare the context once, for the first user turn of each conversation.
         let userTrail;
-        if (!remarkLastStoryFragmentForAnalysis) {
+        if (!remarkUnprocessedMessagesForAnalysis) {
             const messagesFormatted = messages.map(m => m.message).join("\n\n");
             const story = messagesFormatted ? `# Story to Analyze:\n\n${messagesFormatted}\n\n` : "";
             userTrail = before + story + after;
         } else {
-            // Split at the last message authored by a character (not the story
-            // master). Everything added by the story master is kept as the last
-            // fragment to analyze.
+            // Split at the last unprocessed message for analysis, so the questioning agent can focus on the most recent fragment while still having access to the previous story context.
             let lastCurrentMessageIndex = messages.length - 1;
-            while (lastCurrentMessageIndex >= 0 && messages[lastCurrentMessageIndex].storyMaster) {
+            while (lastCurrentMessageIndex >= 0 && !messages[lastCurrentMessageIndex].unprocessed) {
                 lastCurrentMessageIndex--;
             }
             const lastMessage = messages.slice(lastCurrentMessageIndex, messages.length);
@@ -1603,17 +1606,19 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      *   lore: string,
      *   likes: Array<string>,
      *   dislikes: Array<string>,
-     *   messages: Array<{message: string, author: string, storyMaster: boolean}>,
+     *   messages: Array<{message: string, author: string, storyMaster: boolean, unprocessed: boolean}>,
      *   nextMessageInstructions: string,
      *   narrativeEffects: Array<string>,
      *   followingAction: string|null,
      *   primaryEmotion: DEEmotionNames,
      *   emotionalRange: Array<DEEmotionNames>,
      *   mute: boolean,
+     *   additionalInjections: Array<string>,
+     *   perspective: DEPerspective,
      * }} options
-     * @returns {{system: string, user: string}} the system and user prompts
+     * @returns {Promise<{system: string, user: string}>} the system and user prompts
      */
-    buildPrompt(DE, character, options) {
+    async buildPrompt(DE, character, options) {
         const { description, externalDescription, relationships, states, lore, characterRules, worldRules, narrativeEffects, followingAction } = options;
 
         const expressiveActiveStates = states.filter(s => s.expressive);
@@ -1701,7 +1706,19 @@ Two characters or items can have the same name, but have different identifiers.`
         if (lore && lore.trim().length > 0) {
             system += `\n\n# Lore:\n\n${lore}`;
         }
-        
+
+        const time = makeTimestamp(DE, options.perspective.timeOfPerspective);
+
+        system += `\n\n# Time:\n\nThe current exact time is ${time}, ${nameFormatted} needs to see it in a clock or remember from memory to know it.`;
+
+        const locationName = options.perspective.ownLocationName;
+        const locationDescription = options.perspective.ownLocation.description;
+
+        const locationSlotName = options.perspective.ownLocationSlotName;
+        const locationSlotDescription = options.perspective.ownLocation.slots.find(s => s.slotId === options.perspective.ownLocationSlotId)?.description || "";
+
+        system += `\n\n# Location:\n\n${nameFormatted} is currently in <${options.perspective.ownLocation.locationId}:${locationName}>. ${locationDescription}\n\nSpecifically at <${options.perspective.ownLocationSlotId}:${locationSlotName}>: ${locationSlotDescription}`;
+
         let user = `# Story To Continue:`;
         for (const msg of options.messages) {
             // author and storymaster are irrelevant
@@ -1713,7 +1730,11 @@ Two characters or items can have the same name, but have different identifiers.`
         for (const state of expressiveActiveStates) {
             user += `\n- ` + `${nameFormatted} is ` + state.expressive + (state.injection ? `: ` + state.injection : ``);
         }
-        user += `\n- ${nameFormatted} is currently primarily feeling ${options.primaryEmotion}, and showcases the following emotional range: ${options.emotionalRange.join(", ")}`;
+        if (options.emotionalRange.length > 0) {
+            user += `\n- ${nameFormatted} should feel and act ${options.primaryEmotion}, and showcases the following emotional range: ${options.emotionalRange.join(", ")}`;
+        } else {
+            user += `\n- ${nameFormatted} should feel and act ${options.primaryEmotion}.`;
+        }
 
         if (options.mute) {
             if (character.voice.mute) {
@@ -1730,6 +1751,11 @@ Two characters or items can have the same name, but have different identifiers.`
         } else if (character.blindness === "partial-good") {
             user += `\n- ${nameFormatted} is partially blind but still can make some details.`;
         }
+        if (options.additionalInjections && options.additionalInjections.length > 0) {
+            for (const injection of options.additionalInjections) {
+                user += `\n- ${injection}`;
+            }
+        }
 
         if (narrativeEffects.length > 0) {
             user += `\n\n# When narrating ENSURE that:\n`;
@@ -1738,13 +1764,91 @@ Two characters or items can have the same name, but have different identifiers.`
             user += `\n- ` + effect;
         }
 
+        const weatherLike = await whatIsWeatherLikeForCharacter(DE, character);
+        if (weatherLike) {
+            user += `\n- ${weatherLike}.`;
+        }
+
+        if (character.canReadThoughts) {
+            user += `\n- ${nameFormatted} can read the thoughts of other characters as they are a psychic.`;
+        }
+
+        /**
+         * @type {Record<string, DEItemInPerspective[]>}
+         */
+        const allClocksAndCalendars = {};
+
+        /**
+         * @param {DEItemInPerspective[]} items 
+         */
+        const findClocks = (items) => {
+            for (const item of items) {
+                if (item.otherProperties && (item.otherProperties.isClock || item.otherProperties.isCalendar)) {
+                    const timeFromClock = makeTimestamp(
+                        DE,
+                        item.otherProperties.clockOrCalendarStuckAt || options.perspective.timeOfPerspective,
+                        false,
+                        {
+                            clockType: item.otherProperties.isClock || "no",
+                            calendarType: item.otherProperties.isCalendar || "no",
+                        }
+                    );
+
+                    allClocksAndCalendars[timeFromClock] = allClocksAndCalendars[timeFromClock] || [];
+                    allClocksAndCalendars[timeFromClock].push(item);
+                }
+                if (item.containing) {
+                    findClocks(item.containing);
+                }
+                if (item.ontop) {
+                    findClocks(item.ontop);
+                }
+            }
+        }
+
+        for (const slot of options.perspective.ownLocation.slots) {
+            findClocks(slot.items);
+        }
+        for (const character of options.perspective.perspectiveCharacters) {
+            if (character.perceptionForm !== "invisible") {
+                findClocks(character.wearingItems);
+                findClocks(character.carryingItems);
+            }
+        }
+
+        let hasClock = false;
+        let hasCalendar = false;
+        for (const clockTime in allClocksAndCalendars) {
+            const deviceList = allClocksAndCalendars[clockTime];
+            const firstDevice = deviceList[0];
+            if (!firstDevice) {
+                continue;
+            }
+            hasClock = !!firstDevice.otherProperties?.isClock;
+            hasCalendar = !!firstDevice.otherProperties?.isCalendar;
+            const giveThe = firstDevice.otherProperties?.isClock && firstDevice.otherProperties?.isCalendar ? "the time and date" : firstDevice.otherProperties?.isClock ? "the time" : "the date";
+            user += `\n- The following devices are visible/accessible to ${nameFormatted} and give ${giveThe} of "${clockTime}": ${deviceList.map(c => "<" + c.ids.map(id => id).join(",") + ":" + c.name + ">").join(" ")}; `;
+        }
+
+        if (!hasClock) {
+            user += `\n- ${nameFormatted} does not have any clocks visible/accessible to them, so they must rely on their own memory or perception to determine the current time.`;
+        }
+
+        if (!hasCalendar) {
+            user += `\n- ${nameFormatted} does not have any calendars visible/accessible to them, so they must rely on their own memory or perception to determine the current date.`;
+        }
+
+        // TODO we should have item interactions eg. right now clocks and calendars are native, but who knows what other items might do
+        // so we whould grab all perspective items, and check if they have any information extra added, because items are serializable, we need to use something
+        // like class or something to grab some general DE item interaction manager that adds extra information to the prompt
+
         if (followingAction) {
             user += `\n\n# IMPORTANT The following action must be executed:\n\n${followingAction}`;
         }
 
         user += `\n\n${options.nextMessageInstructions}`;
 
-        return {system, user};
+        return { system, user };
     }
 
     /**

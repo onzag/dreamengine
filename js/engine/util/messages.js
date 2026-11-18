@@ -2,26 +2,37 @@
  * @param {DEObject} deObject
  * @param {DETimeDescription | null} time
  * @param {boolean} includeNowLabel
+ * Rough clocks show only the hour; default and precise clocks include minutes.
+ * Calendar types ending in "-only" include only that date component.
+ * "no" omits the corresponding portion; omitting both returns an empty string.
+ * @param {{
+ *    clockType?: "default" | "rough" | "precise" | "no",
+ *    calendarType?: "default" | "full" | "year-only" | "month-only" | "day-only" | "no",
+ * }} options
  */
-export function makeTimestamp(deObject, time, includeNowLabel = true) {
+export function makeTimestamp(deObject, time, includeNowLabel = true, options = {}) {
     if (!time) {
         return "Now";
     }
     if (includeNowLabel && deObject?.currentTime.time === time.time) {
         return "Now";
     }
+    if (options.clockType === "no" && options.calendarType === "no") {
+        return "";
+    }
     // We want something like; Monday, June 5th, 2023 at 3:45 PM
     // we expect utc time in milliseconds
     // even in the formatting
     const date = new Date(time.time);
+    const fullCalendar = !options.calendarType || options.calendarType === "default" || options.calendarType === "full";
     // so we want to ensure offset 0
     return date.toLocaleString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: 'numeric',
+        weekday: fullCalendar ? 'long' : undefined,
+        year: fullCalendar || options.calendarType === "year-only" ? 'numeric' : undefined,
+        month: fullCalendar || options.calendarType === "month-only" ? 'long' : undefined,
+        day: fullCalendar || options.calendarType === "day-only" ? 'numeric' : undefined,
+        hour: options.clockType === "no" ? undefined : 'numeric',
+        minute: options.clockType === "rough" || options.clockType === "no" ? undefined : 'numeric',
         hour12: true,
         timeZone: 'UTC',
     });
@@ -272,7 +283,7 @@ export async function* getHistory(engine, character, options) {
                 emotion: null,
                 emotionalRange: null,
                 untimed: true,
-                processed: false,
+                processed: true,
                 onlySeenByCharacterIdNames: null,
                 perspectiveId: null,
             };
@@ -385,7 +396,7 @@ export async function* getHistory(engine, character, options) {
                     emotion: null,
                     emotionalRange: null,
                     untimed: true,
-                    processed: false,
+                    processed: true,
                     onlySeenByCharacterIdNames: null,
                     perspectiveId: null,
                 };
@@ -479,8 +490,8 @@ function convertContentToSimpleList(
 }
 
 /**
- * @param {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, storyMaster: boolean, characterId: string | null, conversationId: string | null, onlySeenByCharacterIdNames: string[] | null}>} messages
- * @returns {Array<{message: string, author: string, storyMaster: boolean}>}
+ * @param {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, storyMaster: boolean, characterId: string | null, conversationId: string | null, onlySeenByCharacterIdNames: string[] | null, unprocessed: boolean}>} messages
+ * @returns {Array<{message: string, author: string, storyMaster: boolean, unprocessed: boolean}>}
  */
 export function convertMessagesToSimpleList(messages) {
     const accumulatedLists = messages.map(msg => {
@@ -489,6 +500,7 @@ export function convertMessagesToSimpleList(messages) {
                 message,
                 author: msg.name,
                 storyMaster: msg.storyMaster,
+                unprocessed: msg.unprocessed,
             };
         })
     });
@@ -516,7 +528,7 @@ export function convertMessagesToSimpleList(messages) {
  *   enrichedMode?: boolean,
  *   perspective: "character" | "story-master"
  * }} options
- * @returns {Promise<{messages: Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null, onlySeenByCharacterIdNames: string[] | null}>, conversingCharacters: string[], mentionedCharacters: string[], lastPerspectiveId: string | null}>}
+ * @returns {Promise<{messages: Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null, onlySeenByCharacterIdNames: string[] | null, unprocessed: boolean}>, conversingCharacters: string[], mentionedCharacters: string[], lastPerspectiveId: string | null}>}
  */
 export async function getHistoryFragment(engine, character, options) {
     if (!engine.deObject) {
@@ -531,7 +543,7 @@ export async function getHistoryFragment(engine, character, options) {
     let generator = await allHistory.next();
 
     /**
-     * @type {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null, onlySeenByCharacterIdNames: string[] | null}>}
+     * @type {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>, name: string, characterId: string | null, storyMaster: boolean, id: string | null, conversationId: string | null, onlySeenByCharacterIdNames: string[] | null, unprocessed: boolean}>}
      */
     let messagesToAdd = [];
     /**
@@ -589,6 +601,7 @@ export async function getHistoryFragment(engine, character, options) {
                     id: generator.value.id,
                     conversationId: generator.value.conversationId,
                     onlySeenByCharacterIdNames: generator.value.onlySeenByCharacterIdNames,
+                    unprocessed: !generator.value.processed,
                 });
                 
                 if (generator.value.characterId) {

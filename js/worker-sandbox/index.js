@@ -8,9 +8,7 @@
 import { SQLiteBridge } from "../engine/data-management/sqlite-bridge.js";
 import { createDatabaseController } from "./database-controller.js";
 import { INFERENCE_ADAPTERS } from "../engine/inference/all.js";
-import { getInternalDescriptionOfCharacter, getRelationship, getSysPromptForCharacter } from "../engine/util/character-info.js";
-import { getHistory } from "../engine/util/messages.js";
-import { VOICE_ADAPTERS } from "../engine/voice/all.js";
+import { getRelationship } from "../engine/util/character-info.js";
 import { isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from "../script-generation/base.js";
 
 // Catch truly unexpected things (runtime errors after init)

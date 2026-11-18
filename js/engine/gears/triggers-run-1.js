@@ -237,8 +237,14 @@ export async function runQuestion(engine, character, question, options) {
         const characterChain = /** @type {DEQuestionChain<DEAskPerTypeCharacters>} */ (chain);
         const selfChain = /** @type {DEQuestionChain} */ (chain);
 
-        if (question.runIf) {
-            let shouldRun = false;
+        
+        let shouldRun = true;
+        if (shouldRun && !question.runAfterDeath && engine.deObject.stateFor[character.id]?.dead) {
+            shouldRun = false;
+            console.warn(`Question has runAfterDeath set to false and character ${character.name} is dead, skipping`);
+        }
+        if (question.runIf && shouldRun) {
+            shouldRun = false;
             if (otherObject) {
                 shouldRun = !!(await objectQuestion.runIf?.(character, otherObject));
             } else if (otherCharacter) {
@@ -248,8 +254,11 @@ export async function runQuestion(engine, character, question, options) {
             }
             if (!shouldRun) {
                 console.warn(`Question has runIf condition that returned false for character ${character.name} and other ${other?.id ?? null}, skipping`);
-                continue;
             }
+        }
+
+        if (!shouldRun) {
+            continue;
         }
 
         await options.initializeAgent();

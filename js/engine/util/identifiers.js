@@ -135,6 +135,10 @@ function findACharacterWithTheName(DE, nameLower, characterIdThatEmittedTheIdent
     for (const characterId in DE.stateFor) {
         const character = DE.characters[characterId];
         if (character && DE.stateFor[characterId].location === DE.world.currentLocation) {
+            const isDeadEnded = DE.stateFor[characterId].deadEnded && !DE.stateFor[characterId].dead;
+            if (isDeadEnded) {
+                continue;
+            }
             allCharacterAtLocation.push(character);
         }
     }

@@ -117,6 +117,8 @@ engine.exports = {
                 sounds: {},
             }),
             script: engine.script,
+            // big number for testing purposes
+            thinkBeforeAct: 1,
             attention: 1,
             clothing: "custom",
             name: "Dema",

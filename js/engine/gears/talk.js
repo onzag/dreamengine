@@ -1,11 +1,13 @@
 import { debug } from "../debug.js";
 import { DEngine } from "../index.js";
-import { getCharacterSurroundingInformation, getSysPromptForCharacter } from "../util/character-info.js";
+import { getCharacterSurroundingInformation, getExternalDescriptionOfCharacter, getInternalDescriptionOfCharacter } from "../util/character-info.js";
 import { emotions } from "../util/emotions.js";
 import { createGrammarFromList, generateGrammarForVoice, parseListFromGrammarResponse } from "../util/grammar.js";
 import { convertMessagesToSimpleList, getHistoryFragment, getNameIdentificationForOneCharacterTowardsAnother } from "../util/messages.js";
+import { getPerspective } from "../util/perspective.js";
 import { minimizeSoundDescription, minimizeModeDescription } from "../util/voice.js";
 import { mergeVoicesFrom, reweightVoiceForEmotion, selectForcedVoiceEffects } from "../util/voice.js";
+import { markCharacterAsDeadEnded } from "../utils.js";
 
 /**
  * @param {DEngine} engine 
@@ -52,15 +54,14 @@ export async function talk(engine, character, options) {
     }
 
     const ourCharacterName = getNameIdentificationForOneCharacterTowardsAnother(engine.deObject, character, character);
-
-    const characterSystemPrompt = await getSysPromptForCharacter(engine, character.id);
-    const characterCanSee = await getCharacterSurroundingInformation(engine.deObject, character.id);
+    const internalDescription = await getInternalDescriptionOfCharacter(engine.deObject, character.id);
+    const externalDescription = await getExternalDescriptionOfCharacter(engine.deObject, character.id, character.id, false, false);
 
     /**
      * @type {string[]}
      */
     const effects = [];
-    let actions = (await Promise.all([...characterSystemPrompt.internalDescription.actions, ...options.injectedActions].map(async (action) => {
+    let actions = (await Promise.all([...internalDescription.actions, ...options.injectedActions].map(async (action) => {
         if (typeof action.probability === "number" && Math.random() > action.probability) {
             return null;
         }
@@ -119,7 +120,7 @@ export async function talk(engine, character, options) {
      * @type {DEEmotionNames | null}
      */
     let primaryEmotion = null;
-    let primaryEmotionDominance = 0;
+    let primaryEmotionDominance = -1;
     /**
      * @type {DEEmotionNames[]}
      */
@@ -142,7 +143,45 @@ export async function talk(engine, character, options) {
      */
     const activeStates = [];
 
-    for (const state of characterSystemPrompt.internalDescription.activeStates) {
+    for (const action of actions) {
+        if (action.actionObject.primaryEmotion) {
+            if ((action.actionObject.dominance || 0) > primaryEmotionDominance) {
+                primaryEmotion = action.actionObject.primaryEmotion;
+                primaryEmotionDominance = action.actionObject.dominance || 0;
+                emotionalRange = [];
+            } else if (action.actionObject.dominance === primaryEmotionDominance) {
+                emotionalRange.push(action.actionObject.primaryEmotion);
+            }
+        }
+
+        if (action.actionObject.emotionalRange) {
+            if ((action.actionObject.dominance || 0) > primaryEmotionDominance) {
+                emotionalRange = [...action.actionObject.emotionalRange];
+            } else if ((action.actionObject.dominance || 0) === primaryEmotionDominance) {
+                emotionalRange = emotionalRange.concat(action.actionObject.emotionalRange.filter((emotion) => !emotionalRange.includes(emotion)));
+            }
+        }
+
+        if (action.actionObject.voice && (voiceDominance < (action.actionObject.dominance || 0) || !baseVoice)) {
+            baseVoice = action.actionObject.voice;
+            voiceDominance = action.actionObject.dominance || 0;
+        } else if (action.actionObject.voice && voiceDominance === (action.actionObject.dominance || 0) && baseVoice) {
+            mergeVoicesFrom(baseVoice, action.actionObject.voice);
+        }
+
+        if (action.actionObject.narrativeEffect && narrativeEffectsDominance < (action.actionObject.dominance || 0)) {
+            narrativeEffects.push(typeof action.actionObject.narrativeEffect === "string" ? action.actionObject.narrativeEffect : await action.actionObject.narrativeEffect({
+                char: character,
+            }));
+            narrativeEffectsDominance = action.actionObject.dominance || 0;
+        } else if (action.actionObject.narrativeEffect && narrativeEffectsDominance === (action.actionObject.dominance || 0)) {
+            narrativeEffects.push(typeof action.actionObject.narrativeEffect === "string" ? action.actionObject.narrativeEffect : await action.actionObject.narrativeEffect({
+                char: character,
+            }));
+        }
+    }
+
+    for (const state of internalDescription.activeStates) {
         activeStates.push({
             state: state.applyingState.state,
             dominance: state.stateInfo.dominance,
@@ -179,67 +218,18 @@ export async function talk(engine, character, options) {
         }
     }
 
-    for (const action of actions) {
-        if (action.action.action.primaryEmotion) {
-            let stateDominance = 0;
-            if (action.action.stateInfo) {
-                stateDominance = action.action.stateInfo.dominance;
-                if (action.action.stateInfo.relieving && typeof action.action.stateInfo.dominanceAfterRelief === "number") {
-                    stateDominance = action.action.stateInfo.dominanceAfterRelief;
-                }
-            } else {
-                // a very high dominance for actions that don't have state info, so they can easily override emotions from states, but not from other actions with state info
-                stateDominance = 50;
-            }
-
-            if (action.action.action.primaryEmotion) {
-                if (stateDominance > primaryEmotionDominance) {
-                    primaryEmotion = action.action.action.primaryEmotion;
-                    primaryEmotionDominance = stateDominance;
-                    emotionalRange = [];
-                } else if (stateDominance === primaryEmotionDominance) {
-                    emotionalRange.push(action.action.action.primaryEmotion);
-                }
-            }
-
-            if (action.action.action.emotionalRange) {
-                if (stateDominance > primaryEmotionDominance) {
-                    emotionalRange = [...action.action.action.emotionalRange];
-                } else if (stateDominance === primaryEmotionDominance) {
-                    emotionalRange = emotionalRange.concat(action.action.action.emotionalRange.filter((emotion) => !emotionalRange.includes(emotion)));
-                }
-            }
-
-            if (action.action.action.voice && (voiceDominance < stateDominance || !baseVoice)) {
-                baseVoice = action.action.action.voice;
-                voiceDominance = stateDominance;
-            } else if (action.action.action.voice && voiceDominance === stateDominance && baseVoice) {
-                mergeVoicesFrom(baseVoice, action.action.action.voice);
-            }
-
-            if (action.action.action.narrativeEffect && narrativeEffectsDominance < stateDominance) {
-                narrativeEffects.push(typeof action.action.action.narrativeEffect === "string" ? action.action.action.narrativeEffect : await action.action.action.narrativeEffect({
-                    char: character,
-                    causes: action.action.applyingState?.causes || null,
-                }));
-                narrativeEffectsDominance = stateDominance;
-            } else if (action.action.action.narrativeEffect && narrativeEffectsDominance === stateDominance) {
-                narrativeEffects.push(typeof action.action.action.narrativeEffect === "string" ? action.action.action.narrativeEffect : await action.action.action.narrativeEffect({
-                    char: character,
-                    causes: action.action.applyingState?.causes || null,
-                }));
-            }
-        }
-
-        if (action.action.action.emotionalRange) {
-            emotionalRange = emotionalRange.concat(action.action.action.emotionalRange.filter((emotion) => !emotionalRange.includes(emotion)));
-        }
-    }
-
     if (!primaryEmotion && emotionalRange.length > 0) {
         // pick one emotion at random
         primaryEmotion = emotionalRange[Math.floor(Math.random() * emotionalRange.length)];
     }
+
+    const allMessagesForStory = await getHistoryFragment(engine, character, {
+        includeDebugMessages: false,
+        includeRejectedMessages: false,
+        msgLimit: "ALL",
+        useExponentialShrinkingSelectiveContextWindowStrategy: true,
+        perspective: "character",
+    });
 
     if (!primaryEmotion) {
         const systemPromptForEmotion = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
@@ -249,17 +239,11 @@ export async function talk(engine, character, options) {
                 "You must answer with a list of emotions that is comma separated, and the first emotion in the list will be the primary emotion that the character is feeling. The rest of the emotions in the list are also part of the emotional range of the character, but are not as strongly felt as the primary emotion.",
             ],
             ([
-                "## " + ourCharacterName + "'s Description:\n\n" +
-                characterSystemPrompt.externalDescription,
-                characterSystemPrompt.internalDescription.general,
+                "## " + ourCharacterName + "'s Description:" +
+                externalDescription.descriptionForUser,
+                internalDescription.general,
             ]).join("\n\n"),
         );
-
-        const lastCycleExtended = await getHistoryFragment(engine, character, {
-            includeDebugMessages: false,
-            includeRejectedMessages: false,
-            msgLimit: "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_INCLUDING_CHAR_2ND_LAST_MESSAGE",
-        });
 
         const emotionsCharacterCantFeel = Object.keys(character.emotions).filter((emotion) =>
             // @ts-ignore
@@ -270,17 +254,19 @@ export async function talk(engine, character, options) {
 
         const emotionsList = "## Possible emotions:\n\n" + availableEmotions.map((emotion) => `- ${emotion}`).join("\n") + "\n\n";
 
+        const expressiveStatesAsTextList = internalDescription.activeStates.filter((state) => state.expressive).map((state) => `- ${ourCharacterName} is ${state.expressive}`).join("\n");
+        const actionsAsTextList = actions.filter((action) => action.action || action.narrativeAction).map((action) => `- The following action is to be performed "${action.action || action.narrativeAction}"`).join("\n");
+        const keepInMindText = expressiveStatesAsTextList || actionsAsTextList ? "## Keep in mind:\n\n" + (expressiveStatesAsTextList + "\n" + actionsAsTextList).trim() : "";
+
         const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("talk", {
             system: systemPromptForEmotion,
             contextInfoBefore: null,
-            messages: convertMessagesToSimpleList(lastCycleExtended.messages),
+            messages: convertMessagesToSimpleList(allMessagesForStory.messages),
             contextInfoAfter: ([
                 emotionsList,
-                ...characterSystemPrompt.internalDescription.stateInjections,
-                actionsAsText,
+                keepInMindText,
                 microInjectionsAsText,
-            ]).join("\n\n"),
-            remarkLastStoryFragmentForAnalysis: false,
+            ]).filter((section) => !!section).join("\n\n"),
         });
 
         const ready = await generator.next();
@@ -298,15 +284,15 @@ export async function talk(engine, character, options) {
             nextQuestion: nextQuestion,
             stopAt: ["\n"],
             stopAfter: [],
-            grammar: createGrammarFromList(engine, availableEmotions).grammar,
-            answerTrail: "Emotions:\n\n",
+            grammar: createGrammarFromList(availableEmotions).grammar,
         });
 
         if (emotionResponse.done || !emotionResponse.value) {
             throw new Error("Inference adapter questioning generator ended unexpectedly while trying to determine primary emotion.");
         }
 
-        const emotionResponseText = emotionResponse.value.trim();
+        const emotionResponseText = emotionResponse.value.text.trim();
+
         console.log("Received emotion response: " + emotionResponseText);
 
         await generator.next(null); // close the generator
@@ -315,29 +301,18 @@ export async function talk(engine, character, options) {
         if (resultEmotions.length > 0) {
             // @ts-ignore
             primaryEmotion = resultEmotions[0].toLowerCase();
-            // @ts-ignore
-            emotionalRange = resultEmotions.slice(1).map((emotion) => emotion.toLowerCase());
         } else {
             console.warn("No valid emotions were parsed from the response, defaulting to no emotions.");
             primaryEmotion = "neutral";
-            emotionalRange = [];
         }
     }
 
     console.log("Determined primary emotion: " + primaryEmotion);
-
     console.log("Determined emotional range: " + emotionalRange.join(", "));
 
-    if (primaryEmotion) {
-        narrativeEffects.push(`'${character}' is primarily feeling ${primaryEmotion}`);
-    }
-
-    if (emotionalRange.length > 0) {
-        narrativeEffects.push(`'${character}' response emotions should also include ${emotionalRange.join(", ")}`);
-    }
-
-    if (baseVoice?.mute && !baseVoice?.description) {
-        narrativeEffects.push(`'${character}' is currently mute`);
+    let considerMute = false;
+    if ((baseVoice?.mute || baseVoice?.dialogueLikelihood === 0) && !baseVoice?.description) {
+        considerMute = true;
     } else {
         if (baseVoice?.description) {
             const description = typeof baseVoice.description === "string" ? baseVoice.description : await baseVoice.description({
@@ -351,24 +326,6 @@ export async function talk(engine, character, options) {
         }
     }
 
-    let narrationStyle = engine.deObject.narrationStyle;
-    if (baseVoice?.narrationStyle) {
-        narrationStyle = baseVoice.narrationStyle;
-    }
-
-    /**
-     * @type string[]
-     */
-    const finalMessages = [];
-
-    const messages = (await getHistoryFragment(engine, character, {
-        includeDebugMessages: false,
-        includeRejectedMessages: false,
-        msgLimit: "ALL",
-        useExponentialShrinkingSelectiveContextWindowStrategy: true,
-    })).messages;
-
-    let totalToGenerate = narrationStyle.minParagraphs + Math.floor(Math.random() * (narrationStyle.maxParagraphs - narrationStyle.minParagraphs + 1));
     /**
      * @type {typeof actions}
      * 
@@ -377,7 +334,7 @@ export async function talk(engine, character, options) {
     const actionsLeftToConsume = actions;
 
     // Pre narration and post narration injections
-    for (const state of characterSystemPrompt.internalDescription.activeStates) {
+    for (const state of internalDescription.activeStates) {
         if (state.stateInfo.preNarration) {
             const probability = state.stateInfo.preNarration.likelihood || 1;
             if (Math.random() < probability) {
@@ -391,10 +348,14 @@ export async function talk(engine, character, options) {
                     const trimmed = preNarrationText.trim();
                     if (trimmed) {
                         actionsLeftToConsume.unshift({
-                            text: null,
-                            narrativeText: trimmed,
-
-                            // @ts-ignore
+                            actionObject: {
+                                deadEndIsDeath: false,
+                                emotionalRange: [],
+                                isDeadEndScenario: false,
+                                primaryEmotion: "neutral",
+                                action: "",
+                            },
+                            narrativeAction: trimmed,
                             action: null,
                         })
                     }
@@ -415,10 +376,14 @@ export async function talk(engine, character, options) {
                     const trimmed = postNarrationText.trim();
                     if (trimmed) {
                         actionsLeftToConsume.push({
-                            text: null,
-                            narrativeText: trimmed,
-
-                            // @ts-ignore
+                            actionObject: {
+                                deadEndIsDeath: false,
+                                emotionalRange: [],
+                                isDeadEndScenario: false,
+                                primaryEmotion: "neutral",
+                                action: "",
+                            },
+                            narrativeAction: trimmed,
                             action: null,
                         })
                     }
@@ -427,119 +392,132 @@ export async function talk(engine, character, options) {
         }
     }
 
-    /**
-     * @type {*}
-     */
-    let lastActionConsumed = null;
+    let narrationStyle = engine.deObject.narrationStyle;
+    if (baseVoice?.narrationStyle) {
+        narrationStyle = baseVoice.narrationStyle;
+    }
+
+    let totalToGenerate = narrationStyle.minParagraphs + Math.floor(Math.random() * (narrationStyle.maxParagraphs - narrationStyle.minParagraphs + 1));
 
     /**
      * @type {Array<"narration" | "dialogue">}
      */
-    const generatedElements = [];
+    const generated = [];
+
+    /**
+     * @type {{value: {
+     * actionObject: DEActionPromptInjection<DEStringTemplateCharOnly>;
+     * action: string | null;
+     * narrativeAction: string | null;
+     * } | null} | null}
+     */
+    let lastActionThatReceivedAThought = null;
+
+    /**
+     * @type {{
+     * actionObject: DEActionPromptInjection<DEStringTemplateCharOnly>;
+     * action: string | null;
+     * narrativeAction: string | null;
+     * } | null}
+     */
+    let lastActionConsumed = null;
 
     /**
      * @type {() => ({
      *    type: "narration" | "dialogue",
      *    action: string | null,
      *    narrativeAction: string | null,
+     *    think: boolean,
      * } | null)}
      */
     const getNextToGenerate = () => {
-        let toConsume = actionsLeftToConsume.shift();
-        if (!toConsume) {
+        let toConsume = actionsLeftToConsume.shift() || null;
+        if (!toConsume && lastActionConsumed) {
             toConsume = lastActionConsumed;
         }
         lastActionConsumed = toConsume;
 
         const narrativeAction = toConsume && toConsume.narrativeAction ? toConsume.narrativeAction : null;
-        const action = toConsume ? toConsume.text : null;
+        const action = toConsume ? toConsume.action : null;
 
-        if (generatedElements.length >= totalToGenerate) {
-            if (!generatedElements.includes("dialogue") && !baseVoice?.mute) {
+        let canDeliverThroughDialogue = considerMute ?
+            (toConsume ? (toConsume.actionObject.actionMustBe === "dialogue" || toConsume.actionObject.actionMustBe === "any" || !toConsume.actionObject.actionMustBe) : true) : false;
+
+        if (canDeliverThroughDialogue && baseVoice) {
+            if (typeof baseVoice.dialogueLikelihood === "number") {
+                canDeliverThroughDialogue = Math.random() <= baseVoice.dialogueLikelihood;
+            }
+        }
+
+        // only think again if it not the same action as before, including the "non-action"
+        let willThink = lastActionThatReceivedAThought ? lastActionThatReceivedAThought.value !== toConsume : true;
+        if (willThink) {
+            // subject it to probability now
+            willThink = Math.random() <= character.thinkBeforeAct;
+        }
+        if (willThink) {
+            lastActionThatReceivedAThought = {
+                value: toConsume || null,
+            };
+        }
+
+        if (generated.length >= totalToGenerate) {
+            if (!generated.includes("dialogue") && canDeliverThroughDialogue) {
                 // force dialogue if we haven't generated any yet
-                generatedElements.push("dialogue");
+                generated.push("dialogue");
                 if (narrativeAction) {
-                    generatedElements.push("narration");
+                    generated.push("narration");
                 }
+
                 return {
                     type: "dialogue",
                     action,
                     narrativeAction,
+                    think: willThink,
                 }
             } else if (actionsLeftToConsume.length > 0) {
-                generatedElements.push("narration");
+                generated.push("narration");
                 if (narrativeAction) {
-                    generatedElements.push("narration");
+                    generated.push("narration");
                 }
                 return {
                     type: "narration",
                     action,
                     narrativeAction,
+                    think: willThink,
                 }
             }
             return null;
         }
 
-        const lastGenerated = generatedElements[generatedElements.length - 1];
+        const lastGenerated = generated.length > 0 ? generated[generated.length - 1] : null;
+
         // always switch from dialogue to narration, and always start in narration
-        if ((lastGenerated && lastGenerated === "dialogue") || generatedElements.length === 0) {
-            generatedElements.push("narration");
+        if ((lastGenerated && lastGenerated === "dialogue") || generated.length === 0) {
+            generated.push("narration");
             if (narrativeAction) {
-                generatedElements.push("narration");
+                generated.push("narration");
             }
             return {
                 type: "narration",
                 action,
                 narrativeAction,
+                think: willThink,
             }
         }
 
-        const isMute = baseVoice?.mute || false;
-        const areLastTwoElementsNarration = generatedElements.length >= 2 && generatedElements[generatedElements.length - 1] === "narration" && generatedElements[generatedElements.length - 2] === "narration";
-        const nextType = isMute ? "narration" : (areLastTwoElementsNarration ? "dialogue" : (Math.random() < narrationStyle.narrativeBias ? "narration" : "dialogue"));
-        generatedElements.push(nextType);
+        const areLastTwoElementsNarration = generated.length >= 2 && generated[generated.length - 1] === "narration" && generated[generated.length - 2] === "narration";
+        const nextType = considerMute ? "narration" : (areLastTwoElementsNarration ? "dialogue" : (Math.random() < narrationStyle.narrativeBias ? "narration" : "dialogue"));
+        generated.push(nextType);
         if (narrativeAction) {
-            generatedElements.push("narration");
+            generated.push("narration");
         }
         return {
             type: nextType,
             action,
             narrativeAction,
+            think: willThink,
         };
-    }
-
-    /**
-     * @type {DEConversationMessage}
-     */
-    const nextMessage = {
-        canOnlyBeSeenByCharacters: null,
-        content: [],
-        // This gets set later by time-forwards.js
-        duration: {
-            inDays: 0,
-            inHours: 0,
-            inMinutes: 0,
-            inSeconds: 0,
-        },
-        endTime: engine.deObject.currentTime,
-        startTime: engine.deObject.currentTime,
-        // This is set later by item-change.js
-        interactingCharacters: [],
-        emotion: primaryEmotion,
-        emotionalRange: emotionalRange,
-        id: "message-" + Math.random().toString(36).substring(2, 15),
-        isCharacter: true,
-        isDebugMessage: false,
-        isRejectedMessage: false,
-        isStoryMasterMessage: false,
-        perspectiveSummaryIds: {},
-        characterId: character.id,
-        metadata: {},
-        untimed: true,
-        rumors: [],
-
-        // TODO
-        singleSummary: null,
     }
 
     const conversationObject = await engine.dataManager.getConversation(charState.conversationId);
@@ -580,361 +558,106 @@ export async function talk(engine, character, options) {
                 }
             }
         }
-
-        await engine.dataManager.newConversationMessage(charState.conversationId, nextMessage);
-
-        await engine.informDEObjectUpdated();
     }
 
     let nextToGenerate = getNextToGenerate();
-    let nextToGenerateIsSameAsPreviousButNarrativeAction = false;
+    /**
+     * @type {"think" | "generate-type" | "narrate" | "done"}
+     */
+    let phase = "think";
 
     const reweightedVoice = reweightVoiceForEmotion(baseVoice, primaryEmotion, emotionalRange, activeStates);
+    const characterPerspective = await engine.deObject.database.getLastPerspectiveOfCharacter(character.id) || await getPerspective(engine.deObject, character.id, []);
 
     let fragmentCount = -1;
     while (nextToGenerate) {
+        if (phase === "done") {
+            nextToGenerate = getNextToGenerate();
+            phase = "think";
+            continue;
+        }
+
+        if (phase === "think" && !nextToGenerate.think) {
+            phase = "generate-type";
+            continue;
+        }
+
+        if (phase === "narrate" && !nextToGenerate.narrativeAction) {
+            phase = "done";
+            continue;
+        }
+
         fragmentCount++;
 
         /**
          * @type {string|null}
          */
         let followingAction = null;
-        if (nextToGenerateIsSameAsPreviousButNarrativeAction) {
+        if (phase === "narrate") {
             followingAction = (`${nextToGenerate.narrativeAction}`);
             console.log("Generating next narrative action: " + nextToGenerate.narrativeAction);
-        } else if (nextToGenerate.action) {
+        } else if (phase === "generate-type" && nextToGenerate.action) {
             followingAction = (`${ourCharacterName} must take the following action next: ${nextToGenerate.action}`);
             console.log("Generating next " + nextToGenerate.type + (nextToGenerate.action ? ` with action: ${nextToGenerate.action}` : ""));
+        } else if (phase === "think") {
+            if (nextToGenerate.action) {
+                followingAction = (`${ourCharacterName} must think about the following action they will take next: ${nextToGenerate.action}`);
+            } else {
+                followingAction = (`${ourCharacterName} must think about what action they will take next`);
+            }
         }
 
-        const nextIsNarration = nextToGenerateIsSameAsPreviousButNarrativeAction ? true : nextToGenerate.type === "narration"
-        const forcedVoiceEffects = nextIsNarration ? {
+        const nextIsNarrationOrThought = phase === "think" || phase === "narrate" ? true : nextToGenerate.type === "narration";
+        const forcedVoiceEffects = nextIsNarrationOrThought ? {
             forcedMode: null,
             forcedSounds: [],
         } : selectForcedVoiceEffects(reweightedVoice);
 
-        /**
-         * @type {DEConversationMessageDialogue | DEConversationMessageNarration}
-         */
-        const currentBlock = nextIsNarration ? {
-            type: "narration",
-            fragments: [],
-        } : {
-            type: "dialogue",
-            fragments: [],
-        };
-        nextMessage.content.push(currentBlock);
-
-        const grammar = generateGrammarForVoice(engine, baseVoice, ourCharacterName, forcedVoiceEffects.forcedMode);
+        // We fetch again, the reason is that we are updating all this as we go
+        const allMessagesForStoryDuringTalkProcess = await getHistoryFragment(engine, character, {
+            includeDebugMessages: false,
+            includeRejectedMessages: false,
+            msgLimit: "ALL",
+            useExponentialShrinkingSelectiveContextWindowStrategy: true,
+            perspective: "character",
+        });
 
         const generator = engine.inferenceAdapter.inferNextStoryFragmentFor(
+            engine.deObject,
             character,
             {
-                messages: convertMessagesToSimpleList(messages),
-                messagesTrail: finalMessages,
-                system: characterSystemPrompt.sysprompt,
-                stateInjections: characterSystemPrompt.internalDescription.stateInjections,
-                visibleEnviroment: characterCanSee.everything,
+                messages: convertMessagesToSimpleList(allMessagesForStoryDuringTalkProcess.messages),
+                perspective: characterPerspective,
                 narrativeEffects,
-                grammar: nextIsNarration ? grammar.narrative : grammar.dialogue,
-                activeStates,
-                narration: nextIsNarration,
-                modes: baseVoice?.modes.map((mode) => mode.label) || [],
-                sounds: baseVoice?.sounds.map((sound) => sound.label) || [],
+                externalDescription: externalDescription.description,
+                internalDescription: internalDescription,
+                availableModes: baseVoice?.modes.map((mode) => mode.label) || [],
+                availableSounds: baseVoice?.sounds.map((sound) => sound.label) || [],
                 forcedMode: forcedVoiceEffects.forcedMode,
                 forcedSounds: forcedVoiceEffects.forcedSounds,
                 emotionalRange: emotionalRange,
                 followingAction,
-
-                // @ts-ignore primary emotion is guaranteed to be set at this point, because if it wasn't, we would have set it to "neutral"
-                primaryEmotion,
+                primaryEmotion: primaryEmotion || "neutral",
+                type: phase === "think" ? "thought" : (phase === "narrate" ? "narration" : nextToGenerate.type),
+                additionalInjections: options.microInjections,
             },
         );
 
-        // dialogue specific
-        // A dialogue line is spoken words by default; an asterisk toggles into a
-        // third-person narration/action beat (and the next asterisk toggles back out), and
-        // [..] are voice/sound tags. Asterisks are reserved exclusively for narration
-        // transitions, so they are treated as structural delimiters here, not decoration.
-        let insideNarration = false;
-        let insideSound = false;
-        let ignoreFirstNCharactersDialogueOnly = (character + ": ").length;
+        // TODO add the actual message to the conversation thingy
 
-        const currentBlockAsDialogue = /** @type {DEConversationMessageDialogue} */ (currentBlock);
-
-        /**
-         * The dialogue fragment currently being streamed into, or null when none is open.
-         * This persists across streamed chunks so that markers ("*", "[", "]") split across
-         * chunk boundaries are handled consistently for both the message data and the UI events.
-         * @type {DEConversationMessageDialogueFragment | null}
-         */
-        let openDialogueFragment = null;
-
-        /**
-         * @returns {"narration" | "dialogue" | "sound"}
-         */
-        const currentDialogueType = () => insideSound ? "sound" : (insideNarration ? "narration" : "dialogue");
-
-        /**
-         * Closes the currently open fragment (if any), computing sound info for sound fragments
-         * and emitting the appropriate end event exactly once.
-         */
-        const finalizeOpenDialogueFragment = () => {
-            if (!openDialogueFragment) {
-                return;
-            }
-            const fragment = openDialogueFragment;
-            openDialogueFragment = null;
-            const trimmed = fragment.text.trim().toLowerCase();
-            const soundInfo = fragment.type === "sound" ? {
-                sound: minimizeSoundDescription(baseVoice?.sounds.find((sound) => sound.label.toLowerCase() === trimmed)),
-                mode: minimizeModeDescription(baseVoice?.modes.find((mode) => mode.label.toLowerCase() === trimmed)),
-            } : undefined;
-            if (fragment.type === "sound" && soundInfo) {
-                fragment.soundInfo = soundInfo;
-            }
-        };
-
-        /**
-         * Ensures there is an open fragment of the given type, finalizing any previously open
-         * fragment of a different type first.
-         * @param {"narration" | "dialogue" | "sound"} type
-         * @returns {DEConversationMessageDialogueFragment}
-         */
-        const ensureOpenDialogueFragment = (type) => {
-            if (openDialogueFragment && openDialogueFragment.type === type) {
-                return openDialogueFragment;
-            }
-            finalizeOpenDialogueFragment();
-            /** @type {DEConversationMessageDialogueFragment} */
-            const fragment = type === "sound"
-                ? { type: "sound", text: "", soundInfo: {} }
-                : { type: type, text: "" };
-            currentBlockAsDialogue.fragments.push(fragment);
-            openDialogueFragment = fragment;
-            return fragment;
-        };
-
-        /**
-         * Streams a run of text into the fragment of the given type, creating it if needed.
-         * @param {"narration" | "dialogue" | "sound"} type
-         * @param {string} text
-         */
-        const appendDialogueRun = (type, text) => {
-            if (!text) {
-                return;
-            }
-            // Pure-whitespace narration runs are just empty beats (e.g. a stray `* *` or
-            // `**`); dropping them avoids spurious empty narration fragments. Whitespace in
-            // spoken or sound runs is always preserved.
-            if (type === "narration" && !text.trim()) {
-                return;
-            }
-            const fragment = ensureOpenDialogueFragment(type);
-            fragment.text += text;
-        };
-
-        let next = await generator.next(true);
-        while (!next.done || next.value) {
-            const info = next.value;
-            if (info) {
-                if (info.type === "warning") {
-                    engine.informCycleState("warning", info.content);
-                } else if (info.type === "hidden") {
-
-                } else if (info.type === "text" && nextIsNarration) {
-                    // replace all asterisks with nothing
-                    let textToStream = info.content.replace(/\*/g, "");
-
-                    if (textToStream) {
-                        engine.triggerConversationMessageUpdate(engine.deObject, {
-                            conversationId: charState.conversationId,
-                            messageId: nextMessage.id,
-                            text: textToStream,
-                            event: "add-narration",
-                            contentIndex: nextMessage.content.length - 1,
-                        });
-                    }
-
-                    const currentBlockAsNarration = /** @type {DEConversationMessageNarration} */ (currentBlock);
-                    currentBlockAsNarration.text += textToStream;
-                } else if (info.type === "text" && !nextIsNarration) {
-                    let actualInfoContent = info.content;
-
-                    if (ignoreFirstNCharactersDialogueOnly) {
-                        actualInfoContent = actualInfoContent.substring(ignoreFirstNCharactersDialogueOnly);
-                        ignoreFirstNCharactersDialogueOnly -= info.content.length;
-                        if (ignoreFirstNCharactersDialogueOnly < 0) {
-                            ignoreFirstNCharactersDialogueOnly = 0;
-                        }
-                    }
-
-                    // Asterisks are the narration delimiter, so they are kept for parsing
-                    // (not stripped); [..] delimit voice/sound tags. Both are consumed as
-                    // markers and never emitted as fragment text.
-                    const textToStream = actualInfoContent;
-
-                    // Persistent character-by-character state machine. An asterisk toggles
-                    // between spoken dialogue (default) and third-person narration beats;
-                    // "[" opens a sound/voice tag and "]" closes it (only while speaking).
-                    let run = "";
-                    for (let i = 0; i < textToStream.length; i++) {
-                        const char = textToStream[i];
-                        if (insideSound) {
-                            if (char === "]") {
-                                appendDialogueRun("sound", run);
-                                run = "";
-                                insideSound = false;
-                                finalizeOpenDialogueFragment();
-                            } else {
-                                run += char;
-                            }
-                        } else if (char === "*") {
-                            appendDialogueRun(currentDialogueType(), run);
-                            run = "";
-                            finalizeOpenDialogueFragment();
-                            insideNarration = !insideNarration;
-                        } else if (char === "[" && !insideNarration) {
-                            appendDialogueRun(currentDialogueType(), run);
-                            run = "";
-                            insideSound = true;
-                            // open the sound fragment eagerly so an empty sound still renders
-                            ensureOpenDialogueFragment("sound");
-                        } else {
-                            run += char;
-                        }
-                    }
-                    appendDialogueRun(currentDialogueType(), run);
-                }
-            }
-
-            if (!next.done) {
-                next = await generator.next(true);
-            }
-        }
-
-        console.log("\nFinished receiving text chunk from inference adapter.");
-
-        if (nextIsNarration) {
-            const currentBlockAsNarration = /** @type {DEConversationMessageNarration} */ (currentBlock);
-            engine.triggerConversationMessageUpdate(engine.deObject, {
-                conversationId: charState.conversationId,
-                messageId: nextMessage.id,
-                text: currentBlockAsNarration.text,
-                event: "end-add-narration",
-                contentIndex: nextMessage.content.length - 1,
-            });
-            engine.triggerConversationMessageUpdate(engine.deObject, {
-                conversationId: charState.conversationId,
-                messageId: nextMessage.id,
-                obj: currentBlockAsNarration,
-                event: "end-narration-block",
-                contentIndex: nextMessage.content.length - 1,
-            });
-        } else {
-            const currentBlockAsDialoge = /** @type {DEConversationMessageDialogue} */ (currentBlock);
-            finalizeOpenDialogueFragment();
-            engine.triggerConversationMessageUpdate(engine.deObject, {
-                conversationId: charState.conversationId,
-                messageId: nextMessage.id,
-                obj: currentBlockAsDialoge,
-                event: "end-dialogue-block",
-                contentIndex: nextMessage.content.length - 1,
-            });
-        }
-
-        const converted = convertContentToSimpleList(engine, [currentBlock], nextMessage.characterId, false);
-        converted.forEach((ele) => {
-            finalMessages.push(ele.message);
-        });
-
-        if (nextToGenerate.narrativeAction) {
-            nextToGenerateIsSameAsPreviousButNarrativeAction = true;
-        } else {
-            nextToGenerate = getNextToGenerate();
-            nextToGenerateIsSameAsPreviousButNarrativeAction = false;
+        if (phase === "think") {
+            phase = "generate-type";
+        } else if (phase === "generate-type") {
+            phase = "narrate";
+        } else if (phase === "narrate") {
+            phase = "done";
         }
     }
 
-    engine.triggerConversationMessageUpdate(engine.deObject, {
-        conversationId: charState.conversationId,
-        messageId: nextMessage.id,
-        event: "done",
-    });
-
-    const totalGeneratedThusFar = finalMessages.join("\n\n");
-    console.log("Final generated narration/dialogue: " + totalGeneratedThusFar);
-
     if (deadEndAction) {
-        console.log(`Finalizing dead end action for character ${character}: ${deadEndAction.text}`);
-        if (deadEndAction.action.action.deadEndIsDeath) {
-            console.log(`Character ${character} has died.`);
-            addedMessagesForStoryMaster.push(`${character} has died.`);
-            charState.dead = true;
-        }
-        charState.deadEnded = true;
-        charState.deadEndReason = deadEndAction.text;
-
-        if (charState.dead) {
-            // TODO change the description of the character to reflect they are dead
-            // await updateCharacterDescription(engine, character, "dead", "The lifeless body of " + character);
-            // keep in mind "CHARACTER_OVERRIDES_" + characterDef
-            // so the state can be recovered
-        }
-
-        if (!charState.dead) {
-            // normal deadEnd, we need to remove the character from the story
-
-            /**
-             * Removes the character from any item list.
-             * @param {DEItem[]} items 
-             */
-            const removeCharFromAnyItemList = (items) => {
-                for (const item of items) {
-                    if (item.containingCharacters.includes(character)) {
-                        item.containingCharacters = item.containingCharacters.filter((char) => char !== character);
-                    }
-                    if (item.ontopCharacters.includes(character)) {
-                        item.ontopCharacters = item.ontopCharacters.filter((char) => char !== character);
-                    }
-                    removeCharFromAnyItemList(item.containing);
-                    removeCharFromAnyItemList(item.ontop);
-                }
-            };
-
-            removeCharFromAnyItemList(engine.deObject.world.locations[charState.location].slots[charState.locationSlot].items);
-
-            // @ts-ignore
-            charState.location = null;
-            // @ts-ignore
-            charState.locationSlot = null;
-        }
-
-        const socialBonds = engine.deObject.bonds;
-        for (const charName in socialBonds) {
-            const charBonds = socialBonds[charName];
-            const existingBond = charBonds.active.find((bond) => bond.towards === character.id);
-            if (existingBond) {
-                charBonds.active = charBonds.active.filter((bond) => bond.towards !== character.id);
-                charBonds.ex.push(existingBond);
-            }
-        }
-
-        hasDeadEnded = true;
+        console.log(`Finalizing dead end action for character ${character.id}`);
+        markCharacterAsDeadEnded(engine.deObject, character, deadEndAction.action ? "Executing action: " + deadEndAction.action : "Unknown reason", deadEndAction.actionObject.deadEndIsDeath || false);
     }
 
     await engine.informDEObjectUpdated();
-
-    return {
-        addedMessagesForStoryMaster,
-        hasDeadEnded,
-        hasDied,
-        /** @type {DEEmotionNames} */
-        // @ts-ignore
-        primaryEmotion,
-        /** @type {DEEmotionNames[]} */
-        // @ts-ignore
-        emotionalRange,
-        message: totalGeneratedThusFar,
-    }
 }

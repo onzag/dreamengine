@@ -1,5 +1,5 @@
 import { DEngine } from "./index.js";
-import { getCharacterSurroundingInformation, getExternalDescriptionOfCharacter, getFamilyBondRelation, getInternalDescriptionOfCharacter, getSysPromptForCharacter, isCharacterShelteredFromWeather, whatIsWeatherLikeForCharacter } from "./util/character-info.js";
+import { getCharacterSurroundingInformation, getExternalDescriptionOfCharacter, getFamilyBondRelation, getInternalDescriptionOfCharacter, isCharacterShelteredFromWeather, whatIsWeatherLikeForCharacter } from "./util/character-info.js";
 import { makeTimestamp } from "./util/messages.js";
 import { getWeatherSystemForLocationAndWeather } from "./util/world.js";
 
@@ -45,7 +45,7 @@ export const commands = {
             }
             const currentLocation = engine.deObject.world.locations[engine.deObject.world.currentLocation];
             const currentWeather = currentLocation.internalState.currentWeather;
-            const isSheltered = await isCharacterShelteredFromWeather(engine.deObject, engine.deObject.user, currentWeather, engine.deObject.world.currentLocation, engine.deObject.world.currentLocationSlot);
+            const isSheltered = await isCharacterShelteredFromWeather(engine.deObject, engine.deObject.characters[engine.deObject.user], currentWeather, engine.deObject.world.currentLocation, engine.deObject.world.currentLocationSlot);
             const weatherSystem = getWeatherSystemForLocationAndWeather(engine.deObject, engine.deObject.world.currentLocation, currentWeather);
             if (isSheltered.fullySheltered) {
                 const noEffectDescription = typeof weatherSystem.noEffectDescription === "string" ? weatherSystem.noEffectDescription : await weatherSystem.noEffectDescription({
@@ -90,7 +90,7 @@ export const commands = {
             if (!characterState) {
                 return `No state found for character "${characterId}".`;
             }
-            return await whatIsWeatherLikeForCharacter(engine.deObject, characterId);
+            return await whatIsWeatherLikeForCharacter(engine.deObject, character);
         },
         help: "Displays the current weather for a given character (by id) and its effects and whether they are sheltered from it or not.",
         cheat: true,
@@ -126,7 +126,7 @@ export const commands = {
                 return `Location slot "${locationSlotId}" not found in location "${locationId}", options are: ${Object.keys(location.slots).join(", ")}`;
             }
             const weatherThere = location.internalState.currentWeather;
-            const isSheltered = await isCharacterShelteredFromWeather(engine.deObject, characterId, weatherThere, locationId, locationSlotId);
+            const isSheltered = await isCharacterShelteredFromWeather(engine.deObject, character, weatherThere, locationId, locationSlotId);
             const weatherSystem = getWeatherSystemForLocationAndWeather(engine.deObject, locationId, weatherThere);
             if (isSheltered.fullySheltered) {
                 const noEffectDescription = typeof weatherSystem.noEffectDescription === "string" ? weatherSystem.noEffectDescription : await weatherSystem.noEffectDescription({
@@ -220,6 +220,10 @@ export const commands = {
                 if (participantId === engine.deObject.user) {
                     continue;
                 }
+                const deadEnded = engine.deObject.stateFor[participantId]?.deadEnded && !engine.deObject.stateFor[participantId]?.dead;
+                if (deadEnded) {
+                    continue;
+                }
                 const characterInfo = engine.deObject.characters[participantId];
                 if (characterInfo) {
                     answer += `- ${characterInfo.name} (${characterInfo.id}): ${(await getExternalDescriptionOfCharacter(engine.deObject, participantId, participantId, false, false)).descriptionForUser}\n`;
@@ -244,22 +248,6 @@ export const commands = {
         help: "Lists the locations you can go to from your current location",
         cheat: false,
         args: [],
-    },
-    "syspromptfor": {
-        run: async (engine, args) => {
-            if (!engine.deObject) {
-                throw new Error("DEngine not initialized");
-            }
-            if (args.length === 0) {
-                return "Usage: /syspromptfor <character id>";
-            }
-            const characterId = args.join(" ");
-
-            return (await getSysPromptForCharacter(engine, characterId)).sysprompt;
-        },
-        help: "Displays the current system prompt for a given character (by id), for general inference purposes.",
-        cheat: true,
-        args: ["<character id>"],
     },
     "externaldescriptionfor": {
         run: async (engine, args) => {

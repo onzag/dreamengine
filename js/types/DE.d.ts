@@ -227,6 +227,10 @@ declare interface DEActionPromptInjection<TemplateType> {
      */
     action?: TemplateType;
     /**
+     * The action can only be executed through dialogue, narration, or any
+     */
+    actionMustBe?: "dialogue" | "narration" | "any";
+    /**
      * An optional narrive effect for the action, suppose for example the action is
      * {{char}} begins to cry
      * 
@@ -248,7 +252,7 @@ declare interface DEActionPromptInjection<TemplateType> {
      * 
      * For example, if the action is {{char}} begins to cry, the narrative action can be
      * 
-     * Now I will describe {{char}}'s tears flowing down their face and their body shaking as they cry
+     * Describe {{char}}'s tears flowing down their face and their body shaking as they cry
      */
     narrativeAction?: TemplateType;
     /**
@@ -283,6 +287,10 @@ declare interface DEActionPromptInjection<TemplateType> {
      */
     primaryEmotion: DEEmotionNames;
     /**
+     * Dominance of this primary emotion, emotional range, and voice over other actions
+     */
+    dominance?: number;
+    /**
      * The emotional range this action will cause provided
      */
     emotionalRange: DEEmotionNames[];
@@ -310,6 +318,10 @@ declare interface DECharacterStateDefinition {
      * it is recommended that all emotional states are hidden to others, while physical states that are visible are not hidden to others
      */
     hiddenToOthers?: "FULLY_HIDDEN" | "HIDDEN_TO_LOW_PERCEPTION" | "HIDDEN_TO_MEDIUM_PERCEPTION_AND_UNDER" | "HIDDEN_TO_HIGH_PERCEPTION_AND_UNDER";
+    /**
+     * The state remains active after death
+     */
+    remainsAfterDeath?: boolean;
     /**
      * Causes the character intimacy to multiply by this factor when the state is active
      * dominance irrelevant all active states affect it
@@ -1159,6 +1171,14 @@ declare interface DEVoiceDescription {
      */
     mute: boolean;
     /**
+     * The likelihood of the character to use dialogue in each turn with this voice a number from 0 to 1, basically 0 is the same as mute
+     * but mute is a hard mute (can't talk at all) while this is a decision to use dialogue or not, for example, a character may be very shy and only talk 10% of the time, so this would be 0.1
+     * the default is 1, meaning the character will always talk, if you set it to 0.5, the character will talk half of the time, if you set it to 0.9, the character will talk 90% of the time, etc...
+     * 
+     * This is useful for characters that are shy, or have a low bond level with the other character, or are in a state that makes them less likely to talk, for example, if the character is sad, they may be less likely to talk, so you can set this to 0.2 for example
+     */
+    dialogueLikelihood?: number;
+    /**
      * A list of words that the character commonly uses.
      * 
      * This is a whitelist for the de-slopper system, the de-slopper will try to avoid using same words over and over again. This whitelist will allow
@@ -1253,6 +1273,15 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * Arbitrary temporary data
      */
     temp: Record<string, any>;
+
+    /**
+     * The likelihood of a character to think before acting, a number between 0 and 1, higher means more likely to think before acting, lower means more likely to act without thinking
+     * To be fair, a low number does not mean lack of intelligence, but the LLM will not generate thoughts for the character before acting
+     * note that you cannot usually see the other character's thoughts, but you can see your own character's thoughts
+     * 
+     * So usually the higher the number, the longest the simulation takes
+     */
+    thinkBeforeAct: number;
 
     /**
      * Injects extra information into the character's general description
@@ -1814,6 +1843,10 @@ declare interface DECharacterQuestionBase {
      * @returns 
      */
     runIf?: (character: DECompleteCharacterReference) => PromiseOrNot<boolean>;
+    /**
+     * Whether this trigger would run after the character is dead and is a corpse
+     */
+    runAfterDeath?: boolean;
 }
 
 declare type DECharacterQuestionWithAskPerForCharacters = {
@@ -1829,6 +1862,10 @@ declare type DECharacterQuestionWithAskPerForCharacters = {
      * @returns 
      */
     runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference, otherFamilyRelation: DEFamilyRelation | null) => PromiseOrNot<boolean>;
+    /**
+     * Whether this trigger would run after the character is dead and is a corpse
+     */
+    runAfterDeath?: boolean;
 } & (
     | { askPer: Exclude<DEAskPerTypeCharacters, "potential_character_causants_of_state" | "character_causants_of_state"> }
     | { askPer: "potential_character_causants_of_state" | "character_causants_of_state"; askPerState: string }
@@ -1869,6 +1906,10 @@ declare type DECharacterQuestionWithAskPerForObjects = {
      * @returns 
      */
     runIf?: (character: DECompleteCharacterReference, item: DEStateCauseCausantObject) => PromiseOrNot<boolean>;
+    /**
+     * Whether this trigger would run after the character is dead and is a corpse
+     */
+    runAfterDeath?: boolean;
 };
 
 declare type DECharacterQuestionWithoutAskPer = DECharacterQuestionBase & {
@@ -2616,6 +2657,12 @@ declare interface DEItem {
         negativelyExposesToWeathers?: Array<string>;
     } | null;
 
+    otherProperties?: {
+        isClock?: "rough" | "precise";
+        isCalendar?: "full" | "year-only" | "month-only" | "day-only";
+        clockOrCalendarStuckAt?: DETimeDescription;
+    };
+
     /**
      * The items that are inside this item if it is a container, for example a backpack may have items inside it
      * this is different from ontop as these items are actually inside the container and may be hidden from view, while ontop items are on top of the item
@@ -2737,6 +2784,8 @@ declare interface DEStateForCharacter {
          */
         relativePosition?: string | null;
     }>;
+    primaryEmotion: DEEmotionNames;
+    emotionalRange: DEEmotionNames[];
     wearing: DEItem[];
     /**
      * Indicates if the character is dead, aka its deadEnd was a death scenario
@@ -2750,18 +2799,6 @@ declare interface DEStateForCharacter {
      * If the character has deadEnded, the reason why it happened
      */
     deadEndReason: string | null;
-    /**
-     * Items that have been seen when this state was active, reduced description
-     * 
-     * These can be subject to memory
-     */
-    seenItems: Array<DESeenItem>;
-    /**
-     * Characters that may have been seen when this state was active, reduced description
-     * 
-     * These can be subject to memory
-     */
-    seenCharacters: Array<DESeenCharacter>;
 }
 
 declare interface DEItemInteraction {
@@ -3126,6 +3163,9 @@ declare interface DELocation {
     name: string;
     /**
      * Description of the location
+     * 
+     * IMPORTANT: You should vary the description based on the time of the day to give
+     * clues to the characters if it is day or night
      */
     description: DEStringTemplateCharOnly;
     /**
@@ -3970,11 +4010,16 @@ declare interface DECharacterPerception {
     hasMediumPerception: boolean;
     hasHighPerception: boolean;
     hasPerfectPerception: boolean;
+    canTellActiveEmotions: boolean;
 }
 
 declare interface DEPerspectiveCharacter {
     /** Memory retention of this sighting, using the same levels as items. */
     memory: DEPerspectiveMemory;
+    /**
+     * The primary emotion of the character, if it can be perceived
+     */
+    primaryEmotion: DEEmotionNames | null;
     /**
      * Metadata of the character that is in perspective at that moment in time, this includes all the character's attributes, states, and other properties
      */
@@ -4154,6 +4199,8 @@ declare interface DEPerspectiveCharacter {
         slotId?: string;
         slotName?: string;
     }> | null;
+
+    isDead: boolean;
 }
 
 declare interface DEPerspectiveCharacterMemory {
@@ -4540,6 +4587,12 @@ declare interface DEPerspectiveLocation {
  */
 declare interface DEPerspective {
     /**
+     * Whether the game is over or not, this means the user
+     * has reached an ending condition, eg. died, arrested, successful completion, etc...
+     * whatever the world defines as game over conditions
+     */
+    gameOver: boolean;
+    /**
      * The self character perspective, this is the perspective of the character that is in perspective at that moment in time
      * from their own point of view, including their own state, the state of other characters, and the state of locations and items they can perceive
      */
@@ -4811,7 +4864,12 @@ declare interface DESurroundingCharacters {
     /**
      * Dead characters that are known
      */
-    deadKnownSomewhat: string[];
+    deadKnownSomewhatNonConversing: string[];
+    /**
+     * Dead characters that are known somewhat and are part
+     * of the conversation (not really conversing, but part of the conversation)
+     */
+    deadKnownSomewhatConversing: string[];
     /**
      * Dead characters that are not known
      */
@@ -5637,12 +5695,6 @@ declare interface DEObject {
      * and help it make decisions about what happens in the world
      */
     worldRules: Record<string, DEWorldRule>;
-    /**
-     * Whether the game is over or not, this means the user
-     * has reached an ending condition, eg. died, arrested, successful completion, etc...
-     * whatever the world defines as game over conditions
-     */
-    gameOver: boolean;
     /**
      * Arbitrary internal state that is used internally by the engine
      * and not meant to be used by the world scripts, these are for internal bookkeeping and optimizations, they can be used for whatever the engine needs, but they should not be used by the world scripts as they may change or be removed without warning

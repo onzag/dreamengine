@@ -41,6 +41,8 @@ function countIdentifierMentions(message, id) {
  * Builds a snapshot of the world from a single character's point of view, mirroring
  * exactly what the UI surfaces (scene characters, carried/worn/slot items, and what the
  * observer can or cannot make out) through the same engine utilities the views consume.
+ * 
+ * It is possible to still generate a perspective of a deadEnded and dead characters
  *
  * @param {DEObject} DE
  * @param {DECompleteCharacterReference | string} character
@@ -60,7 +62,6 @@ export async function getPerspective(DE, character, destroyedItemsIds = [], rela
         throw new Error(`Character state for ${ownId} not found.`);
     }
 
-    const destroyedIds = new Set(destroyedItemsIds);
     const previousPerspective = knownPreviousPerspective ?? await DE.database.getLastPerspectiveOfCharacter(ownId);
 
     const locationId = ownState.location;
@@ -110,6 +111,12 @@ export async function getPerspective(DE, character, destroyedItemsIds = [], rela
     for (const charId of allConversationsAtLocation.foundCharacters) {
         if (charId === ownId) continue;
 
+        // remove dead ended, seems unecssary because they should be removed already by getAllConversationsAtLocation function
+        // call
+        if (DE.stateFor[charId].deadEnded && !DE.stateFor[charId].dead) {
+            continue;
+        }
+
         const canSeeThem = DE.utils.characterInfo.canSeeCharacter(charId, ownId);
 
         const character = await buildPerspectiveCharacter(DE, charId, ownId, canSeeThem, previousPerspective, relatedConversationMessage);
@@ -140,6 +147,10 @@ export async function getPerspective(DE, character, destroyedItemsIds = [], rela
             if (participantId === ownId) {
                 continue;
             }
+            const isDeadEnded = DE.stateFor[participantId].deadEnded && !DE.stateFor[participantId].dead;
+            if (isDeadEnded) {
+                continue;
+            }
             const canSeeThem = isOwnGroup ? "visible" : DE.utils.characterInfo.canSeeCharacter(participantId, ownId);
             if (canSeeThem !== "invisible") {
                 actualIdsOfVisibleParticipants.push({
@@ -159,12 +170,30 @@ export async function getPerspective(DE, character, destroyedItemsIds = [], rela
             }
         }
 
+        /**
+         * @param {string} charId
+         */
+        const filterOutDeadEnded = (charId) => {
+            const charState = DE.stateFor[charId];
+            const isDeadEnded = charState && charState.deadEnded && !charState.dead;
+            return !isDeadEnded;
+        };
+
         if (isOwnGroup) {
-            objectiveSocialGroups.ownGroup.push(...conversation.participants.filter(id => id !== ownId));
+            objectiveSocialGroups.ownGroup.push(...conversation.participants.filter(id => id !== ownId).filter(filterOutDeadEnded));
         } else if (conversation.participants.length === 1) {
-            objectiveSocialGroups.soloCharacters.push(conversation.participants[0]);
+            const filteredOut = conversation.participants.filter(filterOutDeadEnded);
+            if (filteredOut.length === 1) {
+                objectiveSocialGroups.soloCharacters.push(filteredOut[0]);
+            }
         } else {
-            objectiveSocialGroups.otherGroups.push(conversation.participants.filter(id => id !== ownId));
+            const filteredOut = conversation.participants.filter(filterOutDeadEnded);
+            if (filteredOut.length > 1) {
+                objectiveSocialGroups.otherGroups.push(filteredOut);
+            } else if (filteredOut.length === 1) {
+                // if after filtering out dead ended characters there is only one left, we treat it as a solo character
+                objectiveSocialGroups.soloCharacters.push(filteredOut[0]);
+            }
         }
     }
 
@@ -172,6 +201,7 @@ export async function getPerspective(DE, character, destroyedItemsIds = [], rela
      * @type {DEPerspective}
      */
     const activePerspective = passPerspectiveThroughMemory(DE, {
+        gameOver: DE.stateFor[ownId].deadEnded,
         worldMetadata: DE.world.metadata || {},
         self,
         ownId,
@@ -282,8 +312,10 @@ export async function getPerspectiveChanges(DE, perspective, previousPerspective
         }
         for (const [id, character] of oldCharacters) {
             if (id === perspective.ownId || character.perceptionForm === 'invisible' || newCharacters.has(id)) continue;
-            changes.charactersLeft.push({ characterId: id, characterName: character.nameSimple,
-                description: `${ref(id, character.nameSimple)} left ${locationRef}` });
+            changes.charactersLeft.push({
+                characterId: id, characterName: character.nameSimple,
+                description: `${ref(id, character.nameSimple)} left ${locationRef}`
+            });
         }
     }
 
@@ -305,14 +337,18 @@ export async function getPerspectiveChanges(DE, perspective, previousPerspective
             }
         };
         for (const slot of snapshot.ownLocation.slots) {
-            visit(slot.items, { locationId: snapshot.ownLocationId, slotId: slot.slotId,
-                place: ref(slot.slotId, slot.slotName), carrier: null, wearing: false, relation: 'at' });
+            visit(slot.items, {
+                locationId: snapshot.ownLocationId, slotId: slot.slotId,
+                place: ref(slot.slotId, slot.slotName), carrier: null, wearing: false, relation: 'at'
+            });
         }
         const slots = characterSlots(snapshot);
         for (const character of [snapshot.self, ...snapshot.perspectiveCharacters]) {
             if (character.perceptionForm === 'invisible') continue;
-            const position = { locationId: snapshot.ownLocationId, slotId: slots.get(character.characterId)?.slotId ?? null,
-                place: ref(character.characterId, character.nameSimple), carrier: character, wearing: false, relation: 'carried by' };
+            const position = {
+                locationId: snapshot.ownLocationId, slotId: slots.get(character.characterId)?.slotId ?? null,
+                place: ref(character.characterId, character.nameSimple), carrier: character, wearing: false, relation: 'carried by'
+            };
             visit(character.carryingItems, position);
             visit(character.wearingItems, { ...position, wearing: true, relation: 'worn by' });
         }
@@ -331,7 +367,7 @@ export async function getPerspectiveChanges(DE, perspective, previousPerspective
     const movements = new Map();
     /** @param {ItemPosition} position */
     const positionKey = position => [position.locationId, position.slotId, position.carrier?.characterId,
-        position.wearing, position.parent, position.relation, position.item.relativePosition || null];
+    position.wearing, position.parent, position.relation, position.item.relativePosition || null];
     for (const [id, after] of newItems) {
         const before = oldItems.get(id);
         if (!before || JSON.stringify(positionKey(before)) === JSON.stringify(positionKey(after))) continue;
@@ -348,18 +384,24 @@ export async function getPerspectiveChanges(DE, perspective, previousPerspective
         const base = { itemIds: ids, itemNames };
         const changedCarrier = before.carrier?.characterId !== after.carrier?.characterId;
         if (before.carrier && changedCarrier) {
-            changes.itemsDroppedByCharacters.push({ ...base, byCharacterId: before.carrier.characterId,
+            changes.itemsDroppedByCharacters.push({
+                ...base, byCharacterId: before.carrier.characterId,
                 byCharacterName: before.carrier.nameSimple,
-                description: `${ref(before.carrier.characterId, before.carrier.nameSimple)} dropped ${itemRef} ${describePosition(after, newItems)}` });
+                description: `${ref(before.carrier.characterId, before.carrier.nameSimple)} dropped ${itemRef} ${describePosition(after, newItems)}`
+            });
         }
         if (after.carrier && (changedCarrier || before.wearing !== after.wearing)) {
-            changes.itemsPickedUpByCharacters.push({ ...base, byCharacterId: after.carrier.characterId,
+            changes.itemsPickedUpByCharacters.push({
+                ...base, byCharacterId: after.carrier.characterId,
                 byCharacterName: after.carrier.nameSimple, wearing: after.wearing,
-                description: `${ref(after.carrier.characterId, after.carrier.nameSimple)} ${after.wearing ? 'put on' : 'picked up'} ${itemRef}` });
+                description: `${ref(after.carrier.characterId, after.carrier.nameSimple)} ${after.wearing ? 'put on' : 'picked up'} ${itemRef}`
+            });
         }
         if (!changedCarrier && before.wearing === after.wearing) {
-            changes.itemsMoved.push({ ...base,
-                description: `${itemRef} moved from ${describePosition(before, oldItems)} to ${describePosition(after, newItems)}` });
+            changes.itemsMoved.push({
+                ...base,
+                description: `${itemRef} moved from ${describePosition(before, oldItems)} to ${describePosition(after, newItems)}`
+            });
         }
     }
     return changes;
@@ -882,7 +924,9 @@ async function buildPerspectiveCharacter(
     return {
         metadata: target.metadata || {},
         memory,
+        isDead: targetState.dead,
         ...sightingHistory,
+        primaryEmotion: perception.canTellActiveEmotions ? targetState.primaryEmotion : null,
         characterId: targetId,
         nameComplex: characterNameComplex,
         nameSimple: characterNameSimple,
@@ -933,6 +977,10 @@ async function buildBondDescription(DE, observer, target) {
         let bond = DE.bonds[observer.id]?.active.find(b => b.towards === target.id)
             || DE.bonds[observer.id]?.ex.find(b => b.towards === target.id)
             || null;
+
+        const useWas = bond?.believesDead;
+        const verbToUse = useWas ? 'was' : 'is';
+
         if (!bond) {
             bond = /** @type {DESingleBondDescription} */ ({
                 towards: target.id,
@@ -969,17 +1017,21 @@ async function buildBondDescription(DE, observer, target) {
         const otherRef = getNameIdentificationForOneCharacterTowardsAnother(DE, observer, target);
 
         if (bond.knowsAs.length === 0 && bond.stranger) {
-            result += `\n\n${otherRef} is a stranger to ${selfRef}, ${selfRef} does not know their name.`;
+            result += `\n\n${otherRef} ${verbToUse} a stranger to ${selfRef}, ${selfRef} does not know their name.`;
         } else if (bond.knowsAs.length === 0) {
-            result += `\n\n${otherRef} is an acquaintance to ${selfRef}, but ${selfRef} does not know their name!`;
+            result += `\n\n${otherRef} ${verbToUse} an acquaintance to ${selfRef}, but ${selfRef} does not know their name!`;
         } else if (bond.stranger) {
-            result += `\n\n${otherRef} is a stranger to ${selfRef}, but ${selfRef} knows their name and some details about them.`;
+            result += `\n\n${otherRef} ${verbToUse} a stranger to ${selfRef}, but ${selfRef} knows their name and some details about them.`;
         } else {
-            result += `\n\n${otherRef} is known to ${selfRef}, ${selfRef} knows their name and many details about them.`;
+            result += `\n\n${otherRef} ${verbToUse} known to ${selfRef}, ${selfRef} knows their name and many details about them.`;
         }
 
         if (familyRelation) {
-            result += `\n\n${otherRef} is ${selfRef}'s ${familyRelation}.`;
+            result += `\n\n${otherRef} ${verbToUse} ${selfRef}'s ${familyRelation}.`;
+        }
+
+        if (bond?.believesDead) {
+            result += `\n\n${selfRef} believes ${otherRef} to be dead.`;
         }
 
         const isAttractive = DE.utils.bonds.isAttractedToWithReasoning(observer, target.id);
@@ -1351,6 +1403,11 @@ function visibleCharacterIds(DE, entries, observerId) {
     const invisibleCharacterIds = [];
     for (const entry of entries) {
         const canSee = DE.utils.characterInfo.canSeeCharacter(entry.id, observerId);
+        // should not happen but just in case
+        const deadEnded = DE.stateFor[entry.id].deadEnded && !DE.stateFor[entry.id].dead;
+        if (deadEnded) {
+            continue;
+        }
         if (canSee !== 'invisible') {
             visibleCharacterIds.push(entry.id);
         } else {

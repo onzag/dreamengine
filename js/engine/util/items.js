@@ -290,6 +290,12 @@ export function describeItemsAvailableToCharacterForInference(engine, characterI
     for (const otherCharacterId in engine.deObject.stateFor) {
         if (otherCharacterId === characterId) continue;
         const otherCharState = engine.deObject.stateFor[otherCharacterId];
+
+        // dead ended characters that are not dead should not be listed, as they are no longer active in the story
+        if (otherCharState.deadEnded && !otherCharState.dead) {
+            continue;
+        }
+
         if (otherCharState.location === locationId) {
             const deceasedAddition = otherCharState.dead ? " (Deceased)" : "";
             const otherCharName = engine.deObject.utils.templates.formatCharacterName(otherCharacterId, characterId, { type: "definite" });
@@ -613,10 +619,6 @@ export function checkItemIsOneOfAKindAtLocation(deObject, locationId, itemName, 
      */
     const countInList = (itemList) => {
         for (const itemInList of itemList) {
-            // @ts-ignore TODO whaT?
-            if (itemInList._moved_to) {
-                continue; // skip items that have been moved, as they are not really present in the location anymore
-            }
             if (itemInList.name.trim().toLowerCase() === itemTrimmedLower && itemInList.id !== itemId) {
                 foundAnother = true;
                 return;
@@ -646,12 +648,22 @@ export function checkItemIsOneOfAKindAtLocation(deObject, locationId, itemName, 
     const allCharactersToCheck = [];
     for (const charName in deObject.characters) {
         const charState = deObject.stateFor[charName];
+
+        if (charState.deadEnded && !charState.dead) {
+            continue;
+        }
+
         if (charState.location === locationId) {
             allCharactersToCheck.push(charName);
         }
     }
     for (const charName of allCharactersToCheck) {
         const characterState = deObject.stateFor[charName];
+
+        if (characterState.deadEnded && !characterState.dead) {
+            continue;
+        }
+
         countInList(characterState.carrying);
         if (foundAnother) {
             return false;

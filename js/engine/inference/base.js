@@ -100,7 +100,7 @@ export class BaseInferenceAdapter {
      * @param {DEObject} DE
      * @param {DECompleteCharacterReference} character
      * @param {{
-     *   messages: Array<{message: string, author: string, storyMaster: boolean}>,
+     *   messages: Array<{message: string, author: string, storyMaster: boolean, unprocessed: boolean}>,
      *   perspective: DEPerspective,
      *   narrativeEffects: string[],
      *   followingAction?: string|null,
@@ -113,6 +113,7 @@ export class BaseInferenceAdapter {
      *   availableSounds: Array<string>,
      *   forcedMode: string|null,
      *   forcedSounds: Array<string>,
+     *   additionalInjections: Array<string>,
      * }} options
      * @returns {Promise<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>}
      */
@@ -137,9 +138,9 @@ export class BaseInferenceAdapter {
      * @param {{
      *   system: string,
      *   contextInfoBefore: string|null,
-     *   messages: Array<{message: string, author: string, storyMaster: boolean}>,
+     *   messages: Array<{message: string, author: string, storyMaster: boolean, unprocessed: boolean}>,
      *   contextInfoAfter: string|null,
-     *   remarkLastStoryFragmentForAnalysis?: boolean,
+     *   remarkUnprocessedMessagesForAnalysis?: boolean,
      * }} options
      * @returns {QuestionAgentGeneratorResponse}
      */

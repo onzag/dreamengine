@@ -531,7 +531,6 @@ export class DEngine {
             stateFor: {},
             initialTime: defaultTimeDEFormat,
             currentTime: { ...defaultTimeDEFormat },
-            gameOver: false,
             worldRules: {},
             narrationStyle: {
                 maxParagraphs: 2,
@@ -693,6 +692,10 @@ export class DEngine {
         if (this.deObject.party.includes(characterId)) {
             return; // already in party
         }
+        const deadEndedCharacter = this.deObject.stateFor[characterId]?.deadEnded;
+        if (deadEndedCharacter) {
+            throw new Error(`Character with id ${characterId} has dead-ended and cannot be added to the party.`);
+        }
         this.deObject.party.push(characterId);
 
         this.informDEObjectUpdated();
@@ -796,6 +799,7 @@ export class DEngine {
                         hp: 100,
                         carrying: [],
                         carryingCharactersDirectly: [],
+                        heardIdentifiers: [],
                         conversationId: null,
                         dead: false,
                         deadEnded: false,
@@ -803,11 +807,10 @@ export class DEngine {
                         location: futureLocation.location,
                         locationSlot: futureLocation.locationSlot,
                         posture: "standing",
-                        seenCharacters: [],
-                        seenItems: [],
                         states: [],
                         wearing: [],
-                        heardIdentifiers: [],
+                        primaryEmotion: "neutral",
+                        emotionalRange: [],
                     }
                 }
 
@@ -897,16 +900,21 @@ export class DEngine {
                     allItemVolume += volume.completeVolume;
                 }
 
-                // @ts-ignore
-                for (const charName in this.deObject.stateFor) {
-                    // @ts-ignore
-                    const charState = this.deObject.stateFor[charName];
+                if (!this.deObject) {
+                    throw new Error("DEngine not initialized");
+                }
+
+                for (const charId in this.deObject.stateFor) {
+                    const charState = this.deObject.stateFor[charId];
+                    if (charState.deadEnded && !charState.dead) {
+                        continue;
+                    }
                     if (charState.location === locationId && charState.locationSlot === slotName) {
-                        if (measuredCharacters.includes(charName)) {
+                        if (measuredCharacters.includes(charId)) {
                             continue;
                         }
-                        allItemWeight += getCharacterWeight(this.getDEObject(), charName).weight;
-                        allItemVolume += getCharacterVolume(this.getDEObject(), charName).volume;
+                        allItemWeight += getCharacterWeight(this.getDEObject(), charId).weight;
+                        allItemVolume += getCharacterVolume(this.getDEObject(), charId).volume;
                     }
                 }
 
@@ -1010,6 +1018,8 @@ export class DEngine {
             states: [],
             conversationId: null,
             posture: "standing",
+            emotionalRange: [],
+            primaryEmotion: "neutral",
 
             heardIdentifiers: [],
 
@@ -1020,8 +1030,6 @@ export class DEngine {
             // chars start up naked
             // hopefully they give them some clothes soon :)
             wearing: [],
-            seenItems: [],
-            seenCharacters: [],
         };
     }
 
@@ -1054,7 +1062,22 @@ export class DEngine {
         // this will include everyone involved in the conversation
         for (const characterId of lastMessages.conversingCharacters) {
             const character = this.deObject.characters[characterId];
+
+            // the character was already dead ended, so we don't need to process them
+            const isDeadEndedAndNotDead = this.deObject.stateFor[characterId]?.deadEnded && !this.deObject.stateFor[characterId]?.dead;
+            if (isDeadEndedAndNotDead) {
+                continue;
+            }
+
+            // run the triggers and calculate things
+            // this can kill the character
             await runAllTriggersFor(this, character);
+
+            const isDeadEndedAndNotDeadNow = this.deObject.stateFor[characterId]?.deadEnded && !this.deObject.stateFor[characterId]?.dead;
+            if (isDeadEndedAndNotDeadNow) {
+                continue;
+            }
+
             await calculatePostureChange(this, character);
             await calculateStateChange(this, character);
             await calculateBondsChange(this, character);
@@ -1542,14 +1565,6 @@ export class DEngine {
         const leftOrderOfInteraction = feasibilityResults.leftOrderOfInteraction;
 
         await this._startInteraction(nextCharacterToTalkCharacterObject, leftOrderOfInteraction, internalCycleDepth + 1);
-    }
-
-    async gameOver() {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        this.deObject.gameOver = true;
-        await this.informDEObjectUpdated();
     }
 
     /**
