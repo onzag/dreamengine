@@ -879,7 +879,7 @@ engine.exports = {
             requiresPosture: null,
             injuryAndDeath: true,
             usesReliefDynamic: true,
-            relieving: (info) => `${info.char.name} is recovering from the severe freezing effects of the vacuum of space and should look for warmth`,
+            relieving: (info) => `${DE.utils.templates.formatCharacterName(info.char)} is recovering from the severe freezing effects of the vacuum of space and should look for warmth`,
             intensityChangeRatePerInferenceCycleAfterRelief: -0.1,
             // need no triggers, the weather system will apply the state
             triggersStates: {},
@@ -889,11 +889,11 @@ engine.exports = {
             deadEndIsDeath: true,
             // 5 minutes to death by freezing
             deadEndByTimeInMinutes: 5,
-            triggersDeadEnd: (info) => `${info.char.name} has succumbed to the extreme cold of the vacuum of space`,
+            triggersDeadEnd: (info) => `${DE.utils.templates.formatCharacterName(info.char)} has succumbed to the extreme cold of the vacuum of space`,
             intensityChangeRatePerInferenceCycle: 0,
             dominance: 10,
             dominanceAfterRelief: 1,
-            general: (info) => `${info.char.name} is freezing in the vacuum of space`,
+            general: (info) => `${DE.utils.templates.formatCharacterName(info.char)} is freezing in the vacuum of space`,
         });
     }
 }

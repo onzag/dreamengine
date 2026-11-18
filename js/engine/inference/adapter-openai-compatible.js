@@ -8,6 +8,8 @@
 import { DEngine } from '../index.js';
 import { BaseInferenceAdapter } from './base.js';
 import { emotions } from '../util/emotions.js';
+import { generateGrammarForVoice } from '../util/grammar.js';
+import { parseDialogue, parseNarration } from '../util/narration-and-dialogue.js';
 
 const DUMMY_SENTENCES = [
     "The wind carried whispers of forgotten names across the empty plaza.",
@@ -99,16 +101,16 @@ function formatVoiceTags(tags) {
 
 /**
  * @param {string} characterName
- * @param {{narration: boolean; modes: string[]; sounds: string[]; forcedMode: string|null; forcedSounds: string[], primaryEmotion: string, emotionalRange: string[]}} options
+ * @param {{type: "narration" | "dialogue" | "thought"; availableModes: string[]; availableSounds: string[]; forcedMode: string|null; forcedSounds: string[], primaryEmotion: string, emotionalRange: string[]}} options
  * @param {boolean} includeThirdPersonBeat
  * @returns {string}
  */
 function buildNextMessageInstructions(characterName, options, includeThirdPersonBeat) {
     const instructions = [];
 
-    if (options.narration) {
+    if (options.type === "narration") {
         instructions.push(`Write the next passage as one paragraph of third-person narration wrapped in asterisks (*). Keep everyone, including ${characterName}, in the third person, and describe ${characterName}'s actions, feelings, and surroundings as an outside observer.`);
-    } else {
+    } else if (options.type === "dialogue") {
         instructions.push(`Write EXACTLY ONE line spoken aloud by ${characterName}, beginning with "${characterName}:". Write that single line only and then stop: never write "${characterName}:" a second time, never start another dialogue line, and never continue onto a new line.`);
         if (includeThirdPersonBeat) {
             instructions.push(`You may interrupt the spoken dialogue with one brief third-person action beat wrapped in asterisks, as in: ${characterName}: spoken words *${characterName} acts* more spoken words. Asterisks are used EXCLUSIVELY to wrap a complete third-person action sentence, never for emphasis, bold text, pauses, or sound effects. Short cues such as pauses or sounds are written as bracket tags (e.g. [pause]), never with asterisks. Do not narrate on a separate line or describe another character's actions, thoughts, or feelings.`);
@@ -116,6 +118,9 @@ function buildNextMessageInstructions(characterName, options, includeThirdPerson
             instructions.push("Use spoken dialogue only, without action beats or asterisks. Pauses and sounds are still written as bracket tags such as [pause], never with asterisks.");
         }
         instructions.push(buildVoiceTagInstructions(options));
+    } else if (options.type === "thought") {
+        instructions.push(`Write EXACTLY ONE line of ${characterName}'s internal thoughts, beginning with "${characterName} (thought):".`);
+        instructions.push("Write internal thoughts only in first person, without action beats or asterisks; the thoughts must help the character reason about their situation.");
     }
 
     instructions.push("Advance the scene with new events. Do not repeat, summarize, or paraphrase previous text.");
@@ -123,7 +128,7 @@ function buildNextMessageInstructions(characterName, options, includeThirdPerson
 }
 
 /**
- * @param {{modes: string[]; sounds: string[]; forcedMode: string|null; forcedSounds: string[], primaryEmotion: string, emotionalRange: string[]}} options
+ * @param {{availableModes: string[]; availableSounds: string[]; forcedMode: string|null; forcedSounds: string[], primaryEmotion: string, emotionalRange: string[]}} options
  * @returns {string}
  */
 export function buildVoiceTagInstructions(options) {
@@ -132,8 +137,8 @@ export function buildVoiceTagInstructions(options) {
     if (options.forcedMode) {
         instructions.push(`Start the spoken dialogue with the voice mode tag [${options.forcedMode}].\n`);
     } else {
-        if (options.modes.length > 0) {
-            instructions.push(`Optionally use one relevant voice mode tag from ${formatVoiceTags(options.modes)}.`);
+        if (options.availableModes.length > 0) {
+            instructions.push(`Optionally use one relevant voice mode tag from ${formatVoiceTags(options.availableModes)}.`);
         }
         instructions.push(`Use the tag [normal] or [${options.primaryEmotion}] to reset or specify the ${options.primaryEmotion} voice (primary emotion of the character).`);
         instructions.push(`Other common tags include ${formatVoiceTags(options.emotionalRange)} to indicate the emotion (the character experiences these currently)`);
@@ -143,7 +148,7 @@ export function buildVoiceTagInstructions(options) {
 
     const forcedSounds = options.forcedSounds.slice(0, 3);
     const forcedSoundNames = new Set(forcedSounds);
-    const optionalSounds = Array.from(new Set(options.sounds.filter((sound) => !forcedSoundNames.has(sound))));
+    const optionalSounds = Array.from(new Set(options.availableSounds.filter((sound) => !forcedSoundNames.has(sound))));
 
     if (forcedSounds.length > 0) {
         instructions.push(`Use at most 3 [sound tags] total. Include ${describeForcedSounds(forcedSounds)}.`);
@@ -409,9 +414,10 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      * approximation is returned instead.
      *
      * @param {string} text
+     * @param {string} modelId
      * @returns {Promise<number>}
      */
-    async countTokens(text) {
+    async countTokens(text, modelId) {
         if (this.useExperimentalTestMode) {
             return Math.ceil(text.length / 4);
         }
@@ -879,7 +885,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
             }
         } finally {
             controller.abort();
-            await reader.cancel().catch(() => {});
+            await reader.cancel().catch(() => { });
             reader.releaseLock();
         }
         if (thought) thoughts.push(thought);
@@ -1337,101 +1343,98 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
 
     /**
      * Infers the next message for a character narrative purposes
-     *
+     * 
+     * TODO this is missing information from perspective about surroundings, as well as other tools that fetch information from perspective and
+     * memory
+     * 
+     * @param {DEObject} DE
      * @param {DECompleteCharacterReference} character
      * @param {{
      *   messages: Array<{message: string, author: string, storyMaster: boolean}>,
-     *   messagesTrail: Array<string>,
-     *   system: string,
-     *   stateInjections: string[],
-     *   visibleEnviroment: string,
+     *   perspective: DEPerspective,
      *   narrativeEffects: string[],
      *   followingAction?: string|null,
-     *   grammar: string|null,
-     *   narration: boolean,
-     *   primaryEmotion: string,
-     *   emotionalRange: Array<string>,
-     *   activeStates: Array<{state: string, dominance: number}>,
-     *   modes: Array<string>,
-     *   sounds: Array<string>,
+     *   primaryEmotion: DEEmotionNames,
+     *   emotionalRange: Array<DEEmotionNames>,
+     *   type: "narration" | "dialogue" | "thought",
+     *   internalDescription: DEInternalDescriptionOfCharacter,
+     *   externalDescription: string,
+     *   availableModes: Array<string>,
+     *   availableSounds: Array<string>,
      *   forcedMode: string|null,
      *   forcedSounds: Array<string>,
-     *   __debug_id?: string|null,
+     *   mute: boolean,
      * }} options
-     * @returns {Promise<import('./base.js').InferenceResponse>}
+     * @returns {Promise<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>}
      */
-    async inferNextStoryFragmentFor(character, options) {
-        const { messages, messagesTrail, system, stateInjections, visibleEnviroment, narrativeEffects, grammar } = options;
-
+    async inferNextStoryFragmentFor(DE, character, options) {
         await this.ensureInitialized();
 
         const model = this._modelForGear('talk');
 
-        let systemPrompt = replaceMultipleNewLines(system + visibleEnviroment).trim();
+        const includeThirdPersonBeat = options.type === "dialogue" && Math.random() >= 0.5;
+        const nextMessageInstructions = buildNextMessageInstructions(character.name, options, includeThirdPersonBeat);
 
-        const includeThirdPersonBeat = !options.narration && Math.random() >= 0.5;
-        const nextMessageMustBeInform = buildNextMessageInstructions(character.name, options, includeThirdPersonBeat);
+        const { system: systemPrompt, user: userPrompt } = this.buildPrompt(DE, character, {
+            characterRules: await Promise.all(Object.values(character.characterRules).map(rule => typeof rule.rule === "string" ? rule.rule : rule.rule({
+                char: character,
+            }))),
+            description: options.internalDescription.general,
+            externalDescription: options.externalDescription,
+            dislikes: character.dislikes,
+            likes: character.likes,
+            lore: DE.world.lore ? typeof DE.world.lore === "string" ? DE.world.lore : await DE.world.lore({ char: character }) : "",
+            relationships: options.internalDescription.relationships,
+            states: options.internalDescription.activeStates,
+            worldRules: await Promise.all(Object.values(DE.worldRules).map(rule => typeof rule.rule === "string" ? rule.rule : rule.rule({
+                char: character,
+            }))),
+            messages: options.messages,
+            nextMessageInstructions,
+            narrativeEffects: options.narrativeEffects,
+            followingAction: options.followingAction || null,
+            primaryEmotion: options.primaryEmotion,
+            emotionalRange: options.emotionalRange,
+            mute: options.mute,
+        });
 
-        const continuationRequestPrompt = replaceMultipleNewLines(`
-${stateInjections.length > 0 ? `# ${character.name}'s Current States:\n\n${stateInjections.join("\n\n")}` : ""}
+        const nameFormatted = DE.utils.templates.formatCharacterName(character.name);
+        const grammarInfo = generateGrammarForVoice(nameFormatted, options.forcedMode);
 
-${narrativeEffects.length ? "# When narrating ENSURE that:\n\n" + narrativeEffects.map(effect => `- ${effect}`).join("\n") : ""}
+        let paddingUsed = 0;
+        let grammar = "";
 
-${options.followingAction ? `# IMPORTANT:\n\n${options.followingAction}\n` : ""}
-
-${nextMessageMustBeInform}
-`
-        ).trim() + "\n";
+        if (options.type === "dialogue") {
+            grammar = grammarInfo.dialogue;
+            paddingUsed = grammarInfo.extraCharsDialogue;
+        } else if (options.type === "narration") {
+            grammar = grammarInfo.narrative;
+            paddingUsed = grammarInfo.extraCharsNarrative;
+        } else if (options.type === "thought") {
+            grammar = grammarInfo.thought;
+            paddingUsed = grammarInfo.extraCharsThought;
+        }
 
         let tokensExhaustedApprox = 512; // initial buffer
         const contextWindowSize = this.contextWindowSize;
 
         // wiggle room for system prompt
-        tokensExhaustedApprox += await this.countTokens(systemPrompt);
+        tokensExhaustedApprox += await this.countTokens(systemPrompt, model);
 
         if (tokensExhaustedApprox >= contextWindowSize) {
             throw new Error("System prompt is too long for the model's context window");
         }
 
-        tokensExhaustedApprox += await this.countTokens(continuationRequestPrompt);
+        tokensExhaustedApprox += await this.countTokens(userPrompt, model);
 
         if (tokensExhaustedApprox >= contextWindowSize) {
             throw new Error("User prompt is too long for the model's context window");
         }
 
-        const warnings = [];
-        let storySoFar = "";
-        let tokensInStorySoFar = 0;
-        for (const msg of messages.reverse()) {
-            let messageToAdd = msg.message;
-            if (storySoFar) {
-                messageToAdd += "\n\n";
-            }
-            const messageTokens = await this.countTokens(messageToAdd);
-            if (tokensExhaustedApprox + tokensInStorySoFar + messageTokens >= contextWindowSize) {
-                warnings.push("The story so far is too long for the model's context window, some of the earliest messages will be truncated.");
-                break;
-            }
-            storySoFar = messageToAdd + storySoFar;
-            tokensInStorySoFar += messageTokens;
-        }
-
-        if (!storySoFar) {
-            throw new Error("There is no story so far to provide as context, at least one message must be provided");
-        }
-
-        if (messagesTrail.length > 0) {
-            storySoFar += "\n\n" + messagesTrail.join("\n\n");
-        }
-
-        storySoFar = replaceMultipleNewLines(storySoFar).trim();
-
-        const storyUserPrompt = `# Story to continue:\n\n${storySoFar}\n\n`;
-
         /** @type {Array<{role: "system" | "user" | "assistant", content: string, thoughts: string[], _raw?: string}>} */
         const chatMessages = [
             { role: "system", content: systemPrompt, thoughts: [] },
-            { role: "user", content: storyUserPrompt + continuationRequestPrompt, thoughts: [] },
+            { role: "user", content: userPrompt, thoughts: [] },
         ];
 
         const deServerOptions = {
@@ -1443,26 +1446,29 @@ ${nextMessageMustBeInform}
             // can only produce a single line and cannot begin a second
             // "<name>:" dialogue line beneath the current one. Narration is a
             // paragraph and is bounded by maxParagraphs instead.
-            stopAt: /** @type {string[]} */ (options.narration ? [] : ["\n"]),
+            stopAt: /** @type {string[]} */ (options.type === "narration" ? [] : ["\n"]),
             stopAfter: /** @type {string[]} */ ([]),
             grammar: grammar || undefined,
         };
 
-        if (options.__debug_id) {
-            this.__debug_last10TalkPayloads.push({
-                payload: { model, messages: chatMessages, ...deServerOptions },
-                id: options.__debug_id,
-            });
-            if (this.__debug_last10TalkPayloads.length > 10) {
-                this.__debug_last10TalkPayloads.shift();
-            }
-        }
-
         const result = await this.runInference(model, chatMessages, this._standardOpenAIOptions(), deServerOptions);
+        // remove the first n paddingUsed characters
+        const contentWithoutPad = result.content.slice(paddingUsed);
+
+        if (options.type === "dialogue") {
+            return {
+                type: "dialogue",
+                fragments: await parseDialogue(DE, contentWithoutPad, character),
+            };
+        } else if (options.type === "narration") {
+            return {
+                type: "narration",
+                fragments: await parseNarration(DE, contentWithoutPad, character),
+            };
+        }
         return {
-            text: result.content,
-            thoughts: result.thoughts || [],
-            warnings: [],
+            type: "thought",
+            fragments: await parseNarration(DE, contentWithoutPad, character),
         };
     }
 
@@ -1585,75 +1591,44 @@ ${nextMessageMustBeInform}
     }
 
     /**
-     * @param {DECompleteCharacterReference} character 
-     * @param {{
-     *   description: string,
-     *   externalDescription: string|null,
-     *   relationships: Array<{title: string, description: string}>,
-     *   expressiveStates: string[],
-     *   scenario: string|null,
-     *   lore: string|null,
-     * }} options
-     * @returns {string}
-     */
-    buildSystemCharacterDescription(character, options) {
-        const { description, externalDescription, relationships, expressiveStates, scenario, lore } = options;
-        return (
-            `${externalDescription ? `# ${character.name}'s External Description:
-            
-${externalDescription}
-
-` : ""}# ${character.name}'s Description:
-
-${description}${relationships.length > 0 ? `
-
-# ${character.name}'s Relationships:
-
-${relationships.map(relationship => `## ${relationship.title}\n\n${relationship.description}`).join("\n")}` : ""}${expressiveStates.length > 0 ? `
-
-# Current States:
-
-${expressiveStates.map(state => `## ${state}`).join("\n")}` : ""}${scenario && scenario.trim().length > 0 ? `
-
-# Scenario:
-
-${scenario}` : ""}${lore && lore.trim().length > 0 ? `
-
-# Lore:
-
-${lore}
-` : ""}`);
-    }
-
-    /**
+     * @param {DEObject} DE
      * @param {DECompleteCharacterReference} character the character in question that is building a prompt for
      * @param {{
      *   description: string,
      *   externalDescription: string,
      *   relationships: Array<{title: string, description: string}>,
-     *   expressiveStates: string[],
-     *   scenario: string,
-     *   lore: string|null,
-     *   otherInteractingCharacters: Array<string>,
+     *   states: Array<DEInternalDescriptionOfCharacterActiveState>,
      *   characterRules: Array<string>,
      *   worldRules: Array<string>,
+     *   lore: string,
      *   likes: Array<string>,
      *   dislikes: Array<string>,
+     *   messages: Array<{message: string, author: string, storyMaster: boolean}>,
+     *   nextMessageInstructions: string,
+     *   narrativeEffects: Array<string>,
+     *   followingAction: string|null,
+     *   primaryEmotion: DEEmotionNames,
+     *   emotionalRange: Array<DEEmotionNames>,
+     *   mute: boolean,
      * }} options
-     * @returns {string} the system prompt
+     * @returns {{system: string, user: string}} the system and user prompts
      */
-    buildSystemPromptForCharacter(character, options) {
-        const { description, externalDescription, relationships, expressiveStates, scenario, lore, otherInteractingCharacters, characterRules, worldRules } = options;
+    buildPrompt(DE, character, options) {
+        const { description, externalDescription, relationships, states, lore, characterRules, worldRules, narrativeEffects, followingAction } = options;
 
-        return (
-            `You roleplay as ${character.name} in a richly detailed and immersive world. Your actions, thoughts, and feelings are entirely your own, and you have complete creative freedom to explore this narrative-driven experience.
+        const expressiveActiveStates = states.filter(s => s.expressive);
+
+        const nameFormatted = DE.utils.templates.formatCharacterName(character);
+
+        let system = (
+            `You roleplay as ${nameFormatted} in a richly detailed and immersive world. Your actions, thoughts, and feelings are entirely your own, and you have complete creative freedom to explore this narrative-driven experience.
 
 This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
 
 # Roleplay Guidelines:
 
-## Writting:
-Every response should be detailed, creative, and immersive, driving the scenario forward in a way that fully engages the player. Introduce new scenarios and events naturally, making sure they fit the description of the location.
+## Writing:
+Every response should be detailed, creative, and immersive, driving the scenario forward in an engaging way.
 
 ## Avoid Repetition:
 Ensure that the narration does not repeat information. Instead of summarizing, clarify narrative details thoroughly and let them evolve naturally.
@@ -1664,45 +1639,115 @@ Write in a neutral and balanced tone, considering all consequences, limitations,
 ## Style Preference:
 Adopt a \`show, don't tell\` manner, similar to Terry Pratchett's style, blending humor, wit, and everyday language.
 
-# Rules:
-${otherInteractingCharacters.map(name => `Rule: Never speak for or control ${name}'s actions, thoughts, or feelings.`).join("\n")}
-RULE: Avoid suggesting or implying reactions or decisions from other characters
-RULE: Reflect on the potential consequences of ${character.name} actions and decisions.
+# Roleplay Rules:
+RULE: Avoid suggesting or implying reactions or decisions from other characters, you only control ${nameFormatted}'s actions, thoughts, and feelings.
+RULE: Reflect on the potential consequences of ${nameFormatted} actions and decisions.
 RULE: Write all narration and actions in third person, not first person.
 RULE: Use a movie script style format for the story, with character names followed by a colon, and their dialogue or actions following.
-RULE: Spoken dialogue should be done in first person, and start with the character name followed by a colon eg. \`${character.name}: This is spoken dialogue.\`
-RULE: Action beats inside a dialogue line must be wrapped in asterisks and written in third person eg. \`${character.name}: spoken words *${character.name} does something* more spoken words\`
+RULE: Spoken dialogue is done in first person, and start with the character name followed by a colon eg. \`${nameFormatted}: This is spoken dialogue.\`
+RULE: Action beats inside a dialogue line must be wrapped in asterisks and written in third person eg. \`${nameFormatted}: spoken words *${nameFormatted} does something* more spoken words\`
 RULE: Asterisks are used exclusively to mark narration and action beats; never use asterisks for emphasis or bold text.
-RULE: Narration messages are plain without specifying a speaker and written, and in third person eg. \`As ${character.name} hears this...\` written on their own line.${characterRules.length ? `
+RULE: Narration messages are plain without specifying a speaker and written, and in third person eg. \`As ${nameFormatted} hears this...\` written on their own line.${characterRules.length ? `
+RULE: Thoughts are written in first person just like dialogue.
 
-# Character Rules:
-${characterRules.map(rule => `Rule: ${rule}`).join("\n")}
+# ${nameFormatted} Rules:
+${characterRules.map(rule => `RULE: ${rule}`).join("\n")}
 ` : ""}${worldRules.length ? `
 
 # World Rules:
-${worldRules.map(rule => `Rule: ${rule}`).join("\n")}
-` : ""}${options.likes.length > 0 ? `\n\n# ${character.name} Likes:\n\n` +
-                options.likes.map(like => `- ${like}`).join("\n") : ""}${options.dislikes.length > 0 ? `\n\n# ${character.name} Dislikes:\n\n` +
+${worldRules.map(rule => `RULE: ${rule}`).join("\n")}
+` : ""}${options.likes.length > 0 ? `\n\n# ${nameFormatted} Likes:\n\n` +
+                options.likes.map(like => `- ${like}`).join("\n") : ""}${options.dislikes.length > 0 ? `\n\n# ${nameFormatted} Dislikes:\n\n` +
                     options.dislikes.map(dislike => `- ${dislike}`).join("\n") : ""}
-
-# Roleplay Context:
-You are currently roleplaying as ${character.name}.
 
 # Narration and Dialogue Examples:
 \`\`\`
 *This is narration*
 
-${character.name}: This is spoken dialogue *${character.name} does something* this is more spoken dialogue
+${DE.utils.templates.formatCharacterName(character)}: This is spoken dialogue *${DE.utils.templates.formatCharacterName(character)} does something* this is more spoken dialogue
+
+${DE.utils.templates.formatCharacterName(character)} (thought): This is a thought.
 
 *This is narration*
 \`\`\`
 
-${this.buildSystemCharacterDescription(character, { description, externalDescription, relationships, expressiveStates, scenario, lore })}
-`
-        )
+# IMPORTANT: Always use identifiers for characters, locations and objects:
+
+Identifiers are created with the format <id:name> and are used to refer to characters, locations, and objects in the story. For example, <character-john-1:John> refers to a character named John.
+
+Always use the identifiers even when referring to things using pronouns. For example, instead of saying merely "he" or "she", say "<character-john-1:He> was not feeling well, so he grabbed his <item-wallet-32:wallet> and went to the <location-hospital-5:hospital>."
+
+You can combine multiple identifiers by comma separating them, for example: "<character-john-1:He> grabbed all his <item-wallet-32,item-keys-7,item-hat-5:things> and went <location-house-32:home> to see <character-jane-1,character-mia-1:his children>.
+
+Keep in mind that characters in the story are not aware of the identifiers, they are only used for the AI to keep track of characters, locations and objects in the story.
+
+Two characters or items can have the same name, but have different identifiers.`);
+
+        if (externalDescription && externalDescription.trim().length > 0) {
+            system += `\n\n# ${nameFormatted}'s External Description:\n\n${externalDescription}`;
+        }
+
+        if (description && description.trim().length > 0) {
+            system += `\n\n# ${nameFormatted}'s Description:\n\n${description}`;
+        }
+
+        if (relationships.length > 0) {
+            system += `\n\n# ${nameFormatted}'s Relationships:\n\n`;
+            for (const relationship of relationships) {
+                system += `\n\n## ` + relationship.title + `\n\n` + relationship.description;
+            }
+        }
+
+        if (lore && lore.trim().length > 0) {
+            system += `\n\n# Lore:\n\n${lore}`;
+        }
+        
+        let user = `# Story To Continue:`;
+        for (const msg of options.messages) {
+            // author and storymaster are irrelevant
+            // this already contains all the formatting too
+            user += `\n\n${msg.message}`;
+        }
+
+        user += `\n\n# Keep in mind:\n`;
+        for (const state of expressiveActiveStates) {
+            user += `\n- ` + `${nameFormatted} is ` + state.expressive + (state.injection ? `: ` + state.injection : ``);
+        }
+        user += `\n- ${nameFormatted} is currently primarily feeling ${options.primaryEmotion}, and showcases the following emotional range: ${options.emotionalRange.join(", ")}`;
+
+        if (options.mute) {
+            if (character.voice.mute) {
+                user += `\n- ${nameFormatted} is mute and cannot speak.`;
+            } else {
+                user += `\n- ${nameFormatted} is currently mute and cannot speak.`;
+            }
+        }
+
+        if (character.blindness === "full") {
+            user += `\n- ${nameFormatted} is blind and cannot see.`;
+        } else if (character.blindness === "partial-bad") {
+            user += `\n- ${nameFormatted} is partially blind and has limited vision.`;
+        } else if (character.blindness === "partial-good") {
+            user += `\n- ${nameFormatted} is partially blind but still can make some details.`;
+        }
+
+        if (narrativeEffects.length > 0) {
+            user += `\n\n# When narrating ENSURE that:\n`;
+        }
+        for (const effect of narrativeEffects) {
+            user += `\n- ` + effect;
+        }
+
+        if (followingAction) {
+            user += `\n\n# IMPORTANT The following action must be executed:\n\n${followingAction}`;
+        }
+
+        user += `\n\n${options.nextMessageInstructions}`;
+
+        return {system, user};
     }
 
-        /**
+    /**
      * @param {string} description
      * @param {string[]} rules
      * @param {string[]|string|null} characterDescriptions
@@ -1729,135 +1774,6 @@ ${this.buildSystemCharacterDescription(character, { description, externalDescrip
         }
 
         return value;
-    }
-
-
-    /**
-     * @param {Array<{groupDescription: string, characters: Array<{name: string, description: string}>}>} groups
-     * @param {boolean} asSocialGroups
-     * @returns {{availableCharactersAt: string, characterInfoAt: string, value: string}}
-     */
-    buildContextInfoForAvailableCharacters(groups, asSocialGroups = false) {
-        if (asSocialGroups) {
-            let value = `# Social Groups:\n`;
-            let index = 0;
-            for (const group of groups) {
-                if (index > 0) {
-                    value += `\n`;
-                }
-                if (group.groupDescription) {
-                    value += group.groupDescription + "\n";
-                }
-                for (const character of group.characters) {
-                    value += `- ` + character.name + ` - ` + character.description + `\n`;
-                }
-                index++;
-            }
-
-            return {
-                availableCharactersAt: "Social Groups section",
-                characterInfoAt: "Social Groups section",
-                value,
-            };
-        } else {
-            let value = `# Available Characters\n`;
-            let index = 0;
-            for (const group of groups) {
-                if (index > 0) {
-                    value += `\n`;
-                }
-                if (group.groupDescription) {
-                    value += group.groupDescription + "\n";
-                }
-                for (const character of group.characters) {
-                    value += `- ` + character.name + ` - ` + character.description + `\n`;
-                }
-                index++;
-            }
-
-            return {
-                availableCharactersAt: "Available Characters section",
-                characterInfoAt: "Available Characters section",
-                value,
-            };
-        }
-    }
-
-    /**
-     * Builds context info for available items
-     * @param {string[]} items 
-     * @returns {{availableItemsAt: string, itemInfoAt: string, value: string}}
-     */
-    buildContextInfoForAvailableItems(items) {
-        let value = `# Available Items:\n`;
-        for (const item of items) {
-            value += `- ` + item + `\n`;
-        }
-
-        return {
-            availableItemsAt: "Available Items section",
-            itemInfoAt: "Available Items section",
-            value,
-        };
-    }
-
-    /**
-     * @param {string} instructions
-     */
-    buildContextInfoInstructions(instructions) {
-        return ("# Instructions:\n" + instructions);
-    }
-
-    /**
-     * @param {string} rule 
-     * @returns {string}
-     */
-    buildContextInfoRule(rule) {
-        return ("Rule:\n" + rule);
-    }
-
-    /**
-     * @param {string} example
-     * @returns {string}
-     */
-    buildContextInfoExample(example) {
-        return ("# Example:\n" + example);
-    }
-
-    /**
-     * @param {DECompleteCharacterReference} character
-     * @param {string} info
-     * @returns {{characterDescriptionAt: string, value: string}}
-     */
-    buildContextInfoCharacterDescription(character, info) {
-        return {
-            characterDescriptionAt: character.name + " Description section",
-            value: "# " + character.name + " Description:\n\n" + info
-        };
-    }
-
-    /**
-     * @param {string} itemName
-     * @param {string} title
-     * @param {string[]} descriptions
-     * @return {{itemDescriptionAt: string, value: string}}
-     */
-    buildContextInfoItemDescription(itemName, title, descriptions) {
-        return {
-            itemDescriptionAt: itemName + " Description section",
-            value: "# " + itemName + " Description:\n" + title + ":\n\n" + descriptions.join("\n")
-        };
-    }
-
-    /**
-     * Returns a debug payload, non-essential
-     * this is an arbitrary json object that was sent as payload for whatever the server is
-     * 
-     * @param {string} __debug_id
-     * @returns {any | null}
-     */
-    getDebugPayload(__debug_id) {
-        return this.__debug_last10TalkPayloads.find(p => p.id === __debug_id)?.payload || null;
     }
 
     /**

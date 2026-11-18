@@ -435,25 +435,6 @@ export class EngineWorkerClient {
         this.#worker.postMessage({ type: "ScriptTypeGuiderGoBack" });
     }
 
-    /**
-     * @param {{ characterName: string, lastMessageGid: string | null }} args
-     * @returns {Promise<import("../engine/util/messages.js").DEObjectMessageGeneratorResult[]>}
-     */
-    getHistory(args) { return this.#call("getHistory", args); }
-
-    /**
-     * @param {{ characterName: string }} args 
-     * @returns {Promise<{info: string}>} The debug info for the character
-     */
-    getDebugInfoForCharacter(args) { return this.#call("getDebugInfoForCharacter", args); }
-
-    /**
-     * 
-     * @param {{ message__debug_id: string }} args 
-     * @returns {Promise<{info: string}>} The debug info for the message
-     */
-    getDebugInfoForMessage(args) { return this.#call("getDebugInfoForMessage", args); }
-
     // ── Lifecycle ───────────────────────────────────────────────────
 
     terminate() {

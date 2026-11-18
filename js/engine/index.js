@@ -41,7 +41,6 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
  * @typedef {EngineConversationEventBase & {
  *   contentIndex: number,
  *   text?: string,
- *   __debug_id?: string,
  *   event: "add-narration-block" | "add-dialogue-block" |
  *          "add-hidden-block" | "add-narration" |
  *          "add-dialogue" | "add-sound" | "end-add-narration" | "end-add-dialogue" | "end-add-sound"
@@ -57,7 +56,6 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
  *   contentIndex: number,
  *   event: "end-narration-block",
  *   obj: DEConversationMessageNarration,
- *   __debug_id?: string,
  * }} EngineConversationEventEndNarrationBlock
  */
 
@@ -66,7 +64,6 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
  *   contentIndex: number,
  *   event: "end-dialogue-block",
  *   obj: DEConversationMessageDialogue,
- *   __debug_id?: string,
  * }} EngineConversationEventEndDialogueBlock
  */
 
@@ -192,13 +189,6 @@ export function createCharacterFromUser(user) {
         metadata: user.metadata || {},
         curiosity: 0,
         skepticism: 0,
-        worldKnowledge: {
-            advancedTechnology: false,
-            anthropomorphizedCreatures: false,
-            magic: false,
-            robots: false,
-            talkingAnimals: false,
-        },
         apparentTier: user.apparentTier,
         apparentTierValue: user.apparentTierValue,
         name: user.name,

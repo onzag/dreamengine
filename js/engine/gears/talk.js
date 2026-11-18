@@ -619,11 +619,9 @@ export async function talk(engine, character, options) {
         const currentBlock = nextIsNarration ? {
             type: "narration",
             fragments: [],
-            __debug_id: nextMessage.id + "__" + fragmentCount,
         } : {
             type: "dialogue",
             fragments: [],
-            __debug_id: nextMessage.id + "__" + fragmentCount,
         };
         nextMessage.content.push(currentBlock);
 
@@ -647,8 +645,6 @@ export async function talk(engine, character, options) {
                 forcedSounds: forcedVoiceEffects.forcedSounds,
                 emotionalRange: emotionalRange,
                 followingAction,
-
-                __debug_id: nextMessage.id + "__" + fragmentCount,
 
                 // @ts-ignore primary emotion is guaranteed to be set at this point, because if it wasn't, we would have set it to "neutral"
                 primaryEmotion,

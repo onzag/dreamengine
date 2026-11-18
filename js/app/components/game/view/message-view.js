@@ -49,7 +49,6 @@ kbd { opacity: .7; margin-left: 1vh; }
         this.hasCurrent = false;
         this.hasPrev = false;
         this.hasNext = false;
-        this.processing = false;
         this.waitingForAfter = false;
         this.isInputMode = false;
         this.navigating = false;
@@ -69,7 +68,7 @@ kbd { opacity: .7; margin-left: 1vh; }
         this.messageObject.addEventListener('stream-change', () => this.renderControls());
         this.input.addEventListener('message-submit', event => {
             event.stopPropagation();
-            if (this.frozenKey || !this.isInputMode || this.processing || this.navigating) return;
+            if (this.frozenKey || !this.isInputMode || this.waitingForAfter || this.navigating) return;
             const text = /** @type {CustomEvent<string>} */ (event).detail;
             playConfirmSound();
             this.frozenKey = this.messageKey;
@@ -112,7 +111,7 @@ kbd { opacity: .7; margin-left: 1vh; }
         this.currentPerspective = null;
         this.messageKey = this.selectionKey = this.frozenKey = '';
         this.hasCurrent = this.hasPrev = this.hasNext = false;
-        this.processing = this.isInputMode = false;
+        this.isInputMode = false;
         this.waitingForAfter = false;
         this.input.drafts.clear();
         this.input.draftKey = '';
@@ -150,18 +149,17 @@ kbd { opacity: .7; margin-left: 1vh; }
         this.hasPrev = hasPrev;
         this.hasNext = hasNext;
         this.waitingForAfter = waitingForAfter;
-        this.processing = message.isProcessingSideEffects === true || waitingForAfter;
         this.messageObject.updateMessage(perspective, message, content, selectionKey);
         this.input.updateUser(perspective, JSON.stringify([perspective?.ownId, conversation.id]));
         // A next message may arrive while an unsent draft is open. Keep the draft for later.
-        if (this.isInputMode && (hasNext || this.processing)) this.isInputMode = false;
+        if (this.isInputMode && (hasNext || this.waitingForAfter)) this.isInputMode = false;
         this.renderControls();
     }
 
     renderControls() {
         const userName = this.currentPerspective?.ownName || this.currentPerspective?.self.nameSimple || 'Player';
-        const key = JSON.stringify([this.hasCurrent, this.isInputMode, this.frozenKey, this.processing,
-            this.hasPrev, this.hasNext, this.navigating, this.messageObject.streaming, userName, this.waitingForAfter]);
+        const key = JSON.stringify([this.hasCurrent, this.isInputMode, this.frozenKey, this.waitingForAfter,
+            this.hasPrev, this.hasNext, this.navigating, this.messageObject.streaming, userName]);
         if (key === this.controlsKey) return;
         this.controlsKey = key;
         this.hidden = !this.hasCurrent;
@@ -172,10 +170,10 @@ kbd { opacity: .7; margin-left: 1vh; }
             this.dispatchEvent(new CustomEvent('message-visibility-change', { detail: messageVisible }));
         }
         this.input.hidden = !this.isInputMode;
-        this.input.setEnabled(this.hasCurrent && this.isInputMode && !this.frozenKey && !this.processing && !this.navigating);
+        this.input.setEnabled(this.hasCurrent && this.isInputMode && !this.frozenKey && !this.waitingForAfter && !this.navigating);
         this.prev.hidden = !!this.frozenKey || !(this.isInputMode || this.hasPrev);
         this.prev.disabled = this.navigating;
-        this.next.hidden = !!this.frozenKey || this.processing || this.navigating;
+        this.next.hidden = !!this.frozenKey || this.waitingForAfter || this.navigating;
         this.next.disabled = this.isInputMode && !this.input.canSubmit;
         const shortcut = /** @type {HTMLElement} */ (this.next.querySelector('kbd'));
         shortcut.hidden = this.isInputMode;
@@ -183,14 +181,14 @@ kbd { opacity: .7; margin-left: 1vh; }
         const label = this.isInputMode ? 'Ok \u25b6' : this.messageObject.streaming ? 'Reveal text' : this.hasNext ? 'Next \u25b6' : `${userName}'s Turn \u25b6`;
         const nextLabel = /** @type {HTMLElement} */ (this.next.querySelector('span'));
         if (nextLabel.textContent !== label) nextLabel.textContent = label;
-        this.loading.hidden = !(this.frozenKey || this.processing || this.navigating);
+        this.loading.hidden = !(this.frozenKey || this.waitingForAfter || this.navigating);
         const status = /** @type {HTMLElement} */ (this.loading.querySelector('.status'));
-        const statusText = this.frozenKey ? 'Waiting...' : this.waitingForAfter ? 'Loading outcome\u2026' : 'Processing\u2026';
+        const statusText = this.frozenKey ? 'Waiting...' : this.waitingForAfter ? 'Loading outcome\u2026' : 'Loading message\u2026';
         if (status.textContent !== statusText) status.textContent = statusText;
     }
 
     async advance() {
-        if (!this.hasCurrent || this.frozenKey || this.processing || this.navigating || this.isInputMode) return;
+        if (!this.hasCurrent || this.frozenKey || this.waitingForAfter || this.navigating || this.isInputMode) return;
         playConfirmSound();
         if (this.messageObject.streaming) { this.messageObject.finish(); return; }
         if (!this.hasNext) {

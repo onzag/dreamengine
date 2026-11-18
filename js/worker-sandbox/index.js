@@ -693,60 +693,6 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
             }
             return null;
         },
-
-        async getHistory({ characterName, lastMessageGid }) {
-            /**
-             * @type {Array<import("../engine/util/messages.js").DEObjectMessageGeneratorResult>}
-             */
-            let accumulatedMessages = [];
-            const generator = getHistory(
-                engine,
-                engine.getDEObject().characters[characterName],
-                {
-                    // excludeFrom: [this.username],
-                    includeDebugMessages: true,
-                    includeRejectedMessages: true,
-                    enrichedMode: false,
-                    useExponentialShrinkingSelectiveContextWindowStrategy: false,
-                },
-            );
-            let next = await generator.next(true);
-            while (!next.done) {
-                if (next.value.gid === lastMessageGid) {
-                    await generator.return();
-                    break;
-                }
-                accumulatedMessages.push(next.value);
-                next = await generator.next(true);
-            }
-            return accumulatedMessages;
-        },
-
-        async getDebugInfoForCharacter({ characterName }) {
-            const char = engine.getDEObject().characters[characterName];
-            if (!char) {
-                return {
-                    "info": `Character '${characterName}' not found`,
-                }
-            }
-
-            const internalDescription = await getSysPromptForCharacter(engine, characterName);
-
-            return {
-                "info": internalDescription.sysprompt,
-            }
-        },
-
-        async getDebugInfoForMessage({ message__debug_id }) {
-            const inferenceAdapter = engine.inferenceAdapter;
-            if (!inferenceAdapter) {
-                return {
-                    "info": `No inference adapter found on engine`,
-                }
-            }
-            const payload = inferenceAdapter.getDebugPayload(message__debug_id);
-            return payload;
-        }
     };
 
     // ── CardType Wizard infrastructure ──────────────────────────────────

@@ -132,13 +132,6 @@ engine.exports = {
                 (info) => `${DE.utils.templates.formatCharacterName(info.char, info.char)} will use his robotic strength and a series of sharp blades that come off its arm to defend itself from ${DE.utils.templates.formatCharacterName(info.other, info.char, { type: "definite" })}`,
             ],
             curiosity: 0.8,
-            worldKnowledge: {
-                talkingAnimals: false,
-                magic: false,
-                advancedTechnology: true,
-                anthropomorphizedCreatures: false,
-                robots: true,
-            },
             generalCharacterDescriptionInjection: {},
             actionPromptInjection: [],
             characterRules: {},

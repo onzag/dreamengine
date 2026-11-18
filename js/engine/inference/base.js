@@ -97,44 +97,31 @@ export class BaseInferenceAdapter {
     /**
      * Infers the next message for a character narrative purposes
      * 
+     * @param {DEObject} DE
      * @param {DECompleteCharacterReference} character
      * @param {{
      *   messages: Array<{message: string, author: string, storyMaster: boolean}>,
-     *   messagesTrail: Array<string>,
-     *   system: string,
-     *   stateInjections: string[],
-     *   visibleEnviroment: string,
+     *   perspective: DEPerspective,
      *   narrativeEffects: string[],
      *   followingAction?: string|null,
-     *   grammar: string|null,
-     *   primaryEmotion: string,
-     *   emotionalRange: Array<string>,
-     *   narration: boolean,
-     *   activeStates: Array<{state: string, dominance: number}>,
-     *   modes: Array<string>,
-     *   sounds: Array<string>,
+     *   primaryEmotion: DEEmotionNames,
+     *   emotionalRange: Array<DEEmotionNames>,
+     *   type: "narration" | "dialogue" | "thought",
+     *   internalDescription: DEInternalDescriptionOfCharacter,
+     *   externalDescription: string,
+     *   availableModes: Array<string>,
+     *   availableSounds: Array<string>,
      *   forcedMode: string|null,
      *   forcedSounds: Array<string>,
-     *   __debug_id?: string|null,
      * }} options
-     * @returns {Promise<InferenceResponse>}
+     * @returns {Promise<DEConversationMessageNarration | DEConversationMessageDialogue | DEConversationMessageThought>}
      */
     async inferNextStoryFragmentFor(
+        DE,
         character,
         options,
     ) {
         throw new Error("Method 'inferNextStoryFragmentFor()' must be implemented.");
-    }
-
-    /**
-     * Returns a debug payload, non-essential
-     * this is an arbitrary json object that was sent as payload for whatever the server is
-     * 
-     * @param {string} __debug_id
-     * @returns {any | null}
-     */
-    getDebugPayload(__debug_id) {
-        return null;
     }
 
     /**
@@ -164,43 +151,6 @@ export class BaseInferenceAdapter {
     }
 
     /**
-     * @param {DECompleteCharacterReference} character the character in question that is building a prompt for
-     * @param {{
-     *   description: string,
-     *   externalDescription: string,
-     *   relationships: Array<{title: string, description: string}>,
-     *   expressiveStates: string[],
-     *   scenario: string,
-     *   lore: string|null,
-     *   otherInteractingCharacters: Array<string>,
-     *   characterRules: Array<string>,
-     *   worldRules: Array<string>,
-     *   likes: Array<string>,
-     *   dislikes: Array<string>,
-     * }} options
-     * @returns {string} the system prompt
-     */
-    buildSystemPromptForCharacter(character, options) {
-        throw new Error("Method 'buildSystemPromptForCharacter()' must be implemented.");
-    }
-
-    /**
-     * @param {DECompleteCharacterReference} character the character in question that is building a prompt for
-     * @param {{
-     *   description: string,
-     *   externalDescription: string|null,
-     *   relationships: Array<{title: string, description: string}>,
-     *   expressiveStates: string[],
-     *   scenario: string|null,
-     *   lore: string|null,
-     * }} options
-     * @returns {string} the system prompt
-     */
-    buildSystemCharacterDescription(character, options) {
-        throw new Error("Method 'buildSystemCharacterDescription()' must be implemented.");
-    }
-
-    /**
      * Builds a system prompt for an assistant to run a questioning agent
      * 
      * @param {string} description
@@ -210,67 +160,6 @@ export class BaseInferenceAdapter {
      */
     buildSystemPromptForQuestioningAgent(description, rules, characterDescriptions) {
         throw new Error("Method 'buildSystemPromptForQuestioningAgent()' must be implemented.");
-    }
-
-     /**
-     * @param {Array<{groupDescription: string, characters: Array<{name: string, description: string}>}>} groups
-     * @param {boolean} asSocialGroups
-     * @returns {{availableCharactersAt: string, characterInfoAt: string, value: string}}
-     */
-    buildContextInfoForAvailableCharacters(groups, asSocialGroups = false) {
-        throw new Error("Method 'buildContextInfoForAvailableCharacters()' must be implemented.");
-    }
-
-    /**
-     * @param {string} instructions
-     * @returns {string}
-     */
-    buildContextInfoInstructions(instructions) {
-        throw new Error("Method 'buildContextInfoInstructions()' must be implemented.");
-    }
-
-    /**
-     * @param {string} rule
-     * @returns {string}
-     */
-    buildContextInfoRule(rule) {
-        throw new Error("Method 'buildContextInfoRule()' must be implemented.");
-    }
-
-    /**
-     * @param {string} example
-     * @returns {string}
-     */
-    buildContextInfoExample(example) {
-        throw new Error("Method 'buildContextInfoExample()' must be implemented.");
-    }
-
-    /**
-     * @param {DECompleteCharacterReference} character
-     * @param {string} info
-     * @returns {{characterDescriptionAt: string, value: string}}
-     */
-    buildContextInfoCharacterDescription(character, info) {
-        throw new Error("Method 'buildContextInfoCharacterDescription()' must be implemented.");
-    }
-
-    /**
-     * @param {string} itemName
-     * @param {string} title
-     * @param {string[]} descriptions
-     * @return {{itemDescriptionAt: string, value: string}}
-     */
-    buildContextInfoItemDescription(itemName, title, descriptions) {
-        throw new Error("Method 'buildContextInfoItemDescription()' must be implemented.");
-    }
-
-    /**
-     * Builds context info for available items
-     * @param {string[]} items 
-     * @returns {{availableItemsAt: string, itemInfoAt: string, value: string}}
-     */
-    buildContextInfoForAvailableItems(items) {
-        throw new Error("Method 'buildContextInfoForAvailableItems()' must be implemented.");
     }
 
     /**

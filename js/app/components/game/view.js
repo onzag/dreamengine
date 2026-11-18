@@ -201,7 +201,6 @@ export class GameView extends HTMLElement {
 
     async goNextMessage() {
         await this.pendingPerspectiveUpdate;
-        if (this.currentConversationMessage?.isProcessingSideEffects || this.waitingForAfter) return;
         if (!this.nextConversation || !this.nextConversationMessage || !this.nextConversationMessageContent) return;
 
         this.currentConversationId = this.nextConversation.id;

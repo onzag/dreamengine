@@ -47,12 +47,13 @@ export class InferenceAdapterVLLandLlamaMUncensored extends InferenceServerOpenA
      * if the server type is unknown.
      *
      * @param {string} text
+     * @param {string} modelId
      * @returns {Promise<number>}
      */
-    async countTokens(text) {
+    async countTokens(text, modelId) {
         if (this.useExperimentalTestMode) {
             // No server to tokenize against; use the base approximation.
-            return super.countTokens(text);
+            return super.countTokens(text, modelId);
         }
 
         if (!this.connected || !this.selectedModel) {
@@ -89,7 +90,7 @@ export class InferenceAdapterVLLandLlamaMUncensored extends InferenceServerOpenA
             const r = await fetch(`${baseUrl}/tokenize`, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ model: this.selectedModel.id, prompt: text }),
+                body: JSON.stringify({ model: modelId, prompt: text }),
             });
             if (!r.ok) {
                 throw new Error(`vLLM /tokenize returned HTTP ${r.status}`);

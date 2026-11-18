@@ -175,20 +175,18 @@ export function isYes(answer) {
 }
 
 /**
- * 
- * @param {DEngine} engine 
- * @param {DEVoiceDescription | null | undefined} voice 
- * @param {string} charName
+ * @param {string} charNameFormatted
  * @param {string | null | undefined} forcedMode
- * @returns {{narrative: string | null; dialogue: string | null}}
+ * @returns {{
+ *   narrative: string;
+ *   dialogue: string,
+ *   thought: string,
+ *   extraCharsNarrative: number;
+ *   extraCharsDialogue: number;
+ *   extraCharsThought: number;
+ * }}
  */
-export function generateGrammarForVoice(engine, voice, charName, forcedMode) {
-    if (!engine.inferenceAdapter) {
-        throw new Error("Inference adapter is required to create grammar");
-    } else if (!engine.deObject) {
-        throw new Error("DEngine must be initialized to create grammar");
-    }
-
+export function generateGrammarForVoice(charNameFormatted, forcedMode) {
     // Portable "any character" tail. We avoid the GBNF `.` wildcard / `.+`
     // because vLLM's structured-outputs backend (xgrammar) does not support it
     // and crashes compiling the grammar (surfaced as a streamed HTTP 500). Both
@@ -196,27 +194,26 @@ export function generateGrammarForVoice(engine, voice, charName, forcedMode) {
     // "any char" is expressed as `[^\n] | "\n"`.
     const anyRule = `ANY ::= [^\\n] | "\\n"`;
 
-    if (voice?.mute) {
-        return {
-            narrative: `root ::= "*" [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] ANY+\n${anyRule}`,
-            dialogue: null,
-        };
-    }
-
     let forcedModeValid = false;
+    let forcedModeLen = 0;
     if (forcedMode) {
         // ensure a-zA-Z characters only in forcedMode
         if (/^[a-zA-Z]+$/.test(forcedMode)) {
             forcedModeValid = true;
+            forcedModeLen = forcedMode.length;
         } else {
-            console.warn(`Invalid forcedMode "${forcedMode}" for character "${charName}". Forced mode must contain only letters a-z or A-Z.`);
+            console.warn(`Invalid forcedMode "${forcedMode}" for character "${charNameFormatted}". Forced mode must contain only letters a-z or A-Z.`);
         }
     }
     
     return {
         narrative: `root ::= "*" [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] ANY+\n${anyRule}`,
         dialogue: forcedModeValid
-            ? `root ::= ${JSON.stringify(charName + ": [" + forcedMode + "] ")} ANY+\n${anyRule}`
-            : `root ::= ${JSON.stringify(charName + ": ")} [^*] [^*] [^*] ANY+\n${anyRule}`,
+            ? `root ::= ${JSON.stringify(charNameFormatted + ": [" + forcedMode + "] ")} ANY+\n${anyRule}`
+            : `root ::= ${JSON.stringify(charNameFormatted + ": ")} [^*] [^*] [^*] ANY+\n${anyRule}`,
+        thought: `root ::= ${JSON.stringify(charNameFormatted + " (thought): ")} [^*] [^*] [^*] ANY+\n${anyRule}`,
+        extraCharsNarrative: 0,
+        extraCharsDialogue: forcedModeValid ? charNameFormatted.length + 4 + forcedModeLen : charNameFormatted.length + 2,
+        extraCharsThought: charNameFormatted.length + " (thought): ".length,
     };
 }

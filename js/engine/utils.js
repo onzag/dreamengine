@@ -2179,13 +2179,18 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 return { level: false, attracted: false, reasoning: `Cannot check attraction from ${char1} towards ${potentialAttractiveChar2} because one of the characters was not found` };
             }
 
+            const char1Name = DE.utils.templates.formatCharacterName(char1Ref, char1Ref);
+            const char2Name = DE.utils.templates.formatCharacterName(char2Ref, char1Name, {
+                type: "definite",
+            });
+
             if (char1Ref.attractions.length === 0) {
-                return { level: false, attracted: false, reasoning: `Character ${char1Ref.name} is asexual and therefore not attracted to ${char2Ref.name}` };
+                return { level: false, attracted: false, reasoning: `Character ${char1Name} is asexual and therefore not attracted to ${char2Name}` };
             }
 
             if (!char1Ref.bonds) {
-                console.warn(`Character ${char1Ref.name} does not have bonds property, cannot check attraction towards ${char2Ref.name}`);
-                return { level: false, attracted: false, reasoning: `Character ${char1Ref.name} has no bonds and therefore cannot feel attraction towards ${char2Ref.name}` };
+                console.warn(`Character ${char1Name} does not have bonds property, cannot check attraction towards ${char2Name}`);
+                return { level: false, attracted: false, reasoning: `Character ${char1Name} has no bonds and therefore cannot feel attraction towards ${char2Name}` };
             }
 
             /** @type {"slight" | "moderate" | "strong" | false} */
@@ -2220,18 +2225,18 @@ export const deEngineUtilsFn = (DE, engine) => ({
                     "feral": "feral animalistic creatures of any kind",
                 };
                 if (actuallyFeelsAttractionRegardless) {
-                    return { level, attracted: true, reasoning: `Despite ${char1Ref.name} not being attracted to ${explanation[char2Ref.speciesType] || "unknown reason"}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+                    return { level, attracted: true, reasoning: `Despite ${char1Name} not being attracted to ${explanation[char2Ref.speciesType] || "unknown reason"}, ${char1Name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Name}` };
                 }
-                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char1Ref.name} is not attracted to ${explanation[char2Ref.speciesType] || "unknown reason"}` };
+                return { level: false, attracted: false, reasoning: `${char1Name} is not romantically/sexually attracted to ${char2Name} because ${char1Name} is not attracted to ${explanation[char2Ref.speciesType] || "unknown reason"}` };
             }
 
             char1Attractions = char1Attractions.filter(a => !a.species || a.species.includes(char2Ref.species));
 
             if (char1Attractions.length === 0) {
                 if (actuallyFeelsAttractionRegardless) {
-                    return { level, attracted: true, reasoning: `Despite ${char1Ref.name} not being attracted to ${char2Ref.species} species, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+                    return { level, attracted: true, reasoning: `Despite ${char1Name} not being attracted to ${char2Ref.species} species, ${char1Name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Name}` };
                 }
-                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char1Ref.name} is not attracted to ${char2Ref.species} species` };
+                return { level: false, attracted: false, reasoning: `${char1Name} is not romantically/sexually attracted to ${char2Name} because ${char1Name} is not attracted to ${char2Ref.species} species` };
             }
 
             const oldChar1AttractionsBeforeAgeCheck = char1Attractions;
@@ -2240,13 +2245,13 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (char1Attractions.length === 0) {
                 const isTooOld = char2Ref.ageYears > oldChar1AttractionsBeforeAgeCheck[0].ageRange[1];
                 if (actuallyFeelsAttractionRegardless) {
-                    const ageReason = isTooOld ? `${char2Ref.name} being too old` : `${char2Ref.name} being too young`;
-                    return { level, attracted: true, reasoning: `Despite ${ageReason}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+                    const ageReason = isTooOld ? `${char2Name} being too old` : `${char2Name} being too young`;
+                    return { level, attracted: true, reasoning: `Despite ${ageReason}, ${char1Name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Name}` };
                 }
                 if (isTooOld) {
-                    return { level, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char2Ref.name} is too old for them` };
+                    return { level, attracted: false, reasoning: `${char1Name} is not romantically/sexually attracted to ${char2Name} because ${char2Name} is too old for them` };
                 } else {
-                    return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char2Ref.name} is too young for them` };
+                    return { level, attracted: false, reasoning: `${char1Name} is not romantically/sexually attracted to ${char2Name} because ${char2Name} is too young for them` };
                 }
             }
 
@@ -2268,31 +2273,31 @@ export const deEngineUtilsFn = (DE, engine) => ({
 
             if (char1Attractions.length === 0) {
                 if (actuallyFeelsAttractionRegardless) {
-                    return { level, attracted: true, reasoning: `Despite ${char1Ref.name} not being attracted to ${char2Ref.name}'s gender appearing to be ${char2Gender}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+                    return { level, attracted: true, reasoning: `Despite ${char1Name} not being attracted to ${char2Name}'s gender appearing to be ${char2Gender}, ${char1Name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Name}` };
                 }
-                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char1Ref.name} is not attracted to ${char2Ref.name} gender being ${char2Gender}` };
+                return { level: false, attracted: false, reasoning: `${char1Name} is not romantically/sexually attracted to ${char2Name} because ${char1Name} is not attracted to ${char2Name} gender being ${char2Gender}` };
             }
 
             char1Attractions = char1Attractions.filter(a => !a.sex || a.sex.includes(char2Ref.sex));
 
             if (char1Attractions.length === 0) {
                 if (actuallyFeelsAttractionRegardless) {
-                    return { level, attracted: true, reasoning: `Despite ${char1Ref.name} not being attracted to ${char2Ref.name}'s biological sex being ${char2Ref.sex}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+                    return { level, attracted: true, reasoning: `Despite ${char1Name} not being attracted to ${char2Name}'s biological sex being ${char2Ref.sex}, ${char1Name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Name}` };
                 }
-                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char1Ref.name} is not attracted to ${char2Ref.name} biological sex being ${char2Ref.sex}` };
+                return { level: false, attracted: false, reasoning: `${char1Name} is not romantically/sexually attracted to ${char2Name} because ${char1Name} is not attracted to ${char2Name} biological sex being ${char2Ref.sex}` };
             }
 
             char1Attractions = char1Attractions.filter(a => !a.race || a.race === char2Ref.race);
 
             if (char1Attractions.length === 0) {
                 if (actuallyFeelsAttractionRegardless) {
-                    const raceReason = char1Ref.race ? `not being attracted to ${char2Ref.name}'s race being ${char2Ref.race}` : `${char2Ref.name} having no racial identity`;
-                    return { level, attracted: true, reasoning: `Despite ${raceReason}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+                    const raceReason = char1Ref.race ? `not being attracted to ${char2Name}'s race being ${char2Ref.race}` : `${char2Name} having no racial identity`;
+                    return { level, attracted: true, reasoning: `Despite ${raceReason}, ${char1Name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Name}` };
                 }
                 if (char1Ref.race) {
-                    return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char1Ref.name} is not attracted to ${char2Ref.name} race being ${char2Ref.race}` };
+                    return { level: false, attracted: false, reasoning: `${char1Name} is not romantically/sexually attracted to ${char2Name} because ${char1Name} is not attracted to ${char2Name} race being ${char2Ref.race}` };
                 } else {
-                    return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char2Ref.name} has no racial identity` };
+                    return { level: false, attracted: false, reasoning: `${char1Name} is not romantically/sexually attracted to ${char2Name} because ${char2Name} has no racial identity` };
                 }
             }
 
@@ -2304,13 +2309,13 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 if (actuallyFeelsAttractionRegardless) {
                     // @ts-ignore
                     const groupReason = groupsThatMatter.length === 1 ? `not belonging to the group of ${groupsThatMatter[0]}` : `not belonging to any of the following required groups: ${formatOrHelper(groupsThatMatter)}`;
-                    return { level, attracted: true, reasoning: `Despite ${groupReason}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+                    return { level, attracted: true, reasoning: `Despite ${groupReason}, ${char1Name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Name}` };
                 }
                 if (groupsThatMatter.length === 1) {
-                    return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char2Ref.name} does not belong to the group of ${groupsThatMatter[0]}` };
+                    return { level: false, attracted: false, reasoning: `${char1Name} is not romantically/sexually attracted to ${char2Name} because ${char2Name} does not belong to the group of ${groupsThatMatter[0]}` };
                 }
                 // @ts-ignore
-                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char2Ref.name} does not belong to any of the following required groups: ${formatOrHelper(groupsThatMatter)}` };
+                return { level: false, attracted: false, reasoning: `${char1Name} is not romantically/sexually attracted to ${char2Name} because ${char2Name} does not belong to any of the following required groups: ${formatOrHelper(groupsThatMatter)}` };
             }
 
             const minPickiness = Math.min(...char1Attractions.map(a => a.pickiness || 0));
@@ -2318,18 +2323,18 @@ export const deEngineUtilsFn = (DE, engine) => ({
 
             if (tooUnattractive) {
                 if (actuallyFeelsAttractionRegardless) {
-                    return { level, attracted: true, reasoning: `Despite ${char2Ref.name} not being attractive enough, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+                    return { level, attracted: true, reasoning: `Despite ${char2Name} not being attractive enough, ${char1Name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Name}` };
                 }
-                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because they are not attractive enough for them` };
+                return { level: false, attracted: false, reasoning: `${char1Name} is not romantically/sexually attracted to ${char2Name} because they are not attractive enough for them` };
             }
 
             if (minPickiness > 0.65) {
                 const tooUncharismatic = char2Ref.charisma < (minPickiness * 0.75);
                 if (tooUncharismatic) {
                     if (actuallyFeelsAttractionRegardless) {
-                        return { level, attracted: true, reasoning: `Despite ${char2Ref.name} lacking charisma, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+                        return { level, attracted: true, reasoning: `Despite ${char2Name} lacking charisma, ${char1Name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Name}` };
                     }
-                    return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char2Ref.name} lacks charisma` };
+                    return { level: false, attracted: false, reasoning: `${char1Name} is not romantically/sexually attracted to ${char2Name} because ${char2Name} lacks charisma` };
                 }
             }
 
@@ -2345,10 +2350,10 @@ export const deEngineUtilsFn = (DE, engine) => ({
             }
 
             if (specialReason) {
-                return { level, attracted: true, reasoning: `${char1Ref.name} is romantically/sexually attracted to ${char2Ref.name} because ${specialReason.specialReason}` };
+                return { level, attracted: true, reasoning: `${char1Name} is romantically/sexually attracted to ${char2Name} because ${specialReason.specialReason}` };
             }
 
-            return { level, attracted: true, reasoning: `${char1Ref.name} is romantically/sexually attracted to ${char2Ref.name}` };
+            return { level, attracted: true, reasoning: `${char1Name} is romantically/sexually attracted to ${char2Name}` };
         },
         doesNotKnow(char, towardsChar) {
             const charRef = resolveCharacter(DE, char);
@@ -3099,12 +3104,14 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
         stateDescriptionText += ".";
     }
 
+    const characterName = deObject.utils.templates.formatCharacterName(character, character, { capitalize: true });
+
     await makeCharacterConversationStoryMasterMessage(
         deObject,
         stateName,
         characterStateDescription,
         character,
-        `${character.name} is now ${stateName}.\n\n${stateDescriptionText}`,
+        `${characterName} is now ${stateName}.\n\n${stateDescriptionText}`,
     );
 
     if (characterStateDescription.triggersStates) {
@@ -3185,9 +3192,9 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
         console.log(`The user character ${character.name} has reached a dead-end: ${deadEndPotential}, game over.`);
 
         if (characterStateDescription.deadEndIsDeath) {
-            await makeCharacterConversationStoryMasterMessage(deObject, stateName, characterStateDescription, character, `${deObject.utils.templates.formatCharacterName(character)} has died.\n\n${deadEndPotential}.`);
+            await makeCharacterConversationStoryMasterMessage(deObject, stateName, characterStateDescription, character, `${characterName} has died.\n\n${deadEndPotential}.`);
         } else {
-            await makeCharacterConversationStoryMasterMessage(deObject, stateName, characterStateDescription, character, `${deObject.utils.templates.formatCharacterName(character)} is gone.\n\n${deadEndPotential}.`);
+            await makeCharacterConversationStoryMasterMessage(deObject, stateName, characterStateDescription, character, `${characterName} is gone.\n\n${deadEndPotential}.`);
         }
 
         markGameOver(deObject);
