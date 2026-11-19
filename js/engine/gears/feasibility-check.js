@@ -4,7 +4,7 @@
 
 import { debug } from "../debug.js";
 import { DEngine } from "../index.js";
-import { getExternalDescriptionOfCharacter, getInternalDescriptionOfCharacter, getRelationshipBetweenCharacters, getSurroundingCharacters } from "../util/character-info.js";
+import { getExternalDescriptionOfCharacter, getInternalDescriptionOfCharacter, getSurroundingCharacters } from "../util/character-info.js";
 import { convertMessagesToSimpleList, getHistoryFragment } from "../util/messages.js";
 
 /**

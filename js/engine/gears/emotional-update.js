@@ -2,10 +2,10 @@
 // otherwise we use the same strategy as talk to get the new emotions.
 
 import { DEngine } from "../index.js";
-import { getExternalDescriptionOfCharacter, getInternalDescriptionOfCharacter } from "../util/character-info";
-import { emotions } from "../util/emotions";
-import { createGrammarFromList, parseListFromGrammarResponse } from "../util/grammar";
-import { convertMessagesToSimpleList, getHistoryFragment, getNameIdentificationForOneCharacterTowardsAnother } from "../util/messages";
+import { getExternalDescriptionOfCharacter, getInternalDescriptionOfCharacter } from "../util/character-info.js";
+import { emotions } from "../util/emotions.js";
+import { createGrammarFromList, parseListFromGrammarResponse } from "../util/grammar.js";
+import { convertMessagesToSimpleList, getHistoryFragment, getNameIdentificationForOneCharacterTowardsAnother } from "../util/messages.js";
 
 /**
  * @param {DEngine} engine 
