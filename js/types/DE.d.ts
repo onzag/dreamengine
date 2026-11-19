@@ -224,12 +224,36 @@ declare interface DEActionPromptInjection<TemplateType> {
      * remember this applies every inference cycle while the state is active
      * So be careful check actionPromptInjection documentation description for more details
      * on a proper use case
+     * 
+     * @param cycles The number of inference cycles that have passed since the action was first triggered, this can be used to determine how long the action has been active and how many interruptions have occurred
+     * @param interrupters The list of character ids that have interrupted the action, this can be used to determine how many interruptions have occurred and who has interrupted the action
      */
-    action?: TemplateType;
+    action?: (cycles: number, interrupters: string[]) => TemplateType;
     /**
      * The action can only be executed through dialogue, narration, or any
      */
     actionMustBe?: "dialogue" | "narration" | "any";
+    /**
+     * Whether the action needs to be fullfilled immediately after a trigger activated it
+     * for example say a character says "oh you are so stupid" and the action generated
+     * upon being called stupid is "punch {{other}} in the face" but somehow another character
+     * interrupts the action before they can do it; then the action will not be executed.
+     * 
+     * Say that other character has a tension trigger and they have an action "try to calm down everyone"
+     * and that interrupts our action, then the action will not be executed and the character will not punch the other character in the face
+     * 
+     * Sometimes actions can be fullfilled at once among another character's action, but this can
+     * only happen if story master can deliver the action, for that actionMustBe set to "any" or "narration"
+     * 
+     * If mustBeFullfilledImmediately is false, then you can even change the behaviour for what happens
+     * when it is fullfilled immediately or not, in that case the cycles number will be greater than 0
+     * depending on how many interruptions the action had before
+     * 
+     * in that case you can be like "explain that you wanted to punch {{other}} in the face but you were interrupted by {{other2}}" for example
+     * 
+     * If you don't care and want to fullfill the action, no mather what just ignore cycles and interrupters and send the same regardless
+     */
+    mustBeFulfilledImmediately: boolean;
     /**
      * An optional narrive effect for the action, suppose for example the action is
      * {{char}} begins to cry
@@ -242,8 +266,11 @@ declare interface DEActionPromptInjection<TemplateType> {
      * While an action, gets applied towards a single paragraph of the story (or all of them if not contenders)
      * 
      * Narrative effects should be subtle
+     * 
+     * @param cycles The number of inference cycles that have passed since the action was first triggered, this can be used to determine how long the action has been active and how many interruptions have occurred
+     * @param interrupters The list of character ids that have interrupted the action, this can be used to determine how many interruptions have occurred and who has interrupted the action
      */
-    narrativeEffect?: TemplateType;
+    narrativeEffect?: (cycles: number, interrupters: string[]) => TemplateType;
     /**
      * A narrative action that gets applied in narration instead of in the character dialogue
      * 
@@ -253,8 +280,11 @@ declare interface DEActionPromptInjection<TemplateType> {
      * For example, if the action is {{char}} begins to cry, the narrative action can be
      * 
      * Describe {{char}}'s tears flowing down their face and their body shaking as they cry
+     * 
+     * @param cycles The number of inference cycles that have passed since the action was first triggered, this can be used to determine how long the action has been active and how many interruptions have occurred
+     * @param interrupters The list of character ids that have interrupted the action, this can be used to determine how many interruptions have occurred and who has interrupted the action
      */
-    narrativeAction?: TemplateType;
+    narrativeAction?: (cycles: number, interrupters: string[]) => TemplateType;
     /**
      * The probability (0 to 1) that the action will be even checked for execution, if say
      * the probability is only 0.5 then the action will only be considered for execution half the time

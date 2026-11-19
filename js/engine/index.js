@@ -209,6 +209,7 @@ export function createCharacterFromUser(user) {
         maintenanceHydrationLitersPerDay: user.maintenanceHydrationLitersPerDay,
         rangeMeters: user.rangeMeters,
         generalCharacterDescriptionInjection: {},
+        thinkBeforeAct: 0,
         bonds: {
             totalStrangersBondDescription: "",
             system: "UNKNOWN",
@@ -1039,22 +1040,56 @@ export class DEngine {
      *    followup: Record<string, {
      *       microInjections: string[],
      *       microVoices: DEVoiceDescription[],
-     *       injectedActions: Array<DEActionPromptInjection<DEStringTemplateCharOnly>>,
-     *       expectedToInteract: boolean,
-     *    }>
+     *       injectedActions: Array<{
+     *          action: DEActionPromptInjection<DEStringTemplateCharOnly>,
+     *          cycle: number,
+     *       }>,
+     *    }>,
      * }} followup
+     * @param {number} cycle
+     * @param {string[][]} interrupters
      * @param {string[]} charactersToForceTalk
      */
-    async runFollowUpInteractions(followup, charactersToForceTalk) {
+    async runFollowUpInteractions(followup, cycle, interrupters, charactersToForceTalk) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        } else if (!this.inferenceAdapter) {
+            throw new Error("Inference adapter not set");
+        } else if (!this.jsEngine) {
+            throw new Error("JS Engine not set");
+        } else if (!this.dataManager) {
+            throw new Error("Data manager not set");
+        }
 
+        // randomize this list
+        const randomizedCharactersToTalkForced = charactersToForceTalk.sort(() => Math.random() - 0.5);
+
+        // Okay so this should all be completed in a single cycle somehow, but we can have actions from
+        // many characters that are all trying to do something at once, and then we have all these characters
+        // that are also supposed to talk and do something
+
+        // we need to tell apart injectedActions from microVoices and microInjections
+        // because injectedActions are "immediate" actions that are supposed to be performed by the character
+        // while microVoices and microInjections are more like "personal side effects" to how the character felt for something
+        // that happened, and they don't necessarily need an immediate effect, but we might consider them to be more important to talk
+
+        // So we need to take in for the next cycle before processing in priority.
+        // 1. An injected action that can be combined into a single narrative process for all the characters involved wins.
+        // 2. The character that has the most actions wins, it takes at least 1 action to be considered for this.
+        // 3. The character that has the most microInjections wins, it takes at least 1 microInjection to be considered for this.
+        // 4. The character that has the most microVoices wins, it takes at least 1 microVoice to be considered for this.
+        // 5. Pick a random one from charactersToForceTalk
+
+        // if no character comes out of this, or we don't get the combination, the follow up is completed and it is the user's turn to talk
     }
 
     /**
      * 
-     * @param {{moveTimeForwards: boolean}} options 
+     * @param {{moveTimeForwards: boolean}} options
+     * @param {number} cycle
      * @param {string | null} characterIdThatJustTalked
      */
-    async calculateSideEffects(options, characterIdThatJustTalked = null) {
+    async calculateSideEffects(options, cycle, characterIdThatJustTalked = null) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         } else if (!this.inferenceAdapter) {
@@ -1081,8 +1116,10 @@ export class DEngine {
          *    followup: Record<string, {
          *       microInjections: string[],
          *       microVoices: DEVoiceDescription[],
-         *       injectedActions: Array<DEActionPromptInjection<DEStringTemplateCharOnly>>,
-         *       expectedToInteract: boolean,
+         *       injectedActions: Array<{
+         *          action: DEActionPromptInjection<DEStringTemplateCharOnly>,
+         *          cycle: number,
+         *       }>
          *    }>
          * }}
          */
@@ -1137,10 +1174,11 @@ export class DEngine {
                         microInjections: [],
                         microVoices: [],
                         injectedActions: [],
-                        expectedToInteract: true,
                     };
-                    results.followup[characterId].injectedActions.push(nextAction);
-                    results.followup[characterId].expectedToInteract = true;
+                    results.followup[characterId].injectedActions.push({
+                        action: nextAction,
+                        cycle,
+                    });
                 }
             }
 
@@ -1155,7 +1193,6 @@ export class DEngine {
                     microInjections: [],
                     microVoices: [],
                     injectedActions: [],
-                    expectedToInteract: false,
                 };
                 results.followup[characterId].microInjections.push(...triggersOutcome.microInjections);
                 results.followup[characterId].microVoices.push(...triggersOutcome.microVoices);
@@ -1342,13 +1379,14 @@ export class DEngine {
             this.informCycleState("info", "Pre-calculating side effects...");
             const nextFollowUpInfo = await this.calculateSideEffects({
                 moveTimeForwards: !preselectedTimeAtSceneStart,
-            });
+            }, 0);
 
             await this.informDEObjectUpdated();
 
-            if (Object.values(nextFollowUpInfo.followup).some(followup => followup.expectedToInteract) || sceneObject.charactersStart) {
-                const randomizedList = sceneObject.charactersStart ? ([...(typeof sceneObject.engagedCharacters === "function" ? sceneObject.engagedCharacters() : sceneObject.engagedCharacters)]).sort(() => Math.random() - 0.5) : [];
-                await this.runFollowUpInteractions(nextFollowUpInfo, randomizedList);
+            if (Object.values(nextFollowUpInfo.followup).some(followup => followup.injectedActions.length) || sceneObject.charactersStart) {
+                const baseList = sceneObject.charactersStart ? ([...(typeof sceneObject.engagedCharacters === "function" ? sceneObject.engagedCharacters() : sceneObject.engagedCharacters)]) : [];
+                const baseListNoDuplicatesOnlyIds = Array.from(new Set(baseList.map(v => typeof v === "string" ? v : v.id)));
+                await this.runFollowUpInteractions(nextFollowUpInfo, 0, [], baseListNoDuplicatesOnlyIds);
             }
 
             this.informThinking(false, null, true);
