@@ -4,7 +4,7 @@ AI Simulation Engine created based on the RStory prototype, now written as an el
 
 Created as a LLM Roleplay and Simulation engine, but considerably more advanced than thin LLM clients.
 
-<img width="891" height="590" alt="image" src="https://github.com/user-attachments/assets/eb3db331-5124-4572-96cb-969ded578db5" />
+<img width="891" height="596" alt="image" src="https://github.com/user-attachments/assets/66f56520-d07c-4ab2-943d-eb7cca31d8bd" />
 
 ## Differences from Kobold / SillyTavern
 
