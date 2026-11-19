@@ -31,11 +31,9 @@ export class EngineWorkerClient {
     /** @type {(() => void) | null} */
     onDEObjectUpdated = null;
     /** @type {((level: "info" | "warning" | "error", message: string) => void) | null} */
-    onCycleInform = null;
+    onInform = null;
     /** @type {((thinking: boolean, characterName: string | null, noMoreCharactersToTalk: boolean) => void) | null} */
     onThinkingInform = null;
-    /** @type {((data: import('../engine/index.js').EngineConversationEvent) => void) | null} */
-    onMessageUpdate = null;
     /** @type {((data: {qid: number, questionType: string, question: string, options?: string[], defaultValue?: any}) => void) | null} */
     onScriptTypeGuiderQuestion = null;
     /** @type {((data: {currentCard: any}) => void) | null} */
@@ -119,14 +117,11 @@ export class EngineWorkerClient {
                         this.onDEObjectUpdated?.();
                         for (const listener of this.#deObjectUpdatedListeners) listener();
                         break;
-                    case "cycleInform":
-                        this.onCycleInform?.(msg.data.level, msg.data.message);
+                    case "inform":
+                        this.onInform?.(msg.data.level, msg.data.message);
                         break;
                     case "thinkingInform":
                         this.onThinkingInform?.(msg.data.thinking, msg.data.characterName, msg.data.noMoreCharactersToTalk);
-                        break;
-                    case "messageUpdate":
-                        this.onMessageUpdate?.(msg.data);
                         break;
                     case "ScriptTypeGuiderQuestion":
                         this.onScriptTypeGuiderQuestion?.(msg.data);

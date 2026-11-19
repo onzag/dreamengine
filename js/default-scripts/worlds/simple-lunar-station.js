@@ -67,7 +67,6 @@ engine.exports = {
             ],
             interactingCharacters: [],
             isCharacter: true,
-            isDebugMessage: false,
             isStoryMasterMessage: false,
             isRejectedMessage: false,
             summariesByCharacterId: {},

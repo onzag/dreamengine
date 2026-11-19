@@ -193,7 +193,6 @@ export default async function calculatePostureChange(engine, character) {
                     ],
                     characterId: null,
                     isCharacter: false,
-                    isDebugMessage: false,
                     isRejectedMessage: false,
                     isStoryMasterMessage: true,
                     singleSummary: null,

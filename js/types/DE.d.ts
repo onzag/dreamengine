@@ -225,6 +225,29 @@ declare interface DEActionPromptInjection<TemplateType> {
      * So be careful check actionPromptInjection documentation description for more details
      * on a proper use case
      * 
+     * Whether the action needs to be fullfilled immediately after a trigger activated it
+     * for example say a character says "oh you are so stupid" and the action generated
+     * upon being called stupid is "punch {{other}} in the face" but somehow another character
+     * interrupts the action before they can do it; then the action will not be executed.
+     * 
+     * in that case you can be like "explain that you wanted to punch {{other}} in the face but you were interrupted by {{other2}}" for example, by using the interrupter
+     * changing what the character does if they have been interrupted is a good way to make the story more dynamic and interesting
+     * 
+     * You can also return "" to not execute any action at all and make it be silently discarded
+     * 
+     * You will know if they are interrupted and by whom they were interrupted by the cycles and interrupters parameters of the action, narrativeEffect and narrativeAction functions
+     * 
+     * Say that another character has a tension trigger and they have an action "try to calm down everyone"
+     * And that action executes first, then the action of punching the other character in the face will be interrupted and not executed
+     * and you can decide if to execute it or not based on the cycles and interrupters, in that case
+     * eg. cycles would be 1, and interrupters would be the id of the character that interrupted the action
+     * you can be interrupted by many characters as it accumulates the list of interrupters and the cycles number increases for each interruption
+     * 
+     * Sometimes actions can be fullfilled at once among another character's action, but this can
+     * only happen if story master can deliver the action, for that actionMustBe set to "any" or "narration"
+     * 
+     * If you don't care and want to fullfill the action, no mather what just ignore cycles and interrupters and send the same regardless
+     * 
      * @param cycles The number of inference cycles that have passed since the action was first triggered, this can be used to determine how long the action has been active and how many interruptions have occurred
      * @param interrupters The list of character ids that have interrupted the action, this can be used to determine how many interruptions have occurred and who has interrupted the action
      */
@@ -234,26 +257,6 @@ declare interface DEActionPromptInjection<TemplateType> {
      */
     actionMustBe?: "dialogue" | "narration" | "any";
     /**
-     * Whether the action needs to be fullfilled immediately after a trigger activated it
-     * for example say a character says "oh you are so stupid" and the action generated
-     * upon being called stupid is "punch {{other}} in the face" but somehow another character
-     * interrupts the action before they can do it; then the action will not be executed.
-     * 
-     * Say that other character has a tension trigger and they have an action "try to calm down everyone"
-     * and that interrupts our action, then the action will not be executed and the character will not punch the other character in the face
-     * 
-     * Sometimes actions can be fullfilled at once among another character's action, but this can
-     * only happen if story master can deliver the action, for that actionMustBe set to "any" or "narration"
-     * 
-     * If mustBeFullfilledImmediately is false, then you can even change the behaviour for what happens
-     * when it is fullfilled immediately or not, in that case the cycles number will be greater than 0
-     * depending on how many interruptions the action had before
-     * 
-     * in that case you can be like "explain that you wanted to punch {{other}} in the face but you were interrupted by {{other2}}" for example
-     * 
-     * If you don't care and want to fullfill the action, no mather what just ignore cycles and interrupters and send the same regardless
-     */
-    mustBeFulfilledImmediately: boolean;
     /**
      * An optional narrive effect for the action, suppose for example the action is
      * {{char}} begins to cry
@@ -333,6 +336,12 @@ declare interface DEActionPromptInjection<TemplateType> {
      * Do not specify this if you do not want to limit vocabulary
      */
     voice?: DEVoiceDescription;
+}
+
+declare interface DEResolvedActionPromptInjection extends Omit<DEActionPromptInjection<string>, "probability" | "action" | "narrativeEffect" | "narrativeAction"> {
+    action: string;
+    narrativeEffect: string;
+    narrativeAction: string;
 }
 
 declare interface DECharacterStateDefinition {
@@ -3463,14 +3472,6 @@ declare interface DEConversationMessage {
      * Whether the message is a system message, eg. narration, scene description, etc.
      */
     isStoryMasterMessage: boolean;
-    /**
-     * Whether the message is a debug message, eg. internal engine messages not meant to be seen by characters
-     * or the user
-     * 
-     * They can be seen if the character or user is in debug mode, they basically represent the commands
-     * eg /whocanisee etc... and other internal messages that are used for debugging purposes
-     */
-    isDebugMessage: boolean;
     /**
      * The content of the message
      */

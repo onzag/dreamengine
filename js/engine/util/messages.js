@@ -143,7 +143,6 @@ export function renderNarrationFragmentsToText(fragments) {
  * @property {string | null} conversationId the id of the conversation this message belongs to, if any, otherwise null
  * @property {string[]} conversationParticipants the ids of the characters that participated in this conversation, if any, otherwise an empty array
  * @property {string | null} id the id of the message, if this is a conversation message, otherwise null
- * @property {boolean} debug whether this is a debug message
  * @property {boolean} rejected whether this message was rejected by the story master or not
  * @property {boolean} storyMaster whether this message is from the story master or not
  * @property {string[]} interactingCharacters the interacting characters in this message
@@ -168,7 +167,6 @@ export function renderNarrationFragmentsToText(fragments) {
  * @param {DECompleteCharacterReference} character
  * @param {{
  *      excludeFrom?: string[] | null,
- *      includeDebugMessages?: boolean | null,
  *      includeRejectedMessages?: boolean | null,
  *      useExponentialShrinkingSelectiveContextWindowStrategy?: boolean,
  *      enrichedMode?: boolean,
@@ -186,8 +184,8 @@ export async function* getHistory(engine, character, options) {
         // throw new Error("Pseudo conversation summary generator not initialized.");
     }
 
-    if (options.useExponentialShrinkingSelectiveContextWindowStrategy && (options.includeDebugMessages || options.includeRejectedMessages)) {
-        throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy cannot be used with includeDebugMessages or includeRejectedMessages");
+    if (options.useExponentialShrinkingSelectiveContextWindowStrategy && options.includeRejectedMessages) {
+        throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy cannot be used with includeRejectedMessages");
     }
 
     if (options.useExponentialShrinkingSelectiveContextWindowStrategy && options.enrichedMode === false) {
@@ -209,7 +207,7 @@ export async function* getHistory(engine, character, options) {
         }
 
         // process the conversation messages
-        const conversationMessages = currentConversationObject.messages.filter(msg => (options.includeRejectedMessages || !msg.isRejectedMessage) && (options.includeDebugMessages || !msg.isDebugMessage) &&
+        const conversationMessages = currentConversationObject.messages.filter(msg => (options.includeRejectedMessages || !msg.isRejectedMessage) &&
             (options.perspective === "story-master" || !msg.canOnlyBeSeenByCharacters || msg.canOnlyBeSeenByCharacters.includes(character.id)));
 
         const conversationLocation = currentConversationObject.locations[character.id];
@@ -275,7 +273,6 @@ export async function* getHistory(engine, character, options) {
                 id: null,
                 conversationId: currentConversationId,
                 conversationParticipants: currentConversationObject.participants,
-                debug: false,
                 rejected: false,
                 storyMaster: true,
                 interactingCharacters: currentConversationObject.participants,
@@ -319,7 +316,6 @@ export async function* getHistory(engine, character, options) {
                     characterId: message.characterId,
                     conversationId: currentConversationId,
                     conversationParticipants: currentConversationObject.participants,
-                    debug: message.isDebugMessage,
                     rejected: message.isRejectedMessage,
                     storyMaster: message.isStoryMasterMessage,
                     interactingCharacters: message.interactingCharacters || [],
@@ -388,7 +384,6 @@ export async function* getHistory(engine, character, options) {
                     characterId: null,
                     conversationId: currentConversationId,
                     conversationParticipants: currentConversationObject.participants,
-                    debug: false,
                     rejected: false,
                     storyMaster: true,
                     interactingCharacters: currentConversationObject.participants,
@@ -518,7 +513,6 @@ export function convertMessagesToSimpleList(messages) {
  * @param {DECompleteCharacterReference} character
  * @param {{
  *   excludeFrom?: string[] | null,
- *   includeDebugMessages?: boolean | null,
  *   includeRejectedMessages?: boolean | null,
  *   msgLimit:
  *      "ALL_UNPROCESSED_MESSAGES_UNTIL_FIRST_PROCESSED_MESSAGE" |
@@ -566,7 +560,7 @@ export async function getHistoryFragment(engine, character, options) {
      */
     let lastPerspectiveId = null;
     while (!generator.done) {
-        if (!generator.value.debug && !generator.value.rejected) {
+        if (!generator.value.rejected) {
             let shouldAddMessage = false;
             let shouldStopAddingMessages = false;
 

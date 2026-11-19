@@ -63,7 +63,6 @@ export async function calculateEmotionForCharacter(engine, character) {
     }
 
     const allMessagesForStory = await getHistoryFragment(engine, character, {
-        includeDebugMessages: false,
         includeRejectedMessages: false,
         msgLimit: "ALL",
         useExponentialShrinkingSelectiveContextWindowStrategy: true,

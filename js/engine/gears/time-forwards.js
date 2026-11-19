@@ -179,7 +179,6 @@ export default async function timeForwardsUsingUntimedMessages(engine) {
     // now this function is meant to be called every time a character sends a message and ends their talk turn
     // or when the story starts (and since the character shouldn't have spoken yet it will get everything since the beginning of time)
     const untimedFragements = (await getHistoryFragment(engine, userCharacter, {
-        includeDebugMessages: false,
         includeRejectedMessages: false,
         msgLimit: "ALL_UNTIMED_MESSAGES_UNTIL_FIRST_TIMED_MESSAGE",
         perspective: "story-master",
@@ -307,7 +306,6 @@ export default async function timeForwardsUsingUntimedMessages(engine) {
                 emotion: null,
                 emotionalRange: [],
                 interactingCharacters: [],
-                isDebugMessage: false,
                 isCharacter: false,
                 isRejectedMessage: false,
                 isStoryMasterMessage: true,

@@ -21,6 +21,7 @@ import timeForwardsUsingUntimedMessages from "./gears/time-forwards.js";
 import { getHistoryFragment } from "./util/messages.js";
 import calculatePhysicalChanges from "./gears/physical-changes.js";
 import { calculateEmotionForCharacter } from "./gears/emotional-update.js";
+import { getInternalDescriptionOfCharacter } from "./util/character-info.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -31,80 +32,6 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "everyone else", "everybody else", "anyone else", "anybody else",
     "somebody else", "somebodyelse", "nobody else", "nobody", "story master", "storymaster", "story", "master",
     "ooc"];
-
-/**
- * @typedef {Object} EngineConversationEventBase
- * @property {string} conversationId
- * @property {string} messageId
- */
-
-/**
- * @typedef {EngineConversationEventBase & {
- *   contentIndex: number,
- *   text?: string,
- *   event: "add-narration-block" | "add-dialogue-block" |
- *          "add-hidden-block" | "add-narration" |
- *          "add-dialogue" | "add-sound" | "end-add-narration" | "end-add-dialogue" | "end-add-sound"
- *   soundInfo?: {
- *     sound?: DEVoiceSound,
- *     mode?: DEVoiceMode,
- *   },
- * }} EngineConversationEventModifyBlock
- */
-
-/**
- * @typedef {EngineConversationEventBase & {
- *   contentIndex: number,
- *   event: "end-narration-block",
- *   obj: DEConversationMessageNarration,
- * }} EngineConversationEventEndNarrationBlock
- */
-
-/**
- * @typedef {EngineConversationEventBase & {
- *   contentIndex: number,
- *   event: "end-dialogue-block",
- *   obj: DEConversationMessageDialogue,
- * }} EngineConversationEventEndDialogueBlock
- */
-
-/**
- * @typedef {EngineConversationEventBase & {
- *   event: "done"
- * }} EngineConversationEventDone
- */
-
-/**
- * @typedef {EngineConversationEventBase & {
- *  event: "new-message"
- *  obj: DEConversationMessage;
- * }} EngineConversationEventNewMessage
- */
-
-/**
- * @typedef {{
- *  event: "new-conversation"
- *  obj: DEConversation;
- *  conversationId: string;
- * }} EngineConversationEventNewConversation
- */
-
-/**
- * @typedef {{
- * event: "start-inference"
- * }} EngineConversationEventStartInference
- */
-
-/**
- * @typedef {{
- * event: "end-inference"
- * }} EngineConversationEventEndInference
- */
-
-/**
- * @typedef {EngineConversationEventModifyBlock | EngineConversationEventDone | EngineConversationEventNewMessage |
- *  EngineConversationEventNewConversation | EngineConversationEventEndNarrationBlock | EngineConversationEventEndDialogueBlock | EngineConversationEventStartInference | EngineConversationEventEndInference} EngineConversationEvent
- */
 
 /**
  * @param {Partial<DEMinimalCharacterReference>} character 
@@ -1046,11 +973,11 @@ export class DEngine {
      *       }>,
      *    }>,
      * }} followup
-     * @param {number} cycle
+     * @param {number} currentCycle
      * @param {string[][]} interrupters
      * @param {string[]} charactersToForceTalk
      */
-    async runFollowUpInteractions(followup, cycle, interrupters, charactersToForceTalk) {
+    async runFollowUpInteractions(followup, currentCycle, interrupters, charactersToForceTalk) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         } else if (!this.inferenceAdapter) {
@@ -1061,8 +988,153 @@ export class DEngine {
             throw new Error("Data manager not set");
         }
 
-        // randomize this list
-        const randomizedCharactersToTalkForced = charactersToForceTalk.sort(() => Math.random() - 0.5);
+        /**
+         * @type {Record<string, {
+         *   microInjections: string[],
+         *   microVoices: DEVoiceDescription[],
+         *   internalState: DEInternalDescriptionOfCharacter,
+         *   injectedActions: Array<{
+         *         resolvedAction: DEResolvedActionPromptInjection,
+         *         action: DEActionPromptInjection<DEStringTemplateCharOnly>,
+         *         cycle: number,
+         *      }>,
+         *   }>}
+         */
+        const cleanedFollowup = {};
+
+        for (const charId in followup.followup) {
+            const character = this.deObject.characters[charId];
+            if (!character) {
+                console.warn(`Character with id ${charId} not found in DEObject, skipping followup.`);
+                continue;
+            }
+
+            const internalState = (await getInternalDescriptionOfCharacter(this.deObject, charId));
+            const charFollowup = followup.followup[charId];
+
+            const additionalActions = internalState.actions.map(action => ({
+                action,
+                cycle: currentCycle,
+            }));
+
+            cleanedFollowup[charId] = {
+                microInjections: charFollowup.microInjections,
+                microVoices: charFollowup.microVoices,
+                internalState,
+                injectedActions: (await Promise.all([...additionalActions, ...charFollowup.injectedActions].map(async (injectedAction) => {
+                    const cyclesAgo = Math.abs(currentCycle - injectedAction.cycle);
+                    const resolvedAction = await this.resolveAction(injectedAction.action, character, cyclesAgo, currentCycle === 0 ? [] : interrupters[currentCycle - 1] || []);
+                    if (!resolvedAction) {
+                        console.warn(`Injected action for character ${charId} could not be resolved, skipping.`, injectedAction);
+                        return null;
+                    }
+                    return {
+                        ...injectedAction,
+                        resolvedAction,
+                    };
+                }))).filter(action => action !== null),
+            };
+        }
+
+        for (const charId in charactersToForceTalk) {
+            if (cleanedFollowup[charId]) {
+                continue;
+            }
+            const character = this.deObject.characters[charId];
+            if (!character) {
+                console.warn(`Character with id ${charId} not found in DEObject, skipping forced talk.`);
+                continue;
+            }
+
+            const internalState = (await getInternalDescriptionOfCharacter(this.deObject, charId));
+
+            const additionalActions = internalState.actions.map(action => ({
+                action,
+                cycle: currentCycle,
+            }));
+
+            cleanedFollowup[charId] = {
+                microInjections: [],
+                microVoices: [],
+                internalState,
+                injectedActions: (await Promise.all(additionalActions.map(async (injectedAction) => {
+                    const resolvedAction = await this.resolveAction(injectedAction.action, character, 0, []);
+                    if (!resolvedAction) {
+                        console.warn(`Injected action for character ${charId} could not be resolved, skipping.`, injectedAction);
+                        return null;
+                    }
+                    return {
+                        ...injectedAction,
+                        resolvedAction,
+                    };
+                }))).filter(action => action !== null),
+            };
+        }
+
+        // remove repeats in all those lists
+        for (const charId in cleanedFollowup) {
+            const charFollowup = cleanedFollowup[charId];
+
+            // microInjections are primitives, a Set is sufficient
+            charFollowup.microInjections = [...new Set(charFollowup.microInjections)];
+
+            // microVoices just merge — no deduplication
+
+            // injectedActions: for each of action, narrativeAction and narrativeEffect there must be no
+            // two repeated non-empty values. When a repeat is found, blank out that field on the entry with
+            // the smallest cycle. Then drop any entry left with all three fields empty.
+            for (const field of /** @type {Array<"action" | "narrativeAction" | "narrativeEffect">} */(["action", "narrativeAction", "narrativeEffect"])) {
+                const seen = new Map();
+                for (const entry of charFollowup.injectedActions) {
+                    const value = entry.resolvedAction[field];
+                    if (!value) {
+                        continue;
+                    }
+                    const existing = seen.get(value);
+                    if (!existing) {
+                        seen.set(value, entry);
+                        continue;
+                    }
+                    // blank the field on the entry with the smallest cycle, keep the other as the representative
+                    if (entry.cycle < existing.cycle) {
+                        entry.resolvedAction[field] = "";
+                    } else {
+                        existing.resolvedAction[field] = "";
+                        seen.set(value, entry);
+                    }
+                }
+            }
+
+            // remove any injectedActions that have all three fields empty
+            // even if they might still carry data, this is an action nightmare I know it is possible
+            // for an action to render something else in another cycle, but then this means we are accumulating a bunch of actions
+            charFollowup.injectedActions = charFollowup.injectedActions.filter(entry =>
+                entry.resolvedAction.action || entry.resolvedAction.narrativeAction || entry.resolvedAction.narrativeEffect
+            );
+        }
+
+        // now we have a clean list for this cycle...
+
+        // fuzz a character's initiative so higher-initiative characters tend to go first, but not always.
+        // initiative is a value from 0 to 1; the fuzz window (-0.1 to +0.3) biases upward slightly while
+        // still allowing a lower-initiative character to occasionally overtake a higher one.
+        /**
+         * @param {string} characterId
+         * @returns {number}
+         */
+        const fuzzInitiative = (characterId) => {
+            const character = this.getDEObject().characters[characterId];
+            const initiative = character?.initiative || 0;
+            const fuzz = Math.random() * 0.5 - 0.1;
+            return initiative + fuzz;
+        };
+
+        // sort by slightly fuzzy initiative (descending), so we don't always have the same character talking first.
+        // the fuzzed value is computed once per character so the comparator stays consistent.
+        const randomizedCharactersToTalkForced = charactersToForceTalk
+            .map((characterId) => ({ characterId, fuzzedInitiative: fuzzInitiative(characterId) }))
+            .sort((a, b) => b.fuzzedInitiative - a.fuzzedInitiative)
+            .map((entry) => entry.characterId);
 
         // Okay so this should all be completed in a single cycle somehow, but we can have actions from
         // many characters that are all trying to do something at once, and then we have all these characters
@@ -1073,23 +1145,86 @@ export class DEngine {
         // while microVoices and microInjections are more like "personal side effects" to how the character felt for something
         // that happened, and they don't necessarily need an immediate effect, but we might consider them to be more important to talk
 
-        // So we need to take in for the next cycle before processing in priority.
+        // So we need to take in for the next cycle before processing in priority; WE WILL FUZZ INITIAIVE SLIGTLY
         // 1. An injected action that can be combined into a single narrative process for all the characters involved wins.
-        // 2. The character that has the most actions wins, it takes at least 1 action to be considered for this.
-        // 3. The character that has the most microInjections wins, it takes at least 1 microInjection to be considered for this.
-        // 4. The character that has the most microVoices wins, it takes at least 1 microVoice to be considered for this.
-        // 5. Pick a random one from charactersToForceTalk
+        // 2. The character that has something with actions and the highest initiative wins, it takes at least 1 action to be considered for this.
+        // 3. The character that has microInjections and the highest initiative wins, it takes at least 1 microInjection to be considered for this.
+        // 4. The character that has microVoices and the highest initiative wins, it takes at least 1 microVoice to be considered for this.
+        // 5. Pick a random one from charactersToForceTalk sorting by fuzzed initiative.
 
         // if no character comes out of this, or we don't get the combination, the follow up is completed and it is the user's turn to talk
+        // otherwise we run the talk, we calculate side effects and then run follow up again!... until it is all exhaused
+
+        // we will also have an interrupt for the user in case, they can after all, go in a forever loop of talking
+    }
+
+    /**
+     * 
+     * @param {DEActionPromptInjection<DEStringTemplateCharOnly>} action
+     * @param {DECompleteCharacterReference} character
+     * @param {number} cycles
+     * @param {string[]} interrupters
+     * @return {Promise<DEResolvedActionPromptInjection | null>}
+     */
+    async resolveAction(action, character, cycles, interrupters) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+
+        if (!action.action && !action.narrativeAction && !action.narrativeEffect) {
+            console.warn(`Action has no action, narrativeAction or narrativeEffect. Skipping.`, action);
+            return null;
+        }
+
+        const resolvedAction = action.action ? action.action(cycles, interrupters) : null;
+        const resolvedNarrativeAction = action.narrativeAction ? action.narrativeAction(cycles, interrupters) : null;
+        const resolvedNarrativeEffect = action.narrativeEffect ? action.narrativeEffect(cycles, interrupters) : null;
+
+        const stringResolvedAction = resolvedAction ? (
+            typeof resolvedAction === "string" ? resolvedAction : await resolvedAction({
+                char: character,
+            })
+        ) : "";
+
+        const stringResolvedNarrativeAction = resolvedNarrativeAction ? (
+            typeof resolvedNarrativeAction === "string" ? resolvedNarrativeAction : await resolvedNarrativeAction({
+                char: character,
+            })
+        ) : "";
+
+        const stringResolvedNarrativeEffect = resolvedNarrativeEffect ? (
+            typeof resolvedNarrativeEffect === "string" ? resolvedNarrativeEffect : await resolvedNarrativeEffect({
+                char: character,
+            })
+        ) : "";
+
+        if (!stringResolvedAction && !stringResolvedNarrativeAction && !stringResolvedNarrativeEffect) {
+            console.warn(`Action has no resolved action, narrativeAction or narrativeEffect. Skipping.`, action);
+            return null;
+        }
+
+        return {
+            action: stringResolvedAction,
+            narrativeAction: stringResolvedNarrativeAction,
+            narrativeEffect: stringResolvedNarrativeEffect,
+            deadEndIsDeath: action.deadEndIsDeath || false,
+            emotionalRange: action.emotionalRange || [],
+            isDeadEndScenario: action.isDeadEndScenario || false,
+            primaryEmotion: action.primaryEmotion || null,
+            actionMustBe: action.actionMustBe,
+            dominance: action.dominance,
+            voice: action.voice,
+        }
     }
 
     /**
      * 
      * @param {{moveTimeForwards: boolean}} options
      * @param {number} cycle
+     * @param {string[][]} interruptersAccumulated
      * @param {string | null} characterIdThatJustTalked
      */
-    async calculateSideEffects(options, cycle, characterIdThatJustTalked = null) {
+    async calculateSideEffects(options, cycle, interruptersAccumulated, characterIdThatJustTalked = null) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         } else if (!this.inferenceAdapter) {
@@ -1163,22 +1298,34 @@ export class DEngine {
             const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
             delete this.deObject.internalState.NEXT_ACTIONS;
 
-            for (const nextAction of nextActionsProduced) {
+            /**
+             * @type {Array<{characterId: string, action: DEActionPromptInjection<DEStringTemplateCharOnly>}>}
+             */
+            const allNextActions = [...nextActionsProduced];
+
+            for (const nextAction of allNextActions) {
                 if (nextAction.characterId !== characterId) {
                     console.warn(`Next action was produced for character ${nextAction.characterId} but we are processing character ${characterId}. Adding anyway, but this may be a bug in the script that produced the next action.`);
                 }
 
                 // they can talk twice in a row for these injected actions
                 if (!this.deObject.stateFor[characterId].dead) {
+                    if (typeof nextAction.action.probability === "number" && nextAction.action.probability < Math.random()) {
+                        console.log(`Next action for character ${characterId} was skipped due to probability check.`);
+                        continue;
+                    }
+
                     results.followup[characterId] = results.followup[characterId] || {
                         microInjections: [],
                         microVoices: [],
                         injectedActions: [],
                     };
                     results.followup[characterId].injectedActions.push({
-                        action: nextAction,
+                        action: nextAction.action,
                         cycle,
                     });
+                } else {
+                    console.log(`Next action for character ${characterId} was skipped because the character is dead.`);
                 }
             }
 
@@ -1187,7 +1334,6 @@ export class DEngine {
                 continue;
             }
 
-            // prevent the character from getting stuck in an infinite loop of talking over and over
             if (!this.deObject.stateFor[characterId].dead) {
                 results.followup[characterId] = results.followup[characterId] || {
                     microInjections: [],
@@ -1261,7 +1407,7 @@ export class DEngine {
                 // check that the time is in the future
                 if (sceneObject.time.time < this.deObject.currentTime.time && this.deObject.world.selectedScene) {
                     console.warn(`Scene time ${sceneObject.time.time} is in the past compared to current time ${this.deObject.currentTime.time}.`);
-                    this.informCycleState("warning", `Scene time ${sceneObject.time.time} is in the past compared to current time ${this.deObject.currentTime.time}. This may cause unexpected behavior.`);
+                    this.inform("warning", `Scene time ${sceneObject.time.time} is in the past compared to current time ${this.deObject.currentTime.time}. This may cause unexpected behavior.`);
 
                 } else {
                     // the scene time is in the future, we need to move time forwards to that point
@@ -1359,7 +1505,6 @@ export class DEngine {
                 ],
                 characterId: null,
                 isCharacter: false,
-                isDebugMessage: false,
                 isRejectedMessage: false,
                 isStoryMasterMessage: true,
                 singleSummary: null,
@@ -1376,10 +1521,10 @@ export class DEngine {
 
             await this.informDEObjectUpdated();
 
-            this.informCycleState("info", "Pre-calculating side effects...");
+            this.inform("info", "Pre-calculating side effects...");
             const nextFollowUpInfo = await this.calculateSideEffects({
                 moveTimeForwards: !preselectedTimeAtSceneStart,
-            }, 0);
+            }, 0, [], null);
 
             await this.informDEObjectUpdated();
 
@@ -1427,7 +1572,7 @@ export class DEngine {
      * @param {"info" | "error" | "warning"} level
      * @param {string} message
      */
-    informCycleState(level, message) {
+    inform(level, message) {
         for (const listener of this.informListeners) {
             try {
                 listener(level, message);
@@ -1457,284 +1602,6 @@ export class DEngine {
     }
 
     /**
-     * TODO this is fully non implemented
-     * @param {DECompleteCharacterReference} character
-     * @param {Array<DEngineInteraction>} previouslyLeftOrderOfInteraction
-     * @param {number} internalCycleDepth
-     * @returns 
-     */
-    async _startInteraction(character, previouslyLeftOrderOfInteraction = [], internalCycleDepth = 0) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-
-        const characterState = this.deObject.stateFor[character.name];
-        if (!characterState) {
-            throw new Error(`Character state for ${character.name} not found.`);
-        }
-
-        if (!characterState.conversationId) {
-            throw new Error(`Character ${character.name} is not in a conversation, cannot run internal cycle step.`);
-        }
-
-        if (this.talkingTurnRequested && internalCycleDepth !== 0) {
-            // stop recursion user wants to talk
-            // in theory characters can talk/react forever without the user talking
-            // and just keep talking to each other because user's turn never comes
-            // this allows user to interrupt the cycle and take a turn
-
-            // it must not be the cycle zero because that would be bit weird
-            // but I guess it can be allowed, but nah
-            this.talkingTurnRequested = false;
-            return;
-        }
-
-        this.informCycleState("info", `Next character to talk: ${character.name}`);
-        await calculateStateChange(this, character);
-        await calculateBondsChange(this, character, lastItemChangesInfo.interactedCharacters);
-        await deleteTemp(this);
-        await talk(character);
-
-        const feasibilityResults = await testMessageFeasibilityForCharacter(this, character, previouslyLeftOrderOfInteraction);
-
-        // this should not happen for non user characters
-        if (!feasibilityResults.feasible) {
-            throw new Error(`Character ${character.name} generated an infeasible message, which should not happen because they are not the user character. Reason: ${feasibilityResults.reason}`);
-        }
-
-        this.informCycleState("info", `Feasibility analysis and effect completed!`);
-
-        const nextCharacterToTalk = feasibilityResults.nextCharacterToTalk;
-
-        if (!nextCharacterToTalk || nextCharacterToTalk.name === this.user?.name) {
-            this.informCycleState("info", `Next character to talk is the user or no one, ending recursive internal cycle.`);
-            return;
-        }
-
-        const nextCharacterToTalkCharacterObject = this.deObject.characters[nextCharacterToTalk.name];
-        const leftOrderOfInteraction = feasibilityResults.leftOrderOfInteraction;
-
-        await this._startInteraction(nextCharacterToTalkCharacterObject, leftOrderOfInteraction, internalCycleDepth + 1);
-    }
-
-    /**
-     * @param {string} userMessageOrig 
-     */
-    async executeNextCycle(userMessageOrig) {
-        const userMessage = userMessageOrig.trim();
-
-        if (userMessage.length === 0) {
-            return;
-        }
-
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        } else if (this.executingCycle) {
-            throw new Error("DEngine is already executing a cycle, cannot execute another one concurrently.");
-        } else if (!this.pseudoConversationSummaryGenerator) {
-            // TODO reenable this error once we have a proper LLM integration
-            // TODO maybe instead of this summary generator, we can just do it on the fly
-            // throw new Error("DEngine has no pseudo conversation summary generator defined, cannot execute cycle.");
-        }
-
-        if (this.executingCycle) {
-            throw new Error("A cycle is already being executed.");
-        }
-
-        this.executingCycle = true;
-
-        if (userMessage.startsWith("/")) {
-            await this.executeCommand(userMessage);
-            this.executingCycle = false;
-            return;
-        }
-
-        const userCharacterState = this.deObject.stateFor[this.user];
-        if (!userCharacterState) {
-            throw new Error(`Character state for user ${this.user} not found.`);
-        }
-
-        const deObjectBackup = deepCopy(this.deObject);
-
-        try {
-            this.informCycleState("info", `Starting new message cycle`);
-
-            const user = this.user;
-
-            const expectedFutureConversationIdIfNotFound = crypto.randomUUID();
-
-            /**
-             * @param {boolean} makeRejected 
-             * @returns 
-             */
-            const addUserMessage = (makeRejected) => {
-                const currentDEObject = /** @type {DEObject} */ (this.deObject);
-
-                /**
-                 * @type {DEConversationMessage}
-                 */
-                const messageToAdd = {
-                    sender: user,
-                    content: [
-                        {
-                            type: "narration",
-                            text: userMessage,
-                        },
-                    ],
-                    duration: { inMinutes: 0, inHours: 0, inDays: 0, inSeconds: 0 },
-                    // @ts-expect-error typescript issue as usual
-                    startTime: { ...this.deObject.currentTime },
-                    // @ts-expect-error typescript issue as usual
-                    endTime: { ...this.deObject.currentTime },
-                    id: crypto.randomUUID(),
-                    isCharacter: true,
-                    isDebugMessage: false,
-                    isStoryMasterMessage: false,
-                    isRejectedMessage: makeRejected,
-                    canOnlyBeSeenByCharacters: null,
-                    perspectiveSummaryIds: {},
-                    interactingCharacters: [],
-                    rumors: [],
-                    // @ts-ignore
-                    singleSummary: userMessage.length < 50 ? userMessage : null,
-
-                    emotion: null,
-                    emotionalRange: null,
-                }
-                if (!userCharacterState.conversationId) {
-                    // need to make a new conversation
-                    // TODO time hasn't moved so it shouldn't be a new state
-                    const userCharacterStateCopy = deepCopyNoHistory(userCharacterState);
-                    userCharacterState.history.push(userCharacterStateCopy);
-                    userCharacterState.conversationId = expectedFutureConversationIdIfNotFound;
-                    // if (!makeRejected) {
-                    //     userCharacterState.messageId = messageToAdd.id;
-                    // }
-                    // @ts-expect-error typescript issue as usual
-                    this.deObject.conversations[expectedFutureConversationIdIfNotFound] = {
-                        id: expectedFutureConversationIdIfNotFound,
-                        previousConversationIdsPerParticipant: {
-                            [user]: null,
-                        },
-                        // @ts-expect-error typescript issue as usual
-                        startTime: { ...this.deObject.currentTime },
-                        messages: [messageToAdd],
-                        participants: [user],
-                        remoteParticipants: [],
-                        location: userCharacterState.location,
-                        pseudoConversation: false,
-                        bondsAtStart: getFrozenBonds(this, [user]),
-                        bondsAtEnd: null,
-                        endTime: null,
-                    };
-                    return expectedFutureConversationIdIfNotFound;
-                } else {
-                    // @ts-expect-error typescript issue as usual
-                    this.deObject.conversations[userCharacterState.conversationId].messages.push(messageToAdd);
-                    // if (!makeRejected) {
-                    //     userCharacterState.messageId = messageToAdd.id;
-                    // }
-                    return userCharacterState.conversationId;
-                }
-            }
-
-            /**
-             * @param {string} reason 
-             */
-            const simpleRollbackWithReason = async (reason) => {
-                this.deObject = deObjectBackup;
-
-                const conversationIdUsed = addUserMessage(true);
-
-                /** @type {any} */
-                const rejectionMessage = {
-                    sender: "Story Master",
-                    content: `Message rejected, ${reason}`,
-                    duration: { inMinutes: 0, inHours: 0, inDays: 0, inSeconds: 0 },
-                    // @ts-ignore
-                    startTime: { ...this.deObject.currentTime },
-                    // @ts-ignore
-                    endTime: { ...this.deObject.currentTime },
-                    id: crypto.randomUUID(),
-                    isCharacter: false,
-                    isDebugMessage: false,
-                    isStoryMasterMessage: true,
-                    // make it rejected so that characters don't pick it up when they check conversations
-                    isRejectedMessage: true,
-                };
-                const currentDEObject = this.deObject;
-                if (!currentDEObject) {
-                    throw new Error("DEngine not initialized");
-                }
-                currentDEObject.conversations[conversationIdUsed].messages.push(rejectionMessage);
-
-                await this.informDEObjectUpdated();
-            }
-
-            addUserMessage(false);
-            await this.informDEObjectUpdated();
-            this.informCycleState("info", `Testing message is following the rules`);
-
-            const testResults = await testWorldRulesOn(this, this.userCharacter);
-            if (!testResults.passed) {
-                await simpleRollbackWithReason(testResults.reason || "Message broke world rules");
-                this.informCycleState("info", `The message has been rejected for breaking the world rules`);
-                return;
-            }
-
-            const feasibilityResults = await testMessageFeasibilityForCharacter(this, this.userCharacter, []);
-
-            if (!feasibilityResults.feasible) {
-                await simpleRollbackWithReason(feasibilityResults.reason || "Message is not feasible for character");
-                this.informCycleState("info", `The message has been rejected for being not feasible for the character`);
-                return;
-            }
-
-            this.informCycleState("info", `Feasibility test Passed!`);
-
-            process.exit(1);
-
-            const nextCharacterToTalk = feasibilityResults.nextCharacterToTalk;
-
-            if (!nextCharacterToTalk || nextCharacterToTalk.name === this.user) {
-                this.informCycleState("info", `Calculating state changes for user character`);
-                await calculateStateChange(this, this.userCharacter);
-                this.informCycleState("info", `Cycle completed successfully`);
-                await this.informDEObjectUpdated();
-                return;
-            }
-
-            const nextCharacterToTalkCharacterObject = this.deObject.characters[nextCharacterToTalk.name];
-            const leftOrderOfInteraction = feasibilityResults.leftOrderOfInteraction;
-
-            await this._startInteraction(
-                nextCharacterToTalkCharacterObject,
-                leftOrderOfInteraction,
-                0,
-            );
-            // calculate state changes towards the user character
-            // hopefully these are reasonable
-            this.informCycleState("info", `Calculating state changes for user character`);
-            await calculateStateChange(this, this.userCharacter);
-            this.informCycleState("info", `Cycle completed successfully`);
-            await this.informDEObjectUpdated();
-
-            // TODO summarize in a detached way all the conversation messages added last cycle
-            // TODO run fixPotentiallyBrokenItemStates at the end of each character reply, who knows what scripts may have done
-        } catch (error) {
-            // @ts-ignore
-            this.informCycleState("error", `Internal Error during cycle execution: ${error.message}`);
-            // @ts-ignore
-            console.log(error.stack);
-            // restore deObject from backup
-            this.deObject = deObjectBackup;
-            await this.informDEObjectUpdated();
-        } finally {
-            this.executingCycle = false;
-        }
-    }
-
-    /**
      * @param {(obj: DEObject) => void | Promise<void>} listener 
      */
     addDEObjectUpdatedListener(listener) {
@@ -1751,14 +1618,14 @@ export class DEngine {
     /**
      * @param {(level: "info" | "warning" | "error", message: string) => void} listener 
      */
-    addCycleInformListener(listener) {
+    addInformListener(listener) {
         this.informListeners.push(listener);
     }
 
     /**
      * @param {(level: "info" | "warning" | "error", message: string) => void} listener 
      */
-    removeCycleInformListener(listener) {
+    removeInformListener(listener) {
         this.informListeners = this.informListeners.filter(l => l !== listener);
     }
 
@@ -1806,62 +1673,7 @@ export class DEngine {
             message = "Unknown command /" + command + ". Type /help for a list of commands.";
         }
 
-        /**
-         * @type {DEConversationMessage}
-         */
-        const messageToAdd = {
-            sender: "System",
-            content: [
-                {
-                    type: "narration",
-                    text: message,
-                },
-            ],
-            duration: { inMinutes: 0, inHours: 0, inDays: 0, inSeconds: 0 },
-            startTime: { ...this.deObject.currentTime },
-            endTime: { ...this.deObject.currentTime },
-            id: crypto.randomUUID(),
-            isCharacter: false,
-            isDebugMessage: true,
-            isStoryMasterMessage: true,
-            isRejectedMessage: false,
-            canOnlyBeSeenByCharacters: null,
-            perspectiveSummaryIds: {},
-            singleSummary: null,
-            emotion: null,
-            emotionalRange: null,
-            interactingCharacters: [],
-            rumors: [],
-        };
-
-        let userConversationId = this.deObject.stateFor[this.deObject.user].conversationId;
-        if (!userConversationId) {
-            userConversationId = crypto.randomUUID();
-            // @ts-ignore
-            const userCharacterState = this.deObject.stateFor[this.deObject.user];
-            const userCharacterStateCopy = deepCopyNoHistory(userCharacterState);
-            userCharacterState.history.push(userCharacterStateCopy);
-            userCharacterState.conversationId = userConversationId;
-            this.deObject.conversations[userConversationId] = {
-                id: userConversationId,
-                previousConversationIdsPerParticipant: {
-                    [this.deObject.user]: null,
-                },
-                startTime: { ...this.deObject.currentTime },
-                messages: [messageToAdd],
-                participants: [this.deObject.user],
-                remoteParticipants: [],
-                location: userCharacterState.location,
-                pseudoConversation: false,
-                bondsAtStart: getFrozenBonds(this, [this.deObject.user]),
-                bondsAtEnd: null,
-                endTime: null,
-            };
-        } else {
-            this.deObject.conversations[userConversationId].messages.push(messageToAdd);
-        }
-
-        await this.informDEObjectUpdated();
+        this.inform("info", message);
     }
 }
 

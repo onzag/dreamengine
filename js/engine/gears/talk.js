@@ -13,7 +13,7 @@ import { markCharacterAsDeadEnded } from "../utils.js";
  * @param {DEngine} engine 
  * @param {DECompleteCharacterReference} character
  * @param {{
- *   injectedActions: Array<DEActionPromptInjection<DEStringTemplateCharOnly>>,
+ *   injectedActions: Array<DEResolvedActionPromptInjection>,
  *   microInjections: string[], // these are messages that are injected into the context of the inference adapter for this talk, but are not shown to the story master, they are meant to be used for micro-injections of information that the character would know but the story master doesn't need to know, such as "I see a monster in the bushes" or "I have a knife in my pocket", which can then be used by the inference adapter to generate more accurate dialogue and narration, but doesn't need to be shown to the story master
  *   microVoices: DEVoiceDescription[] // limits for the micro-injections voice
  * }} options
@@ -61,25 +61,10 @@ export async function talk(engine, character, options) {
      * @type {string[]}
      */
     const effects = [];
-    let actions = (await Promise.all([...internalDescription.actions, ...options.injectedActions].map(async (action) => {
-        if (typeof action.probability === "number" && Math.random() > action.probability) {
-            return null;
-        }
-        const text = action.action ? (typeof action.action === "string" ? action.action : await action.action(
-            {
-                char: character,
-            }
-        )) : "";
-        const narrativeAction = typeof action.narrativeAction === "string" ? action.narrativeAction : (action.narrativeAction ? await action.narrativeAction(
-            {
-                char: character,
-            },
-        ) : "");
-        const narrativeEffect = typeof action.narrativeEffect === "string" ? action.narrativeEffect : (action.narrativeEffect ? await action.narrativeEffect(
-            {
-                char: character,
-            }
-        ) : "");
+    let actions = options.injectedActions.map((action) => {
+        const text = action.action;
+        const narrativeAction = action.narrativeAction;
+        const narrativeEffect = action.narrativeEffect;
         const narrativeActionTrimmed = narrativeAction.trim();
         const trimmed = text.trim();
 
@@ -97,7 +82,7 @@ export async function talk(engine, character, options) {
             action: trimmed || null,
             narrativeAction: narrativeActionTrimmed || null,
         }
-    }))).filter((action) => !!action);
+    }).filter((action) => !!action);
 
     const deadEndAction = actions.find((action) => action.actionObject.isDeadEndScenario);
 
@@ -170,14 +155,10 @@ export async function talk(engine, character, options) {
         }
 
         if (action.actionObject.narrativeEffect && narrativeEffectsDominance < (action.actionObject.dominance || 0)) {
-            narrativeEffects.push(typeof action.actionObject.narrativeEffect === "string" ? action.actionObject.narrativeEffect : await action.actionObject.narrativeEffect({
-                char: character,
-            }));
+            narrativeEffects.push(action.actionObject.narrativeEffect);
             narrativeEffectsDominance = action.actionObject.dominance || 0;
         } else if (action.actionObject.narrativeEffect && narrativeEffectsDominance === (action.actionObject.dominance || 0)) {
-            narrativeEffects.push(typeof action.actionObject.narrativeEffect === "string" ? action.actionObject.narrativeEffect : await action.actionObject.narrativeEffect({
-                char: character,
-            }));
+            narrativeEffects.push(action.actionObject.narrativeEffect);
         }
     }
 
@@ -224,7 +205,6 @@ export async function talk(engine, character, options) {
     }
 
     const allMessagesForStory = await getHistoryFragment(engine, character, {
-        includeDebugMessages: false,
         includeRejectedMessages: false,
         msgLimit: "ALL",
         useExponentialShrinkingSelectiveContextWindowStrategy: true,
@@ -357,6 +337,9 @@ export async function talk(engine, character, options) {
                                 isDeadEndScenario: false,
                                 primaryEmotion: "neutral",
                                 action: "",
+                                mustBeFulfilledImmediately: true,
+                                narrativeAction: "",
+                                narrativeEffect: "",
                             },
                             narrativeAction: trimmed,
                             action: null,
@@ -385,6 +368,9 @@ export async function talk(engine, character, options) {
                                 isDeadEndScenario: false,
                                 primaryEmotion: "neutral",
                                 action: "",
+                                mustBeFulfilledImmediately: true,
+                                narrativeAction: "",
+                                narrativeEffect: "",
                             },
                             narrativeAction: trimmed,
                             action: null,
@@ -409,7 +395,7 @@ export async function talk(engine, character, options) {
 
     /**
      * @type {{value: {
-     * actionObject: DEActionPromptInjection<DEStringTemplateCharOnly>;
+     * actionObject: DEResolvedActionPromptInjection;
      * action: string | null;
      * narrativeAction: string | null;
      * } | null} | null}
@@ -418,7 +404,7 @@ export async function talk(engine, character, options) {
 
     /**
      * @type {{
-     * actionObject: DEActionPromptInjection<DEStringTemplateCharOnly>;
+     * actionObject: DEResolvedActionPromptInjection;
      * action: string | null;
      * narrativeAction: string | null;
      * } | null}
@@ -618,7 +604,6 @@ export async function talk(engine, character, options) {
 
         // We fetch again, the reason is that we are updating all this as we go
         const allMessagesForStoryDuringTalkProcess = await getHistoryFragment(engine, character, {
-            includeDebugMessages: false,
             includeRejectedMessages: false,
             msgLimit: "ALL",
             useExponentialShrinkingSelectiveContextWindowStrategy: true,

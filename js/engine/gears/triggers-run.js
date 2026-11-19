@@ -30,7 +30,6 @@ export default async function runAllTriggersFor(engine, character) {
 
     const lastCycleMessagesInfo = await getHistoryFragment(engine, character, {
         msgLimit: "ALL_UNPROCESSED_MESSAGES_UNTIL_FIRST_PROCESSED_MESSAGE",
-        includeDebugMessages: false,
         includeRejectedMessages: false,
         perspective: "character",
     });

@@ -62,7 +62,6 @@ async function testMessageFeasibilityForce(engine, character) {
     ]);
 
     const lastCycleExpanded = (await getHistoryFragment(engine, character, {
-        includeDebugMessages: false,
         includeRejectedMessages: false,
         msgLimit: "LAST_CYCLE_EXPANDED",
     })).messages;

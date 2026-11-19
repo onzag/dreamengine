@@ -103,7 +103,6 @@ export async function runQuestion(engine, character, question, options) {
     // gather all the other characters that talked inbetween, and update bonds for each
     const lastCycleMessagesInfo = options.lastCycleMessagesInfo || await getHistoryFragment(engine, character, {
         msgLimit: "ALL_UNPROCESSED_MESSAGES_UNTIL_FIRST_PROCESSED_MESSAGE",
-        includeDebugMessages: false,
         includeRejectedMessages: false,
         perspective: "character",
     });

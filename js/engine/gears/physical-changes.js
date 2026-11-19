@@ -99,7 +99,6 @@ export default async function calculatePhysicalChanges(engine) {
 
     const lastCycleMessagesInfo = await getHistoryFragment(engine, userCharacter, {
         msgLimit: "ALL_UNPROCESSED_MESSAGES_UNTIL_FIRST_PROCESSED_MESSAGE",
-        includeDebugMessages: false,
         includeRejectedMessages: false,
         perspective: "story-master",
     });

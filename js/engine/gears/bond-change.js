@@ -89,7 +89,6 @@ export default async function calculateBondsChange(engine, character) {
     }
 
     const allUnprocessedMessages = (await getHistoryFragment(engine, character, {
-        includeDebugMessages: false,
         includeRejectedMessages: false,
         msgLimit: "ALL_UNPROCESSED_MESSAGES_UNTIL_FIRST_PROCESSED_MESSAGE",
         perspective: "character",
@@ -213,5 +212,5 @@ export default async function calculateBondsChange(engine, character) {
     await updateAllStrangerBonds(engine, character, allUnprocessedMessages.conversingCharacters, allUnprocessedMessages.lastPerspectiveId);
     await engine.informDEObjectUpdated();
 
-    engine.informCycleState("info", `Finished updating bonds from ${character.name} towards other characters.`);
+    engine.inform("info", `Finished updating bonds from ${character.name} towards other characters.`);
 }

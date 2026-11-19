@@ -147,8 +147,8 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
     });
 
     // @ts-ignore
-    engine.addCycleInformListener((level, message) => {
-        self.postMessage({ type: "event", event: "cycleInform", data: { level, message } });
+    engine.addInformListener((level, message) => {
+        self.postMessage({ type: "event", event: "inform", data: { level, message } });
     });
 
     // @ts-ignore
@@ -922,7 +922,7 @@ function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generate
     self.onmessage = async (e) => {
         const msg = e.data;
 
-        // Handle responses to worker requests, including database query results.
+            // Handle responses to worker requests, including database query results.
         if (msg.type === "mainThreadCallResponse") {
             const { callId, error } = msg;
             const pending = pendingMainThreadCalls.get(callId);
