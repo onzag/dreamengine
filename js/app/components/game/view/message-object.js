@@ -1,8 +1,7 @@
 import { sharedStyles, identifierLinkStyles } from './shared-styles.js';
 import { createNarrationNodes } from './narration.js';
-import { getPerspectiveIndex } from './perspective-data.js';
+import { getCharacterPortrait, getPerspectiveIndex } from './perspective-data.js';
 import { openIdentifierDialog } from './identifier-dialog.js';
-import { emotionsGrouped } from '../../../../engine/util/emotions.js';
 import '../../world-image.js';
 import './tooltip.js';
 import { startPlayTypingSound, stopPlayTypingSound } from '../../../sound.js';
@@ -62,12 +61,8 @@ app-game-tooltip, app-world-image { display: block; width: 14vh; height: 14vh; }
         this.currentPerspective = perspective;
         const character = content.type !== 'narration' && perspective && message.characterId
             ? getPerspectiveIndex(perspective).characters.get(message.characterId) : null;
-        // The message's primary emotion is stored as `emotion`. Use the same
-        // related-emotion order as the old renderer before falling back to neutral.
-        const emotion = message.emotion || 'neutral';
-        const relatedEmotions = Object.values(emotionsGrouped).find(group => group.includes(emotion)) || [];
-        const assets = character?.metadata.assets;
-        const image = [emotion, ...relatedEmotions, 'neutral'].map(key => assets?.[key]).find(Boolean) || '';
+        // Message portraits use the message emotion; other views use the snapshot emotion.
+        const image = getCharacterPortrait(character, message.emotion || 'neutral');
         const speaker = {
             visible: content.type !== 'narration', id: character?.characterId || '',
             name: character?.nameSimple || 'Unknown speaker',

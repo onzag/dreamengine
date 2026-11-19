@@ -1,6 +1,6 @@
-import { getPerspectiveIndex } from './perspective-data.js';
+import { getCharacterPortrait, getPerspectiveIndex } from './perspective-data.js';
 
-/** @typedef {{id: string, name: string, image: string, positionDescription: string, externalDescription: string, locationSlot: string, states: DECharacterStateInPerspective[]}} SurroundingCharacter */
+/** @typedef {{id: string, name: string, image: string, isDead: boolean, positionDescription: string, externalDescription: string, locationSlot: string, states: DECharacterStateInPerspective[]}} SurroundingCharacter */
 /** @typedef {{id: string, primary: boolean, characters: SurroundingCharacter[]}} SurroundingGroup */
 
 /** The engine has already determined group membership and visibility.
@@ -19,7 +19,8 @@ export function buildSurroundingGroups(perspective) {
             return character ? [{
                 id: character.characterId,
                 name: character.nameComplex,
-                image: character.metadata.assets?.neutral || '',
+                image: getCharacterPortrait(character),
+                isDead: !!character.isDead,
                 externalDescription: character.externalDescriptionForUser,
                 positionDescription: character.placeAndPostureDescription,
                 states: character.states,

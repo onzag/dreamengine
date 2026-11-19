@@ -307,8 +307,11 @@ export async function talk(engine, character, options) {
         }
     }
 
-    console.log("Determined primary emotion: " + primaryEmotion);
-    console.log("Determined emotional range: " + emotionalRange.join(", "));
+    console.log("Determined primary emotion for " + ourCharacterName + ": " + primaryEmotion);
+    console.log("Determined emotional range for " + ourCharacterName + ": " + emotionalRange.join(", "));
+
+    engine.deObject.stateFor[character.id].primaryEmotion = primaryEmotion || "neutral";
+    engine.deObject.stateFor[character.id].emotionalRange = emotionalRange;
 
     let considerMute = false;
     if ((baseVoice?.mute || baseVoice?.dialogueLikelihood === 0) && !baseVoice?.description) {

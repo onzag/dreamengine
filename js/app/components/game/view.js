@@ -6,6 +6,7 @@ import './view/message-view.js';
 import './view/items-overlay.js';
 import './view/menu.js';
 import './view/change-notifications.js';
+import './view/game-over.js';
 import { selectMessagePerspective, isWaitingForAfter } from './view/message-perspective.js';
 import { playHoverSound, stopAllAmbiencesAndStartNewOne } from '../../sound.js';
 
@@ -268,6 +269,7 @@ app-game-stats { display: block; min-width: 0; }
 app-game-character-surrounding-view { grid-area: surroundings; min-width: 0; min-height: 0; padding: 2vh 2vh 2vh 0; margin-top: 7vh; border-top: 1vh solid var(--border); }
 .toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1vh; }
 .story { grid-area: story; min-width: 0; display: block; overflow-wrap: anywhere; }
+app-game-over { position: absolute; grid-area: 1 / 1 / 2 / -1; inset: 0 0 -1vh; z-index: 5; }
 .items-toggle { display: flex; align-items: center; justify-content: space-between; gap: 1.2vh; min-height: var(--control-height); padding: 1vh 2vh; font-size: 2.2vh; }
 kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid var(--border); border-radius: .4vh; padding: .1vh .5vh; }
 .items-toggle:hover { background-color: rgba(80, 130, 180, .35); }
@@ -285,6 +287,7 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
                     <app-game-stats></app-game-stats>
                 </div>
                 <app-game-character-surrounding-view></app-game-character-surrounding-view>
+                <app-game-over hidden></app-game-over>
                 <div class="story">
                     <app-game-message-view></app-game-message-view>
                 </div>
@@ -295,6 +298,13 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
         const button = /** @type {HTMLButtonElement} */ (this.root.querySelector('.items-toggle'));
         const overlay = /** @type {import('./view/items-overlay.js').ItemsOverlay} */ (this.root.querySelector('app-game-items-overlay'));
         const messageView = /** @type {import('./view/message-view.js').MessageView} */ (this.root.querySelector('app-game-message-view'));
+        const gameOver = /** @type {import('./view/game-over.js').GameOver} */ (this.root.querySelector('app-game-over'));
+        gameOver.addEventListener('visibility-change', () => {
+            for (const panel of this.root.querySelectorAll('.sidebar, app-game-character-surrounding-view')) {
+                /** @type {HTMLElement} */ (panel).inert = !gameOver.hidden;
+            }
+            if (!gameOver.hidden) overlay.close();
+        });
         messageView.onNext = () => this.goNextMessage();
         messageView.onPrev = () => this.goPrevMessage();
         messageView.addEventListener('message-visibility-change', event => {
@@ -314,7 +324,7 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
         button.addEventListener("mouseenter", () => playHoverSound());
         window.addEventListener('keydown', event => {
             if (!this.currentPerspective || event.defaultPrevented || event.repeat || event.altKey || event.ctrlKey || event.metaKey || document.querySelector('app-dialog')) return;
-            if (event.key === 'F1') {
+            if (event.key === 'F1' && gameOver.hidden) {
                 event.preventDefault();
                 if (overlay.open) overlay.close();
                 else overlay.show();
@@ -475,7 +485,9 @@ kbd { font: inherit; font-size: 1.5vh; color: var(--accent); border: 1px solid v
         this.renderMessageView();
         this.renderChangeNotifications();
 
-        if (perspective) this.playThemeSongOfPerspective(perspective);
+        const gameOver = /** @type {import('./view/game-over.js').GameOver | null} */ (this.root.querySelector('app-game-over'));
+        gameOver?.updatePerspective(perspective?.gameOver ? this.loadedPerspectiveId : '');
+        if (perspective && !perspective.gameOver) this.playThemeSongOfPerspective(perspective);
 
         if (perspective) this.removePotentialBlackOverlay();
         else this.showBlackOverlay();

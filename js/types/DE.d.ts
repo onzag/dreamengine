@@ -5386,8 +5386,13 @@ declare interface DEUtils {
          * To be used during questions and triggers mostly
          * 
          * Will trigger that action once the character is to talk
+         * 
+         * @param {action} action The action to trigger
+         * @param {characterId} characterId The character to trigger the action for, the character id must be
+         * part of the active conversation that is currently executing when the triggers were called or otherwise
+         * it will merely be ignored
          */
-        triggerActionNext(action: DEActionPromptInjection): void;
+        triggerActionNext(action: DEActionPromptInjection, characterId: string): void;
         accumulateInCharacter(character: string | DECompleteCharacterReference, accumulatorName: string, amount: number): number;
         getAccumulatedValueInCharacter(character: string | DECompleteCharacterReference, accumulatorName: string): number;
     };

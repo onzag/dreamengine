@@ -99,6 +99,7 @@ function playSound(src, volume = 1) {
     // release the audio element from memory once it's done playing
     sound.src = '';
   });
+  return sound;
 }
 
 /**
@@ -588,6 +589,12 @@ async function isAmbiencePlaying(id) {
 
 let lastNumberId = 0;
 
+function stopAllAmbiences() {
+  // Include sources that are still loading or waiting for the first user gesture.
+  const ids = new Set([...CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING.keys(), ...AMBIENCES.map(amb => amb.id)]);
+  for (const id of ids) stopAmbience(id);
+}
+
 /**
  * Stop every ambience group that isn't in `groups` (with a fade) and start the
  * given groups. Each group is keyed by an id and may contain multiple ordered
@@ -642,6 +649,6 @@ export {
   toggleAmbience, isFXEnabled, isAmbienceEnabled, playAmbience, stopAmbience,
   stopAmbienceWithFade, startAmbienceWithFade, startAmbiencesWithFade,
   isAmbiencePlaying, setTempSoundDisable, playSound, playNarration, stopNarration,
-  stopAllAmbiencesAndStartNewOne, randomizeAmbienceGroupSrc,
+  stopAllAmbiences, stopAllAmbiencesAndStartNewOne, randomizeAmbienceGroupSrc,
   setAllAmbiencesVolume, restoreAllAmbiencesVolume, startPlayTypingSound, stopPlayTypingSound
 };

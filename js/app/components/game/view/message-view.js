@@ -139,7 +139,7 @@ kbd { opacity: .7; margin-left: 1vh; }
         }
         const messageKey = JSON.stringify([conversation.id, message.id]);
         // Submission is a latch: even edits to the old message must not reopen its controls.
-        if (this.frozenKey === messageKey) { this.renderControls(); return; }
+        if (this.frozenKey === messageKey && !perspective?.gameOver) { this.renderControls(); return; }
         const selectionKey = JSON.stringify([perspective?.ownId, messageKey, contentIndex]);
         if (selectionKey !== this.selectionKey) this.isInputMode = false;
         this.frozenKey = '';
@@ -148,18 +148,19 @@ kbd { opacity: .7; margin-left: 1vh; }
         this.currentPerspective = perspective;
         this.hasPrev = hasPrev;
         this.hasNext = hasNext;
-        this.waitingForAfter = waitingForAfter;
+        this.waitingForAfter = waitingForAfter && !perspective?.gameOver;
         this.messageObject.updateMessage(perspective, message, content, selectionKey);
         this.input.updateUser(perspective, JSON.stringify([perspective?.ownId, conversation.id]));
         // A next message may arrive while an unsent draft is open. Keep the draft for later.
-        if (this.isInputMode && (hasNext || this.waitingForAfter)) this.isInputMode = false;
+        if (this.isInputMode && (hasNext || this.waitingForAfter || perspective?.gameOver)) this.isInputMode = false;
         this.renderControls();
     }
 
     renderControls() {
         const userName = this.currentPerspective?.ownName || this.currentPerspective?.self.nameSimple || 'Player';
+        const gameOver = !!this.currentPerspective?.gameOver;
         const key = JSON.stringify([this.hasCurrent, this.isInputMode, this.frozenKey, this.waitingForAfter,
-            this.hasPrev, this.hasNext, this.navigating, this.messageObject.streaming, userName]);
+            this.hasPrev, this.hasNext, this.navigating, this.messageObject.streaming, userName, gameOver]);
         if (key === this.controlsKey) return;
         this.controlsKey = key;
         this.hidden = !this.hasCurrent;
@@ -174,11 +175,11 @@ kbd { opacity: .7; margin-left: 1vh; }
         this.prev.hidden = !!this.frozenKey || !(this.isInputMode || this.hasPrev);
         this.prev.disabled = this.navigating;
         this.next.hidden = !!this.frozenKey || this.waitingForAfter || this.navigating;
-        this.next.disabled = this.isInputMode && !this.input.canSubmit;
+        this.next.disabled = this.isInputMode ? !this.input.canSubmit : gameOver && !this.hasNext && !this.messageObject.streaming;
         const shortcut = /** @type {HTMLElement} */ (this.next.querySelector('kbd'));
         shortcut.hidden = this.isInputMode;
         this.next.setAttribute('aria-keyshortcuts', this.isInputMode ? 'Enter' : 'Space Enter');
-        const label = this.isInputMode ? 'Ok \u25b6' : this.messageObject.streaming ? 'Reveal text' : this.hasNext ? 'Next \u25b6' : `${userName}'s Turn \u25b6`;
+        const label = this.isInputMode ? 'Ok \u25b6' : this.messageObject.streaming ? 'Reveal text' : this.hasNext || gameOver ? 'Next \u25b6' : `${userName}'s Turn \u25b6`;
         const nextLabel = /** @type {HTMLElement} */ (this.next.querySelector('span'));
         if (nextLabel.textContent !== label) nextLabel.textContent = label;
         this.loading.hidden = !(this.frozenKey || this.waitingForAfter || this.navigating);
@@ -189,6 +190,7 @@ kbd { opacity: .7; margin-left: 1vh; }
 
     async advance() {
         if (!this.hasCurrent || this.frozenKey || this.waitingForAfter || this.navigating || this.isInputMode) return;
+        if (this.currentPerspective?.gameOver && !this.messageObject.streaming && !this.hasNext) return;
         playConfirmSound();
         if (this.messageObject.streaming) { this.messageObject.finish(); return; }
         if (!this.hasNext) {

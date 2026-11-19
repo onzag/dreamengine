@@ -2894,9 +2894,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
     },
 
     triggersAndAccumulators: {
-        triggerActionNext(action) {
+        triggerActionNext(action, characterId) {
             DE.internalState.NEXT_ACTIONS = DE.internalState.NEXT_ACTIONS || [];
-            DE.internalState.NEXT_ACTIONS.push(action);
+            DE.internalState.NEXT_ACTIONS.push({action, characterId});
         },
         accumulateInCharacter(character, accumulatorName, amount) {
             const characterRef = resolveCharacter(DE, character);
@@ -3071,13 +3071,6 @@ function defineStateInCharacter(DE, character, stateName, stateDefinition) {
     }
     character.stateDefinitions[stateName] = stateDefinition;
     return character.stateDefinitions[stateName];
-}
-
-/**
- * @param {DEObject} DE
- */
-function markGameOver(DE) {
-    DE.internalState.GAME_OVER = true;
 }
 
 /**
@@ -3280,7 +3273,6 @@ export function markCharacterAsDeadEnded(deObject, character, reason, isDeath) {
 
     if (deObject.user && deObject.user === character.id) {
         console.log(`The user character ${character.name} has reached a dead-end: ${reason}, game over.`);
-        markGameOver(deObject);
     }
 
     if (!isDeath && deObject.stateFor[character.id].location) {

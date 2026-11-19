@@ -1,4 +1,5 @@
 import { sharedStyles } from './shared-styles.js';
+import { getCharacterPortrait } from './perspective-data.js';
 import '../../world-image.js';
 import './tooltip.js';
 
@@ -56,7 +57,7 @@ textarea { display: block; resize: vertical; width: 100%; min-height: 10vh; max-
         if (this.form.hidden) this.form.hidden = false;
         if (!this.submitted.hidden) this.submitted.hidden = true;
         const name = perspective?.ownName || perspective?.self.nameSimple || 'Player';
-        const image = perspective?.self.metadata.assets?.neutral || '';
+        const image = getCharacterPortrait(perspective?.self);
         const id = perspective?.self.characterId || '';
         const description = perspective?.self.externalDescriptionForUser || '';
         const key = JSON.stringify([name, image, id, description]);

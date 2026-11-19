@@ -44,7 +44,7 @@ ${characterTagStyles}
 .group.solo:not(.primary) { border-color: transparent; background: transparent; }
 .character { width: 9vh; max-width: 100%; min-width: 0; margin: 0; color: var(--ink); }
 .primary .character { width: 13vh; }
-.portrait-tooltip { display: block; width: 100%; aspect-ratio: 1; }
+.portrait-tooltip { display: block; position: relative; width: 100%; aspect-ratio: 1; }
 .portrait-tooltip:focus-visible { outline: .2vh solid var(--accent); outline-offset: .3vh; }
 app-world-image { --asset-image-border-width: .2vh; display: block; width: 100%; height: auto; aspect-ratio: 1; }
 /* Filter the portrait inside its clipped frame, leaving borders and labels sharp. */
@@ -52,7 +52,10 @@ app-world-image { --asset-image-border-width: .2vh; display: block; width: 100%;
 .groups[data-blindness="partial-good"] { --portrait-blur: .45vh; }
 .groups[data-blindness="partial-bad"] { --portrait-blur: 1.2vh; }
 .groups[data-blindness="full"] { --portrait-blur: 3vh; }
-app-world-image::part(asset-image) { filter: blur(var(--portrait-blur)); }
+app-world-image::part(asset-image) { filter: blur(var(--portrait-blur)) grayscale(var(--portrait-grayscale, 0)) brightness(var(--portrait-brightness, 1)); }
+.character.dead { --portrait-grayscale: 1; --portrait-brightness: .75; }
+.death-badge { display: none; position: absolute; bottom: .35vh; left: .35vh; right: .35vh; padding: .35vh .2vh; border: .1vh solid #c5cbd4; background: #18202a; color: #f0f3f7; font-size: 1.3vh; font-weight: 600; line-height: 1.3; text-align: center; pointer-events: none; }
+.character.dead .death-badge { display: block; }
 figcaption { margin-top: .6vh; line-height: 1.25; }
 .name { display: block; font-size: 1.8vh; }
 .primary .name { font-size: 2.2vh; }
@@ -254,12 +257,13 @@ figcaption { margin-top: .6vh; line-height: 1.25; }
                     const element = document.createElement('figure');
                     element.className = 'character';
                     element.dataset.characterId = character.id;
-                    element.innerHTML = '<app-game-tooltip class="portrait-tooltip" align-with="bottom" tabindex="0"><app-world-image no-transition="true" default-image="./images/default-profile.png" aria-hidden="true"></app-world-image></app-game-tooltip><figcaption><span class="name"></span><span class="position"></span><div class="character-tags"></div></figcaption>';
+                    element.innerHTML = '<app-game-tooltip class="portrait-tooltip" align-with="bottom" tabindex="0"><app-world-image no-transition="true" default-image="./images/default-profile.png" aria-hidden="true"></app-world-image><span class="death-badge" aria-hidden="true">Deceased</span></app-game-tooltip><figcaption><span class="name"></span><span class="position"></span><div class="character-tags"></div></figcaption>';
                     card = { element, placement: target.placement, primary: group.primary };
                     this.cards.set(character.id, card);
                     entering.add(character.id);
                 }
                 card.primary = group.primary;
+                card.element.classList.toggle('dead', character.isDead);
                 const name = card.element.querySelector('.name');
                 const position = card.element.querySelector('.position');
                 if (name) name.textContent = character.name;
@@ -283,7 +287,7 @@ figcaption { margin-top: .6vh; line-height: 1.25; }
                 const tooltip = card.element.querySelector('.portrait-tooltip');
                 if (tooltip) {
                     tooltip.setAttribute('text', character.externalDescription);
-                    tooltip.setAttribute('aria-label', character.name || 'Character description');
+                    tooltip.setAttribute('aria-label', (character.name || 'Character description') + (character.isDead ? ' (Deceased)' : ''));
                     tooltip.setAttribute('identifier-id', character.id);
                     tooltip.setAttribute('found-as', 'single-character');
                     tooltip.setAttribute('role', 'button');

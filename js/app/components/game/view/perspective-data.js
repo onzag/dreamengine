@@ -1,4 +1,18 @@
+import { emotionsGrouped } from '../../../../engine/util/emotions.js';
+
 /** Snapshot lookups shared by views, narration and identifier dialogs. */
+
+/** Select from snapshot assets, preserving the message portrait's emotion fallback order.
+ * @param {Pick<DEPerspectiveCharacter, 'metadata' | 'primaryEmotion'> | null | undefined} character
+ * @param {DEEmotionNames | null} [emotion]
+ * @returns {string}
+ */
+export function getCharacterPortrait(character, emotion = character?.primaryEmotion) {
+    const primaryEmotion = emotion || 'neutral';
+    const relatedEmotions = Object.values(emotionsGrouped).find(group => group.includes(primaryEmotion)) || [];
+    const assets = character?.metadata.assets;
+    return [primaryEmotion, ...relatedEmotions, 'neutral'].map(key => assets?.[key]).find(Boolean) || '';
+}
 
 /** @param {Node | null} node @returns {DEPerspective | null} */
 export function getPerspectiveFor(node) {

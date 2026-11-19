@@ -1,4 +1,4 @@
-import { getPerspectiveIndex } from './perspective-data.js';
+import { getCharacterPortrait, getPerspectiveIndex } from './perspective-data.js';
 
 /**
  * @typedef {{perspective: DEPerspective, userId: string, userName: string, blindness: DEPerspective['ownCharacterBlindness'], memoryScope: string}} ItemTreeContext
@@ -97,7 +97,7 @@ export function loadItemNode(id, context, useSimpleName = false) {
 /** @param {DEPerspectiveCharacter} character @returns {CharacterNodeData} */
 function characterNode(character) {
     return { kind: 'character', id: character.characterId, label: character.nameComplex, amount: 1,
-        asset: character.metadata.assets?.neutral || '', tags: [],
+        asset: getCharacterPortrait(character), tags: [],
         description: character.placeAndPostureDescription };
 }
 

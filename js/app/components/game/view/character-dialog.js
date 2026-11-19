@@ -1,7 +1,7 @@
 import { IdentifierDetail } from './identifier-detail.js';
 import { getItemTreeContext, loadCharacterItemGroups } from './item-tree-data.js';
 import { createItemTree } from './item-node.js';
-import { getPerspectiveIndex } from './perspective-data.js';
+import { getCharacterPortrait, getPerspectiveIndex } from './perspective-data.js';
 
 export class CharacterDialog extends IdentifierDetail {
     constructor() { super(); this.kind = 'Character'; this.layout = 'character'; }
@@ -17,7 +17,7 @@ export class CharacterDialog extends IdentifierDetail {
             name: character.nameComplex,
             description: character.externalDescriptionForUser,
             states: character.states,
-            portrait: character.metadata.assets?.neutral || '',
+            portrait: getCharacterPortrait(character),
             banner: character.metadata.banner || '',
             content,
         };

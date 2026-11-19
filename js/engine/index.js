@@ -20,6 +20,7 @@ import { BaseDataManager } from "./data-management/base.js";
 import timeForwardsUsingUntimedMessages from "./gears/time-forwards.js";
 import { getHistoryFragment } from "./util/messages.js";
 import calculatePhysicalChanges from "./gears/physical-changes.js";
+import { calculateEmotionForCharacter } from "./gears/emotional-update.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -645,7 +646,7 @@ export class DEngine {
         if (this.deObjectSafeBackup) {
             throw new Error("DEngine safe state already exists, cannot backup DEObject again without restoring first");
         }
-        
+
         this.deObjectSafeBackup = deepCopy(this.deObject);
         await this.dataManager.newTransaction();
     }
@@ -846,7 +847,7 @@ export class DEngine {
                 // @ts-ignore typescript bugs
                 this.jsEngine.scriptOrder.map(scriptKey => ({ script: this.jsEngine.scriptCache[scriptKey], scriptKey })).filter(script => script.script.type === type);
 
-            
+
             await this.callFunctionInScripts(scripts, (script) => `Calling onWorldInitialized script ${script.scriptKey} of type ${type}`, "onWorldInitialized", { untilTrue: false }, this.deObject);
         }
 
@@ -1036,8 +1037,16 @@ export class DEngine {
     /**
      * 
      * @param {{moveTimeForwards: boolean}} options 
+     * @param {string | null} characterIdThatJustTalked
+     * @returns {Promise<{
+     *    followup: Record<string, {
+     *       microInjections: string[],
+     *       microVoices: DEVoiceDescription[],
+     *       injectedActions: Array<DEActionPromptInjection<DEStringTemplateCharOnly>>,
+     *    }>
+     * }>}
      */
-    async calculateSideEffects(options) {
+    async calculateSideEffects(options, characterIdThatJustTalked = null) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         } else if (!this.inferenceAdapter) {
@@ -1059,6 +1068,38 @@ export class DEngine {
 
         const { destroyedItemIds: destroyedItems } = await calculatePhysicalChanges(this);
 
+        /**
+         * @type {{
+         *    followup: Record<string, {
+         *       microInjections: string[],
+         *       microVoices: DEVoiceDescription[],
+         *       injectedActions: Array<DEActionPromptInjection<DEStringTemplateCharOnly>>,
+         *    }>
+         * }}
+         */
+        const results = {
+            followup: {
+
+            }
+        }
+
+        for (const characterId of lastMessages.conversingCharacters) {
+            const character = this.deObject.characters[characterId];
+
+            if (character.id === characterIdThatJustTalked) {
+                continue;
+            }
+
+            // the character was already dead ended, so we don't need to process them
+            const isDeadEndedAndNotDead = this.deObject.stateFor[characterId]?.deadEnded && !this.deObject.stateFor[characterId]?.dead;
+            if (isDeadEndedAndNotDead) {
+                continue;
+            }
+
+            // we do this at first so that characters can all have their emotions updated first
+            await calculateEmotionForCharacter(this, character);
+        }
+
         // this will include everyone involved in the conversation
         for (const characterId of lastMessages.conversingCharacters) {
             const character = this.deObject.characters[characterId];
@@ -1071,11 +1112,41 @@ export class DEngine {
 
             // run the triggers and calculate things
             // this can kill the character
-            await runAllTriggersFor(this, character);
+            const triggersOutcome = await runAllTriggersFor(this, character);
+
+            const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
+            delete this.deObject.internalState.NEXT_ACTIONS;
+
+            for (const nextAction of nextActionsProduced) {
+                if (nextAction.characterId !== characterId) {
+                    console.warn(`Next action was produced for character ${nextAction.characterId} but we are processing character ${characterId}. Adding anyway, but this may be a bug in the script that produced the next action.`);
+                }
+
+                // they can talk twice in a row for these injected actions
+                if (!this.deObject.stateFor[characterId].dead) {
+                    results.followup[characterId] = results.followup[characterId] || {
+                        microInjections: [],
+                        microVoices: [],
+                        injectedActions: [],
+                    };
+                    results.followup[characterId].injectedActions.push(nextAction)
+                }
+            }
 
             const isDeadEndedAndNotDeadNow = this.deObject.stateFor[characterId]?.deadEnded && !this.deObject.stateFor[characterId]?.dead;
             if (isDeadEndedAndNotDeadNow) {
                 continue;
+            }
+
+            // prevent the character from getting stuck in an infinite loop of talking over and over
+            if (!this.deObject.stateFor[characterId].dead && characterId !== characterIdThatJustTalked) {
+                results.followup[characterId] = results.followup[characterId] || {
+                    microInjections: [],
+                    microVoices: [],
+                    injectedActions: [],
+                };
+                results.followup[characterId].microInjections.push(...triggersOutcome.microInjections);
+                results.followup[characterId].microVoices.push(...triggersOutcome.microVoices);
             }
 
             await calculatePostureChange(this, character);
@@ -1087,6 +1158,8 @@ export class DEngine {
 
         await consumeAccumulatedSideEffectsReadyFunctions(destroyedItems);
         await this.informDEObjectUpdated();
+
+        return results;
     }
 
     /**
@@ -1140,7 +1213,7 @@ export class DEngine {
                 if (sceneObject.time.time < this.deObject.currentTime.time && this.deObject.world.selectedScene) {
                     console.warn(`Scene time ${sceneObject.time.time} is in the past compared to current time ${this.deObject.currentTime.time}.`);
                     this.informCycleState("warning", `Scene time ${sceneObject.time.time} is in the past compared to current time ${this.deObject.currentTime.time}. This may cause unexpected behavior.`);
-                    
+
                 } else {
                     // the scene time is in the future, we need to move time forwards to that point
                     // if we don't have a selected scene, it means this is our first scene
@@ -1161,8 +1234,6 @@ export class DEngine {
 
             this.deObject.stateFor[this.deObject.user].location = sceneObject.location;
             this.deObject.stateFor[this.deObject.user].locationSlot = sceneObject.locationSlot;
-
-            const didChangeLocation = sceneObject.location !== this.deObject.world.currentLocation;
 
             this.deObject.world.currentLocation = sceneObject.location;
             this.deObject.world.currentLocationSlot = sceneObject.locationSlot;
@@ -1250,116 +1321,37 @@ export class DEngine {
                 metadata: {},
                 summariesByCharacterId: {},
             });
-            
+
             scene.sceneStarted && await scene.sceneStarted(scene);
             await this.callFunctionInScripts(allScripts, (script) => `Running onSceneStarted for script ${script.scriptKey} at the start of scene ${sceneId}`, "onSceneStarted", { untilTrue: false }, this.deObject, scene);
 
             await this.informDEObjectUpdated();
 
-            await this.calculateSideEffects({
+            this.informCycleState("info", "Pre-calculating side effects...");
+            let currentFollowUpInfo = await this.calculateSideEffects({
                 moveTimeForwards: !preselectedTimeAtSceneStart,
             });
 
             await this.informDEObjectUpdated();
 
-            return;
-
-
-            /**
-             * @param {string[]} messages
-             * @param {boolean} [userOnly=false] if true, the message will only be added to the conversation for the user character, otherwise it will be added for all participants to see
-             */
-            const addMessageForStoryMaster = async (messages, userOnly = false) => {
-                if (!this.deObject) {
-                    throw new Error("DEngine not initialized");
-                }
-
-                if (messages.length === 0) {
-                    return;
-                }
-
-                // some normalization
-                const actualMessages = messages.map((text) => text.trim()).filter((text) => text.length > 0).join("\n\n").split("\n\n");
-
-                const messageObjNew = await this.deObject.utils.conversations.addMessageToConversation(conversation.id, {
-                    canOnlyBeSeenByCharacters: userOnly ? [this.deObject.user] : null,
-                    content: actualMessages.map((text) => ({ type: "narration", fragments: [text] })),
-                    characterId: null,
-                    isCharacter: false,
-                    isDebugMessage: false,
-                    isStoryMasterMessage: true,
-                    summariesByCharacterId: {},
-                    singleSummary: null,
-                    isRejectedMessage: false,
-                    emotion: null,
-                    emotionalRange: null,
-                    interactingCharacters: [],
-                    rumors: [],
-                    metadata: {},
-                });
-                await messageObjNew.sideEffectsReady();
-                await this.informDEObjectUpdated();
-            }
-
-            this.informCycleState("info", "Pre-calculating item changes and effects...");
-            let lastItemChangesInfo = await calculateItemChanges(this, this.deObject.characters[this.deObject.user]);
-
-            if (lastItemChangesInfo.storyMasterMessages.length > 0) {
-                await addMessageForStoryMaster(lastItemChangesInfo.storyMasterMessages);
-            }
-
             if (sceneObject.charactersStart) {
                 const randomizedList = ([...(typeof sceneObject.engagedCharacters === "function" ? sceneObject.engagedCharacters() : sceneObject.engagedCharacters)]).sort(() => Math.random() - 0.5);
-                for (const participantName of randomizedList) {
-                    const participant = typeof participantName === "string" ? this.deObject.characters[participantName] : participantName;
-                    this.informCycleState("info", "Running all triggers for " + participant.name + " with id " + participant.id + "...");
-                    this.informThinking(true, participant.id, false);
-                    const triggersResult = await runAllTriggersFor(this, participant, lastItemChangesInfo.interactedCharacters);
+                for (let i = 0; i < randomizedList.length; i++) {
+                    const participantId = randomizedList[i];
+                    const participant = typeof participantId === "string" ? this.deObject.characters[participantId] : participantId;
+                    const isLastParticipant = i === randomizedList.length - 1;
 
+                    this.informCycleState("info", "Running all triggers for " + participant.name + " with id " + participant.id + "...");
+                    this.informThinking(true, participant.id, isLastParticipant);
+
+                    // this might just add new actions so we need to refresh the damn thing
+                    await this.callFunctionInScripts(allScripts, (script) => `Running onInferencePrepareToExecute for script ${script.scriptKey} before ${participantId} starts their turn in scene ${sceneId}`, "onInferencePrepareToExecute", { untilTrue: false }, this.deObject, participant);
+
+                    // TODO this is not exactly what NEXT_ACTIONS contains
                     const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
                     delete this.deObject.internalState.NEXT_ACTIONS;
 
-                    const storyMasterMessagesProduced = this.deObject.internalState.ADD_STORY_MASTER_MESSAGES;
-                    delete this.deObject.internalState.ADD_STORY_MASTER_MESSAGES;
-
-                    for (const message of storyMasterMessagesProduced || []) {
-                        await addMessageForStoryMaster([message]);
-                    }
-
-                    const forcedGameOver = this.deObject.internalState.GAME_OVER;
-                    delete this.deObject.internalState.GAME_OVER;
-
-                    if (forcedGameOver) {
-                        this.deObject.gameOver = true;
-                        return await this.gameOver();
-                    }
-
-                    this.informCycleState("info", "Pre-calculating initial states for " + participant.name + " with id " + participant.id + " and the world...");
-                    await calculateStateChange(this, participant, lastItemChangesInfo.interactedCharacters);
-
-                    this.informCycleState("info", "Pre-calculating initial bonds for " + participant.name + " with id " + participant.id + "...");
-                    await calculateBondsChange(this, participant, lastItemChangesInfo.interactedCharacters);
-                    await deleteTemp(this);
-
-                    /**
-                     * @type {string[]}
-                     */
-                    const messagesAccum = [];
-
-                    for (const participantName of expectedParticipants) {
-                        this.informCycleState("info", "Pre-calculating posture for " + participantName + " with id " + this.deObject.characters[participantName].id + "...");
-                        const messages = await calculatePostureChange(this, this.deObject.characters[participantName], lastItemChangesInfo.charactersThatMoved);
-                        messagesAccum.push(...messages);
-                    }
-
-                    if (messagesAccum.length > 0) {
-                        await addMessageForStoryMaster(messagesAccum);
-                    }
-
-                    await this.callFunctionInScripts(allScripts, (script) => `Running onInferencePrepareToExecute for script ${script.scriptKey} before ${participantName} starts their turn in scene ${sceneId}`, "onInferencePrepareToExecute", { untilTrue: false }, this.deObject, participant);
-
                     const talkResult = await talk(this, participant, {
-                        doNotMove: true,
                         injectedActions: nextActionsProduced,
                         microInjections: triggersResult.microInjections,
                         microVoices: triggersResult.microVoices,
@@ -1384,62 +1376,16 @@ export class DEngine {
                         hasDied: talkResult.hasDied,
                         message: talkResult.message,
                     });
+
+                    this.informCycleState("info", "Calculating side effects...");
+
+                    await this.calculateSideEffects({
+                        moveTimeForwards: true,
+                    }, participant.id);
                 }
             }
 
-            this.informThinking(true, null, true);
-
-            this.informCycleState("info", "Running all triggers for " + this.deObject.user + "...");
-            const triggerResults = await runAllTriggersFor(this, this.deObject.characters[this.deObject.user], lastItemChangesInfo.interactedCharacters);
-
-            const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
-            delete this.deObject.internalState.NEXT_ACTIONS;
-
-            const storyMasterMessagesProduced = this.deObject.internalState.ADD_STORY_MASTER_MESSAGES;
-            delete this.deObject.internalState.ADD_STORY_MASTER_MESSAGES;
-
-            for (const message of storyMasterMessagesProduced || []) {
-                await addMessageForStoryMaster([message]);
-            }
-
-            const forcedGameOver = this.deObject.internalState.GAME_OVER;
-            delete this.deObject.internalState.GAME_OVER;
-
-            if (forcedGameOver) {
-                this.informThinking(false, null, true);
-                this.deObject.gameOver = true;
-                return await this.gameOver();
-            }
-
-            // now the user starts, let's precalculate these states and bonds
-            // so that they are ready for the user's first turn, even though
-            // the user has no real affecting states, they are forced upon the user
-            // as information bits
-            this.informCycleState("info", "Pre-calculating initial states for " + this.deObject.user + " and the world...");
-            await calculateStateChange(this, this.deObject.characters[this.deObject.user], lastItemChangesInfo.interactedCharacters);
-
-            this.informCycleState("info", "Pre-calculating initial bonds for your character...");
-            await calculateBondsChange(this, this.deObject.characters[this.deObject.user], lastItemChangesInfo.interactedCharacters);
-            await deleteTemp(this);
-
-            await this.informDEObjectUpdated();
-
-            /**
-             * @type {string[]}
-             */
-            const messageAccum = [];
-
             this.informThinking(false, null, true);
-
-            for (const participantName of expectedParticipants) {
-                this.informCycleState("info", "Pre-calculating posture for " + participantName + "...");
-                const messages = await calculatePostureChange(this, this.deObject.characters[participantName], lastItemChangesInfo.charactersThatMoved);
-                messageAccum.push(...messages);
-            }
-
-            if (messageAccum.length > 0) {
-                await addMessageForStoryMaster(messageAccum);
-            }
 
             scene.sceneReady && await scene.sceneReady(scene);
 

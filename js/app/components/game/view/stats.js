@@ -2,6 +2,7 @@ import { sharedStyles, characterTagStyles } from './shared-styles.js';
 import '../../world-image.js';
 import './tooltip.js';
 import { createCharacterTags } from './character-tags.js';
+import { getCharacterPortrait } from './perspective-data.js';
 import '../../dialog.js';
 import { playHoverSound, playConfirmSound } from '../../../sound.js';
 
@@ -185,7 +186,7 @@ section[hidden] { display: none; }
             userId: perspective.ownId,
             userName: perspective.ownName,
             externalDescription: self.externalDescriptionForUser,
-            profileImage: self.metadata.assets?.neutral || '',
+            profileImage: getCharacterPortrait(self),
             location: perspective.ownLocationName,
             locationSlot: perspective.ownLocationSlotName,
             dateTime: Number.isFinite(time) ? new Date(time).toLocaleString('en-US', {
