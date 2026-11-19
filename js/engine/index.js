@@ -1035,16 +1035,24 @@ export class DEngine {
     }
 
     /**
-     * 
-     * @param {{moveTimeForwards: boolean}} options 
-     * @param {string | null} characterIdThatJustTalked
-     * @returns {Promise<{
+     * @param {{
      *    followup: Record<string, {
      *       microInjections: string[],
      *       microVoices: DEVoiceDescription[],
      *       injectedActions: Array<DEActionPromptInjection<DEStringTemplateCharOnly>>,
+     *       expectedToInteract: boolean,
      *    }>
-     * }>}
+     * }} followup
+     * @param {string[]} charactersToForceTalk
+     */
+    async runFollowUpInteractions(followup, charactersToForceTalk) {
+
+    }
+
+    /**
+     * 
+     * @param {{moveTimeForwards: boolean}} options 
+     * @param {string | null} characterIdThatJustTalked
      */
     async calculateSideEffects(options, characterIdThatJustTalked = null) {
         if (!this.deObject) {
@@ -1074,6 +1082,7 @@ export class DEngine {
          *       microInjections: string[],
          *       microVoices: DEVoiceDescription[],
          *       injectedActions: Array<DEActionPromptInjection<DEStringTemplateCharOnly>>,
+         *       expectedToInteract: boolean,
          *    }>
          * }}
          */
@@ -1128,8 +1137,10 @@ export class DEngine {
                         microInjections: [],
                         microVoices: [],
                         injectedActions: [],
+                        expectedToInteract: true,
                     };
-                    results.followup[characterId].injectedActions.push(nextAction)
+                    results.followup[characterId].injectedActions.push(nextAction);
+                    results.followup[characterId].expectedToInteract = true;
                 }
             }
 
@@ -1139,11 +1150,12 @@ export class DEngine {
             }
 
             // prevent the character from getting stuck in an infinite loop of talking over and over
-            if (!this.deObject.stateFor[characterId].dead && characterId !== characterIdThatJustTalked) {
+            if (!this.deObject.stateFor[characterId].dead) {
                 results.followup[characterId] = results.followup[characterId] || {
                     microInjections: [],
                     microVoices: [],
                     injectedActions: [],
+                    expectedToInteract: false,
                 };
                 results.followup[characterId].microInjections.push(...triggersOutcome.microInjections);
                 results.followup[characterId].microVoices.push(...triggersOutcome.microVoices);
@@ -1328,61 +1340,15 @@ export class DEngine {
             await this.informDEObjectUpdated();
 
             this.informCycleState("info", "Pre-calculating side effects...");
-            let currentFollowUpInfo = await this.calculateSideEffects({
+            const nextFollowUpInfo = await this.calculateSideEffects({
                 moveTimeForwards: !preselectedTimeAtSceneStart,
             });
 
             await this.informDEObjectUpdated();
 
-            if (sceneObject.charactersStart) {
-                const randomizedList = ([...(typeof sceneObject.engagedCharacters === "function" ? sceneObject.engagedCharacters() : sceneObject.engagedCharacters)]).sort(() => Math.random() - 0.5);
-                for (let i = 0; i < randomizedList.length; i++) {
-                    const participantId = randomizedList[i];
-                    const participant = typeof participantId === "string" ? this.deObject.characters[participantId] : participantId;
-                    const isLastParticipant = i === randomizedList.length - 1;
-
-                    this.informCycleState("info", "Running all triggers for " + participant.name + " with id " + participant.id + "...");
-                    this.informThinking(true, participant.id, isLastParticipant);
-
-                    // this might just add new actions so we need to refresh the damn thing
-                    await this.callFunctionInScripts(allScripts, (script) => `Running onInferencePrepareToExecute for script ${script.scriptKey} before ${participantId} starts their turn in scene ${sceneId}`, "onInferencePrepareToExecute", { untilTrue: false }, this.deObject, participant);
-
-                    // TODO this is not exactly what NEXT_ACTIONS contains
-                    const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
-                    delete this.deObject.internalState.NEXT_ACTIONS;
-
-                    const talkResult = await talk(this, participant, {
-                        injectedActions: nextActionsProduced,
-                        microInjections: triggersResult.microInjections,
-                        microVoices: triggersResult.microVoices,
-                    });
-
-                    await addMessageForStoryMaster(talkResult.addedMessagesForStoryMaster);
-
-                    this.informThinking(true, null, true);
-
-                    if (!talkResult.hasDeadEnded) {
-                        const worldRulesResult = await testWorldRulesOn(this, participant);
-                        await addMessageForStoryMaster(worldRulesResult.addedMessagesForStoryMaster);
-
-                        this.informCycleState("info", "Pre-calculating item changes and effects...");
-                        lastItemChangesInfo = await calculateItemChanges(this, participant);
-                    }
-
-                    await this.callFunctionInScripts(allScripts, (script) => `Running onInferenceExecuted for script ${script.scriptKey} after ${participantName} finishes their turn in scene ${sceneId}`, "onInferenceExecuted", { untilTrue: false }, this.deObject, participant, {
-                        emotionalRange: talkResult.emotionalRange,
-                        primaryEmotion: talkResult.primaryEmotion,
-                        hasDeadEnded: talkResult.hasDeadEnded,
-                        hasDied: talkResult.hasDied,
-                        message: talkResult.message,
-                    });
-
-                    this.informCycleState("info", "Calculating side effects...");
-
-                    await this.calculateSideEffects({
-                        moveTimeForwards: true,
-                    }, participant.id);
-                }
+            if (Object.values(nextFollowUpInfo.followup).some(followup => followup.expectedToInteract) || sceneObject.charactersStart) {
+                const randomizedList = sceneObject.charactersStart ? ([...(typeof sceneObject.engagedCharacters === "function" ? sceneObject.engagedCharacters() : sceneObject.engagedCharacters)]).sort(() => Math.random() - 0.5) : [];
+                await this.runFollowUpInteractions(nextFollowUpInfo, randomizedList);
             }
 
             this.informThinking(false, null, true);

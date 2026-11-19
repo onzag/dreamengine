@@ -1,6 +1,8 @@
 # WildReality DreamEngine (WIP)
 
-AI Simulation Engine created based on the RStory prototype, now written as an electron NodeJS app that can be used to create stories and mix and match them.
+AI Simulation Engine created based on the RStory prototype, now written as an electron app that can be used to evolve multiple AI agents in a shared simulated reality each one with a simulated mind and body, that can interact with each other and the world, possesses simulated emotions, and has the capacity to evolve over time.
+
+Created as a LLM Roleplay and Simulation engine, but considerably more advanced than thin LLM clients.
 
 <img width="891" height="590" alt="image" src="https://github.com/user-attachments/assets/eb3db331-5124-4572-96cb-969ded578db5" />
 
@@ -32,8 +34,17 @@ The level of customization of the behaviour of a character is virtually endless,
 ### Characters experience the world individually
 Each character experiences the world in their own way, they have their own perspective and knowledge and even remember events differently.
 
-### No omnicience
-Character do not have omnicience, that includes you, the user. Things that happen when a character is not present are simply unknowable by such character.
+### Perspective
+Perspective is the internal system that keeps track of what a character knows and doesn't know as well as their individual reality; each character has a evolving perspective along their simulated cognition, and the user is also a character with their own perspective.
+
+### Space and Time
+Space and time are simulated, therefore characters can be in different locations and experience different events at the same time, and they will not know what happens in other locations unless they are present or someone tells them.
+
+### Observer
+The world is observed by the user and directed by the story master; when a user is not present or is not observing a location, event or character; the world evolves as a series of potential events; once the observer (the user) interacts with another character, their past will be generated to make sense of its current present and all other past events; as before that they existed as a series of potentials (the wander mode).
+
+### No Omniscience
+Characters do not have omniscience, that includes you, the user. Things that happen when a character is not present are simply unknowable by such character.
 
 ### Virtually Endless Context Size
 The context is automatically resized as the story flows, DreamEngine uses a Dynamic exponential resizing context that keeps the story fresh and limits repetition by itself.
@@ -62,13 +73,11 @@ You can have missions, events, quests, etc... the world is your oyster.
 
 ### Extra Inference
 
-DreamEngine quite often uses the LLM to keep track of the characters and their states, while some of the features are analyzed using heuristic, others come from LLM analysis, therefore, with very small models with low reasoning, DreamEngine can easily corrupt its own state (Chair stacking problem, as it tends to pile chairs when the model reasoning is low).
+DreamEngine quite often uses the LLM to keep track of the characters and their states, while some of the features are analyzed using heuristic, others come from LLM analysis, therefore, with very small models with low reasoning, DreamEngine can corrupt its own state; while this won't break the flow, the Simulation might become inconsistent.
 
-The extra inference also costs many input tokens, while it is mostly mere yes/no questions, this can cause the model to take its time before it actually updates the game state. This means that DreamEngine works best with models that are at least 120B+ parameters with at least a RTX 6000 Blackwell powering a 4-quant version.
+The extra inference also costs many input tokens, while it is mostly mere yes/no questions, this can cause the model to take its time before it actually updates the game state. This means that DreamEngine works best with models that are at least 120B+ parameters with at least a RTX 6000 Blackwell powering a 4-quant version. It will still work with smaller models, but the output might be of less quality.
 
-The more characters and the more things at a location at once, the more these extra costs.
-
-While it will still work with smaller models, there is increased likelihood of "ghostly actions" and a disconnect of the game state with the flow of the story.
+The more characters and the more things at a location at once, the more it costs, and the slower the simulation runs.
 
 ### Scripting
 
