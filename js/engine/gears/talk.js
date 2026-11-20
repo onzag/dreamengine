@@ -368,7 +368,6 @@ export async function talk(engine, character, options) {
                                 isDeadEndScenario: false,
                                 primaryEmotion: "neutral",
                                 action: "",
-                                mustBeFulfilledImmediately: true,
                                 narrativeAction: "",
                                 narrativeEffect: "",
                             },

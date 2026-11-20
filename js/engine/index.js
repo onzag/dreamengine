@@ -976,6 +976,7 @@ export class DEngine {
      * @param {number} currentCycle
      * @param {string[][]} interrupters
      * @param {string[]} charactersToForceTalk
+     * @returns {Promise<void>}
      */
     async runFollowUpInteractions(followup, currentCycle, interrupters, charactersToForceTalk) {
         if (!this.deObject) {
@@ -990,10 +991,10 @@ export class DEngine {
 
         /**
          * @type {Record<string, {
-         *   microInjections: string[],
-         *   microVoices: DEVoiceDescription[],
-         *   internalState: DEInternalDescriptionOfCharacter,
-         *   injectedActions: Array<{
+         *     microInjections: string[],
+         *     microVoices: DEVoiceDescription[],
+         *     internalState: DEInternalDescriptionOfCharacter,
+         *     injectedActions: Array<{
          *         resolvedAction: DEResolvedActionPromptInjection,
          *         action: DEActionPromptInjection<DEStringTemplateCharOnly>,
          *         cycle: number,
@@ -1129,13 +1130,6 @@ export class DEngine {
             return initiative + fuzz;
         };
 
-        // sort by slightly fuzzy initiative (descending), so we don't always have the same character talking first.
-        // the fuzzed value is computed once per character so the comparator stays consistent.
-        const randomizedCharactersToTalkForced = charactersToForceTalk
-            .map((characterId) => ({ characterId, fuzzedInitiative: fuzzInitiative(characterId) }))
-            .sort((a, b) => b.fuzzedInitiative - a.fuzzedInitiative)
-            .map((entry) => entry.characterId);
-
         // Okay so this should all be completed in a single cycle somehow, but we can have actions from
         // many characters that are all trying to do something at once, and then we have all these characters
         // that are also supposed to talk and do something
@@ -1156,6 +1150,123 @@ export class DEngine {
         // otherwise we run the talk, we calculate side effects and then run follow up again!... until it is all exhaused
 
         // we will also have an interrupt for the user in case, they can after all, go in a forever loop of talking
+
+        // 1. The combined narrative action
+        /**
+         * @type {Array<{
+         *    characterId: string,
+         *    resolvedAction: DEResolvedActionPromptInjection,
+         *    indexOrigin: number,
+         *    originalAction: DEActionPromptInjection<DEStringTemplateCharOnly>,
+         *  }>}
+         */
+        let foundPotentiallyCombinableActions = [];
+
+        for (const charId in cleanedFollowup) {
+            const charFollowup = cleanedFollowup[charId];
+            for (let i = 0; i < charFollowup.injectedActions.length; i++) {
+                const injectedAction = charFollowup.injectedActions[i];
+                if (
+                    // an action that can be delivered through narration
+                    (injectedAction.resolvedAction.action && injectedAction.resolvedAction.actionMustBe !== "dialogue") ||
+                    // or a narrative action without an action
+                    (injectedAction.resolvedAction.narrativeAction && !injectedAction.resolvedAction.action)
+                ) {
+                    foundPotentiallyCombinableActions.push({
+                        characterId: charId,
+                        resolvedAction: injectedAction.resolvedAction,
+                        indexOrigin: i,
+                        originalAction: injectedAction.action,
+                    });
+                }
+            }
+        }
+
+        if (foundPotentiallyCombinableActions.length >= 2) {
+            const characters = new Set(foundPotentiallyCombinableActions.map(entry => entry.characterId));
+            if (characters.size >= 2) {
+                // we have at least two characters with a combinable narrative action, those now take priority over any other action
+
+                // will be the same because they won't talk in this hybrid action
+                const nextCharactersToForceTalk = charactersToForceTalk;
+                const nextInterrupters = [...interrupters, [...characters]];
+                const nextCycle = currentCycle + 1;
+                const nextFollowup = followup;
+
+                // this is where it gets interesting, we must remove the actions that were combined but leave them
+                // if they have narrative effects
+                for (const entry of foundPotentiallyCombinableActions) {
+                    // we will modify the original action in turn!
+                    // this should affect nextFollowup because that is a reference
+                    // and the nextFollowup is the same as followup
+                    delete entry.originalAction.action;
+                    delete entry.originalAction.narrativeAction
+                }
+
+                // TODO make brand new special mode narration talk
+                // TODO run side effects and alter nextFollowup accordingly
+                // TODO run follow up again until exhausted
+                return await this.runFollowUpInteractions(nextFollowup, nextCycle, nextInterrupters, nextCharactersToForceTalk);
+            }
+        }
+
+        const charactersWithActions = Object.keys(cleanedFollowup).filter(charId => cleanedFollowup[charId].injectedActions.filter((a) => a.resolvedAction.action || a.resolvedAction.narrativeAction).length > 0);
+        let winner = "";
+
+        if (charactersWithActions.length > 0) {
+            const initiative = charactersWithActions.map(charId => ({ charId, fuzzedInitiative: fuzzInitiative(charId) }));
+            winner = initiative.sort((a, b) => b.fuzzedInitiative - a.fuzzedInitiative)[0].charId;
+        }
+
+        if (!winner) {
+            const charactersWithMicroInjections = Object.keys(cleanedFollowup).filter(charId => cleanedFollowup[charId].microInjections.length > 0);
+            if (charactersWithMicroInjections.length > 0) {
+                const initiative = charactersWithMicroInjections.map(charId => ({ charId, fuzzedInitiative: fuzzInitiative(charId) }));
+                winner = initiative.sort((a, b) => b.fuzzedInitiative - a.fuzzedInitiative)[0].charId;
+            }
+        }
+
+        if (!winner) {
+            const charactersWithMicroVoices = Object.keys(cleanedFollowup).filter(charId => cleanedFollowup[charId].microVoices.length > 0);
+            if (charactersWithMicroVoices.length > 0) {
+                const initiative = charactersWithMicroVoices.map(charId => ({ charId, fuzzedInitiative: fuzzInitiative(charId) }));
+                winner = initiative.sort((a, b) => b.fuzzedInitiative - a.fuzzedInitiative)[0].charId;
+            }
+        }
+
+        if (!winner) {
+            const initiative = charactersToForceTalk.map(charId => ({ charId, fuzzedInitiative: fuzzInitiative(charId) }));
+            if (initiative.length > 0) {
+                winner = initiative.sort((a, b) => b.fuzzedInitiative - a.fuzzedInitiative)[0].charId;
+            }
+        }
+
+        if (!winner) {
+            // we are done
+            return;
+        }
+
+        // single character mode...
+        const winnerFollowup = cleanedFollowup[winner] || {
+            injectedActions: [],
+            internalState: await getInternalDescriptionOfCharacter(this.deObject, winner),
+            microInjections: [],
+            microVoices: [],
+        };
+
+        const nextCharactersToForceTalk = charactersToForceTalk.filter(charId => charId !== winner);
+        const nextInterrupters = [...interrupters, [winner]];
+        const nextCycle = currentCycle + 1;
+        const nextFollowup = { followup: {
+            ...followup.followup
+        }};
+        delete nextFollowup.followup[winner];
+
+        // TODO make talk
+        // TODO run side effects
+        // TODO run follow up again until exhausted
+
+        return await this.runFollowUpInteractions(nextFollowup, nextCycle, nextInterrupters, nextCharactersToForceTalk);
     }
 
     /**
