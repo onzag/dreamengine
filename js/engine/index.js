@@ -973,12 +973,21 @@ export class DEngine {
      *       }>,
      *    }>,
      * }} followup
+     * @param {Record<string, Array<{action: DEResolvedActionPromptInjection, cycle: number}>>} previousInternalStateActions
+     * @param {Record<string, Array<{action: DEResolvedActionPromptInjection, cycle: number}>>} accumulatedExecutedActions
      * @param {number} currentCycle
      * @param {string[][]} interrupters
      * @param {string[]} charactersToForceTalk
      * @returns {Promise<void>}
      */
-    async runFollowUpInteractions(followup, currentCycle, interrupters, charactersToForceTalk) {
+    async runFollowUpInteractions(
+        followup,
+        previousInternalStateActions,
+        accumulatedExecutedActions,
+        currentCycle,
+        interrupters,
+        charactersToForceTalk,
+    ) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         } else if (!this.inferenceAdapter) {
@@ -998,10 +1007,100 @@ export class DEngine {
          *         resolvedAction: DEResolvedActionPromptInjection,
          *         action: DEActionPromptInjection<DEStringTemplateCharOnly>,
          *         cycle: number,
+         *         fromInternalState: boolean,
          *      }>,
          *   }>}
          */
         const cleanedFollowup = {};
+
+        /**
+         * @param {string} charId
+         */
+        const getInternalStateActionsForChar = async (charId) => {
+            const internalState = (await getInternalDescriptionOfCharacter(this.getDEObject(), charId));
+
+            const additionalActions = internalState.actions.map(action => {
+                const result = {
+                    action,
+                    cycle: currentCycle,
+                    fromInternalState: true,
+                };
+
+                return result;
+            });
+
+            return {
+                additionalActions,
+                internalState,
+            }
+        }
+
+        /**
+         * Each history entry contains the characters that acted during that cycle.
+         * @param {number} cycle The cycle when the action first became pending.
+         * @returns {string[]}
+         */
+        const getInterruptersSinceCycle = (cycle) => {
+            return [...new Set(interrupters.slice(cycle, currentCycle).flat())];
+        };
+
+        /**
+         * 
+         * @param {DECompleteCharacterReference} character 
+         * @param {{
+         *    action: DEActionPromptInjection<DEStringTemplateCharOnly>,
+         *    cycle: number,
+         *    fromInternalState?: boolean,
+         * }} injectedAction 
+         * @returns 
+         */
+        const resolveInjectedAction = async (character, injectedAction) => {
+            let cyclesAgo = Math.abs(currentCycle - injectedAction.cycle);
+            /**
+             * @type {number | null}
+             */
+            let modifiedCycle = null;
+
+            let resolvedAction = await this.resolveAction(injectedAction.action, character, cyclesAgo, getInterruptersSinceCycle(injectedAction.cycle));
+            if (!resolvedAction) {
+                console.warn(`Injected action for character ${character.id} could not be resolved, skipping.`, injectedAction);
+                return null;
+            }
+
+            if (injectedAction.fromInternalState) {
+                const previouslySeenActionsForCharacter = previousInternalStateActions[character.id] || [];
+                const foundSimilarMatches = previouslySeenActionsForCharacter.filter(prev => {
+                    // this can never happen but typescript is wrong
+                    if (!resolvedAction) {
+                        return false;
+                    }
+                    return (
+                        prev.action.action && prev.action.action === resolvedAction.action ||
+                        prev.action.narrativeAction && prev.action.narrativeAction === resolvedAction.narrativeAction
+                    );
+                });
+
+                if (foundSimilarMatches.length > 0) {
+                    const youngestCycle = Math.min(...foundSimilarMatches.map(match => match.cycle));
+                    cyclesAgo = Math.abs(currentCycle - youngestCycle);
+                    modifiedCycle = youngestCycle;
+                    // recalculate the resolved action with the new cyclesAgo and interrupters, because the previous one was skipped and we need to see if it can be resolved now
+                    resolvedAction = await this.resolveAction(injectedAction.action, character, cyclesAgo, getInterruptersSinceCycle(youngestCycle));
+                }
+            }
+
+            if (!resolvedAction) {
+                console.warn(`Injected action for character ${character.id} could not be resolved, skipping.`, injectedAction);
+                return null;
+            }
+            return {
+                ...injectedAction,
+                resolvedAction,
+                cycle: modifiedCycle !== null ? modifiedCycle : injectedAction.cycle,
+                // @ts-ignore this will exist in the internal state ones
+                fromInternalState: !!injectedAction.fromInternalState,
+            };
+        };
 
         for (const charId in followup.followup) {
             const character = this.deObject.characters[charId];
@@ -1010,34 +1109,19 @@ export class DEngine {
                 continue;
             }
 
-            const internalState = (await getInternalDescriptionOfCharacter(this.deObject, charId));
             const charFollowup = followup.followup[charId];
 
-            const additionalActions = internalState.actions.map(action => ({
-                action,
-                cycle: currentCycle,
-            }));
+            const { additionalActions, internalState } = await getInternalStateActionsForChar(charId);
 
             cleanedFollowup[charId] = {
                 microInjections: charFollowup.microInjections,
                 microVoices: charFollowup.microVoices,
                 internalState,
-                injectedActions: (await Promise.all([...additionalActions, ...charFollowup.injectedActions].map(async (injectedAction) => {
-                    const cyclesAgo = Math.abs(currentCycle - injectedAction.cycle);
-                    const resolvedAction = await this.resolveAction(injectedAction.action, character, cyclesAgo, currentCycle === 0 ? [] : interrupters[currentCycle - 1] || []);
-                    if (!resolvedAction) {
-                        console.warn(`Injected action for character ${charId} could not be resolved, skipping.`, injectedAction);
-                        return null;
-                    }
-                    return {
-                        ...injectedAction,
-                        resolvedAction,
-                    };
-                }))).filter(action => action !== null),
+                injectedActions: (await Promise.all([...additionalActions, ...charFollowup.injectedActions].map(resolveInjectedAction.bind(this, character)))).filter(action => action !== null),
             };
         }
 
-        for (const charId in charactersToForceTalk) {
+        for (const charId of charactersToForceTalk) {
             if (cleanedFollowup[charId]) {
                 continue;
             }
@@ -1047,29 +1131,25 @@ export class DEngine {
                 continue;
             }
 
-            const internalState = (await getInternalDescriptionOfCharacter(this.deObject, charId));
-
-            const additionalActions = internalState.actions.map(action => ({
-                action,
-                cycle: currentCycle,
-            }));
+            const { additionalActions, internalState } = await getInternalStateActionsForChar(charId);
 
             cleanedFollowup[charId] = {
                 microInjections: [],
                 microVoices: [],
                 internalState,
-                injectedActions: (await Promise.all(additionalActions.map(async (injectedAction) => {
-                    const resolvedAction = await this.resolveAction(injectedAction.action, character, 0, []);
-                    if (!resolvedAction) {
-                        console.warn(`Injected action for character ${charId} could not be resolved, skipping.`, injectedAction);
-                        return null;
-                    }
-                    return {
-                        ...injectedAction,
-                        resolvedAction,
-                    };
-                }))).filter(action => action !== null),
+                injectedActions: (await Promise.all(additionalActions.map(resolveInjectedAction.bind(this, character)))).filter(action => action !== null),
             };
+        }
+
+        /**
+         * @type {Record<string, Array<{action: DEResolvedActionPromptInjection, cycle: number }>>}
+         */
+        const internalStateActions = {
+            ...previousInternalStateActions,
+        };
+        for (const charId in cleanedFollowup) {
+            const newInternalStateActions = cleanedFollowup[charId].injectedActions.filter((a) => a.fromInternalState).map((a) => ({ action: {...a.resolvedAction}, cycle: a.cycle }));
+            internalStateActions[charId] = internalStateActions[charId] ? [...internalStateActions[charId], ...newInternalStateActions] : newInternalStateActions;
         }
 
         // remove repeats in all those lists
@@ -1081,16 +1161,32 @@ export class DEngine {
 
             // microVoices just merge — no deduplication
 
-            // injectedActions: for each of action, narrativeAction and narrativeEffect there must be no
-            // two repeated non-empty values. When a repeat is found, blank out that field on the entry with
-            // the smallest cycle. Then drop any entry left with all three fields empty.
+            // injectedActions: for each of action, narrativeAction there must be no
+            // two repeated non-empty values, including values executed in previous cycles. Previously
+            // executed values always win; otherwise keep the entry with the largest cycle.
+            // Then drop any entry left with all three fields empty.
             for (const field of /** @type {Array<"action" | "narrativeAction" | "narrativeEffect">} */(["action", "narrativeAction", "narrativeEffect"])) {
+                const executedValues = new Set((accumulatedExecutedActions[charId] || []).map(entry => entry.action[field]).filter(Boolean));
                 const seen = new Map();
                 for (const entry of charFollowup.injectedActions) {
                     const value = entry.resolvedAction[field];
                     if (!value) {
                         continue;
                     }
+                    // narrativeEffect can be repeated from historic, but action and narrativeAction cannot be repeated
+                    if (executedValues.has(value) && field !== "narrativeEffect") {
+                        entry.resolvedAction[field] = "";
+                        continue;
+                    }
+
+                    // but none of them can be repeated in the same cleanedFollow up
+                    // basically image there is action, punch someone, narrativeAction, describe how the punch looks, and narrativeEffect being "be poetic"
+                    // we don't want to have two actions punching twice, or two narrativeActions describing the same thing between different
+                    // cycles as it "character punches", then "character punches again", is generated...; but we can have two narrativeEffects being poetic applied
+                    // no problem, one after another; the reason we remove it within the same cycle is that we don't want to say "be poetic" twice in a row in the prompt
+                    // that is a waste of tokens and will make the prompt worse, but we can have it in cycle 1 and then again in cycle 3 (unlike actions)
+                    // but not historic ones, because we want to be able to say "be poetic" again in the future if it is relevant again
+                    // just not repeat actions or narrativeActions within cycle groups
                     const existing = seen.get(value);
                     if (!existing) {
                         seen.set(value, entry);
@@ -1191,22 +1287,63 @@ export class DEngine {
                 const nextCharactersToForceTalk = charactersToForceTalk;
                 const nextInterrupters = [...interrupters, [...characters]];
                 const nextCycle = currentCycle + 1;
-                const nextFollowup = followup;
+
+                // build a fresh followup for the next cycle instead of reusing the reference.
+                // this is important because we are about to strip the combined action/narrativeAction
+                // fields, and the original action objects may be referenced elsewhere in the app/game
+                // state. mutating them in place would corrupt that deep source, so we only ever touch
+                // our own shallow copies here.
+                /** @type {typeof followup} */
+                const nextFollowup = { followup: {} };
+                for (const charId in followup.followup) {
+                    const charFollowup = followup.followup[charId];
+                    nextFollowup.followup[charId] = {
+                        ...charFollowup,
+                        injectedActions: charFollowup.injectedActions.map(injectedAction => ({ ...injectedAction })),
+                    };
+                }
+
+                const nextExecutedActions = {
+                    ...accumulatedExecutedActions,
+                };
 
                 // this is where it gets interesting, we must remove the actions that were combined but leave them
                 // if they have narrative effects
                 for (const entry of foundPotentiallyCombinableActions) {
-                    // we will modify the original action in turn!
-                    // this should affect nextFollowup because that is a reference
-                    // and the nextFollowup is the same as followup
-                    delete entry.originalAction.action;
-                    delete entry.originalAction.narrativeAction
+                    // Only the combined action fields were executed; the narrative effect remains pending.
+                    nextExecutedActions[entry.characterId] = [
+                        ...(nextExecutedActions[entry.characterId] || []),
+                        {
+                            action: { ...entry.resolvedAction, narrativeEffect: "" },
+                            cycle: currentCycle,
+                        },
+                    ];
+
+                    const charNextFollowup = nextFollowup.followup[entry.characterId];
+                    if (!charNextFollowup) {
+                        // the action originated from internalState.actions, which is stateful and dies off
+                        // this cycle; it is never carried into the next followup, so there is nothing to strip
+                        continue;
+                    }
+
+                    const target = charNextFollowup.injectedActions.find(injectedAction => injectedAction.action === entry.originalAction);
+                    if (!target) {
+                        // same situation as above: this action isn't part of the carried-over followup
+                        continue;
+                    }
+
+                    // strip the combined fields on a fresh shallow copy of the action so the deep source
+                    // in the game state is left untouched, while keeping any narrativeEffect intact
+                    const strippedAction = { ...target.action };
+                    delete strippedAction.action;
+                    delete strippedAction.narrativeAction;
+                    target.action = strippedAction;
                 }
 
                 // TODO make brand new special mode narration talk
                 // TODO run side effects and alter nextFollowup accordingly
                 // TODO run follow up again until exhausted
-                return await this.runFollowUpInteractions(nextFollowup, nextCycle, nextInterrupters, nextCharactersToForceTalk);
+                return await this.runFollowUpInteractions(nextFollowup, internalStateActions, nextExecutedActions, nextCycle, nextInterrupters, nextCharactersToForceTalk);
             }
         }
 
@@ -1257,16 +1394,34 @@ export class DEngine {
         const nextCharactersToForceTalk = charactersToForceTalk.filter(charId => charId !== winner);
         const nextInterrupters = [...interrupters, [winner]];
         const nextCycle = currentCycle + 1;
-        const nextFollowup = { followup: {
-            ...followup.followup
-        }};
-        delete nextFollowup.followup[winner];
+        const nextFollowup = {
+            followup: {
+                ...followup.followup
+            }
+        };
+        nextFollowup.followup[winner] = {
+            injectedActions: [],
+            microInjections: [],
+            microVoices: [],
+        };
 
-        // TODO make talk
+        await talk(this, this.deObject.characters[winner], {
+            injectedActions: winnerFollowup.injectedActions.map(entry => entry.resolvedAction),
+            internalState: winnerFollowup.internalState,
+            microInjections: winnerFollowup.microInjections,
+            microVoices: winnerFollowup.microVoices,
+        });
+        const nextExecutedActions = {
+            ...accumulatedExecutedActions,
+            [winner]: [
+                ...(accumulatedExecutedActions[winner] || []),
+                ...winnerFollowup.injectedActions.map(entry => ({ action: { ...entry.resolvedAction }, cycle: currentCycle })),
+            ],
+        };
         // TODO run side effects
         // TODO run follow up again until exhausted
 
-        return await this.runFollowUpInteractions(nextFollowup, nextCycle, nextInterrupters, nextCharactersToForceTalk);
+        return await this.runFollowUpInteractions(nextFollowup, internalStateActions, nextExecutedActions, nextCycle, nextInterrupters, nextCharactersToForceTalk);
     }
 
     /**
@@ -1642,7 +1797,7 @@ export class DEngine {
             if (Object.values(nextFollowUpInfo.followup).some(followup => followup.injectedActions.length) || sceneObject.charactersStart) {
                 const baseList = sceneObject.charactersStart ? ([...(typeof sceneObject.engagedCharacters === "function" ? sceneObject.engagedCharacters() : sceneObject.engagedCharacters)]) : [];
                 const baseListNoDuplicatesOnlyIds = Array.from(new Set(baseList.map(v => typeof v === "string" ? v : v.id)));
-                await this.runFollowUpInteractions(nextFollowUpInfo, 0, [], baseListNoDuplicatesOnlyIds);
+                await this.runFollowUpInteractions(nextFollowUpInfo, {}, {}, 0, [], baseListNoDuplicatesOnlyIds);
             }
 
             this.informThinking(false, null, true);

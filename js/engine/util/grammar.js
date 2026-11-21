@@ -175,6 +175,22 @@ export function isYes(answer) {
 }
 
 /**
+ * @param {number} paragraphs 
+ * @returns {string}
+ */
+export function generateNarrativeGrammar(paragraphs) {
+    if (!Number.isInteger(paragraphs) || paragraphs <= 0) {
+        throw new Error("Number of paragraphs must be a positive integer");
+    }
+
+    // Match the voice narrative's opening asterisk and minimum length, but
+    // keep newlines exclusive to the separator between paragraphs.
+    const minimumContent = Array(10).fill("[^\\n]").join(" ");
+    const root = Array(paragraphs).fill("PARAGRAPH").join(' "\\n\\n" ');
+    return `root ::= ${root}\nPARAGRAPH ::= "*" ${minimumContent} [^\\n]+`;
+}
+
+/**
  * @param {string} charNameFormatted
  * @param {string | null | undefined} forcedMode
  * @returns {{

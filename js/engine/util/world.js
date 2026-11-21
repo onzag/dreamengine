@@ -3,7 +3,7 @@
      * taking into account location hierarchy (parent locations).
      * @param {DEObject} deObject
      * @param {string} locationId
-     * @param {string} weatherName 
+     * @param {string|null} weatherName 
      * @returns {DEWeatherSystem}
      */
 export function getWeatherSystemForLocationAndWeather(deObject, locationId, weatherName) {
@@ -11,11 +11,12 @@ export function getWeatherSystemForLocationAndWeather(deObject, locationId, weat
     if (!locationInfo) {
         throw new Error(`Location ${locationId} not found in world.`);
     }
-    const weatherSystem = locationInfo.ownWeatherSystem?.find(ws => ws.name === weatherName);
+    const actualWeatherName = weatherName || locationInfo.internalState.currentWeather;
+    const weatherSystem = locationInfo.ownWeatherSystem?.find(ws => ws.name === actualWeatherName);
     if (!weatherSystem && locationInfo.parent) {
-        return getWeatherSystemForLocationAndWeather(deObject, locationInfo.parent, weatherName);
+        return getWeatherSystemForLocationAndWeather(deObject, locationInfo.parent, actualWeatherName);
     } else if (!weatherSystem) {
-        throw new Error(`Weather system ${weatherName} not found in location ${locationId} or its parents.`);
+        throw new Error(`Weather system ${actualWeatherName} not found in location ${locationId} or its parents.`);
     }
     return weatherSystem;
 }

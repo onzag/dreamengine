@@ -275,6 +275,16 @@ declare interface DEActionPromptInjection<TemplateType> {
      */
     narrativeEffect?: (cycles: number, interrupters: string[]) => TemplateType;
     /**
+     * A number from 0 to 1 that represents how much the narrative effect will bias towards making more narration
+     * instead of dialogue, a value of 1 will cause the narrative effect to turn the whole thing into narration
+     * 
+     * This is fine for when a narrative effect is to set a scene where we dont want characters to talk
+     * for example a romantic scene where the characters are in a passionate embrace and we want to describe the scene in detail instead of having them talk
+     * 
+     * Note that having an action that mustBe "dialogue" will still generate the action in dialogue despite the narrative effect bias
+     */
+    narrativeEffectNarrationBias?: number;
+    /**
      * A narrative action that gets applied in narration instead of in the character dialogue
      * 
      * Narrative actions should be specific and explicit, they are injected into story master
@@ -3206,7 +3216,7 @@ declare interface DELocation {
      * IMPORTANT: You should vary the description based on the time of the day to give
      * clues to the characters if it is day or night
      */
-    description: DEStringTemplateCharOnly;
+    description: DEStringTemplateCharOnlyAllowsNull;
     /**
      * Type of vehicle the location is, yes a location can be a vehicle too
      * eg. "car", "spaceship", "boat", etc...
@@ -3748,6 +3758,16 @@ declare interface DEStringTemplateInfoCharOnly {
      */
     char: DECompleteCharacterReference,
 }
+
+declare interface DEStringTemplateInfoCharOnlyAllowsNull {
+    /**
+     * Available the character invoking the template
+     * Usually available, but in rare cases like in narration
+     * it may not be
+     */
+    char: DECompleteCharacterReference | null,
+}
+
 declare interface DEStringTemplateInfoCharOnlyWithEmotion extends DEStringTemplateInfoCharOnly {
     /**
      * The message associated with the template
@@ -3833,6 +3853,10 @@ declare type DEStringTemplateCharOnlyWithEmotion = string | ((
 
 declare type DEStringTemplateCharOnly = string | ((
     info: DEStringTemplateInfoCharOnly
+) => Promise<string> | string);
+
+declare type DEStringTemplateCharOnlyAllowsNull = string | ((
+    info: DEStringTemplateInfoCharOnlyAllowsNull
 ) => Promise<string> | string);
 
 declare type DEStringTemplateCharAndOther = string | ((
@@ -3975,7 +3999,7 @@ declare interface DEWorld {
      * it is also used by characters to understand the world they are in
      * and detect lies or inconsistencies
      */
-    lore: DEStringTemplateCharOnly | null;
+    lore: DEStringTemplateCharOnlyAllowsNull | null;
     /**
      * Properties of the world that can be used for various purposes, eg. "world_age": 1000, "technology_level": "medieval", "has_magic": true, etc...
      */
@@ -5606,8 +5630,12 @@ declare interface DEWorldRule {
     /**
      * Description of the rule being enforced
      * eg. "Magic does not exist in this world, so {{char}} cannot use magic."
+     * 
+     * if you get a null, it is the story master asking for it, so you should write
+     * a mere generic
+     * eg. "Magic does not exist in this world, so no one can use magic."
      */
-    rule: DEStringTemplateCharOnly;
+    rule: DEStringTemplateCharOnlyAllowsNull;
 }
 
 declare interface DEInternalDescriptionOfCharacterActiveState {

@@ -2313,6 +2313,33 @@ export async function getInternalDescriptionOfCharacter(deObject, characterId) {
                 }
             }
         }
+
+        if (activeStateToAdd.actions) {
+            const causes = state.causes;
+            /**
+             * Bind this state's current causes while keeping cycle-dependent templates deferred.
+             * @param {((cycles: number, interrupters: string[]) => DEStringTemplateCharAndCauses) | undefined} template
+             * @returns {((cycles: number, interrupters: string[]) => DEStringTemplateCharOnly) | undefined}
+             */
+            const bindCauses = (template) => {
+                if (!template) {
+                    return undefined;
+                }
+                return (cycles, interrupters) => {
+                    const result = template(cycles, interrupters);
+                    return typeof result === "string" ? result : ({ char }) => result({ char, causes });
+                };
+            };
+
+            for (const action of activeStateToAdd.actions) {
+                finalResult.actions.push({
+                    ...action,
+                    action: bindCauses(action.action),
+                    narrativeAction: bindCauses(action.narrativeAction),
+                    narrativeEffect: bindCauses(action.narrativeEffect),
+                });
+            }
+        }
     }
 
     // no perspective, we are checking for actual reality of total strangers

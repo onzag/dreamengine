@@ -126,6 +126,29 @@ export class BaseInferenceAdapter {
     }
 
     /**
+     * Infers the next message for a character narrative purposes
+     * 
+     * @param {DEObject} DE
+     * @param {{
+     *   messages: Array<{message: string, author: string, storyMaster: boolean, unprocessed: boolean}>,
+     *   narrativeEffects: string[],
+     *   narrationalInjections: Array<string>,
+     *   paragraphs: number,
+     *   relevantCharacters: Array<{
+     *      character: DECompleteCharacterReference,
+     *      externalDescription: string,
+     *   }>,
+     * }} options
+     * @returns {Promise<Array<DEConversationMessageNarration>>}
+     */
+    async inferNextStoryFragmentForStoryMasterNarration(
+        DE,
+        options,
+    ) {
+        throw new Error("Method 'inferNextStoryFragmentForStoryMasterNarration()' must be implemented.");
+    }
+
+    /**
      * The questioning agent is used to create a persistent agent session that can be used to ask multiple questions,
      * this is what is used for bond questioning, what will the character do next, etc...
      * 

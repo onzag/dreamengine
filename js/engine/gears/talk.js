@@ -16,6 +16,7 @@ import { markCharacterAsDeadEnded } from "../utils.js";
  *   injectedActions: Array<DEResolvedActionPromptInjection>,
  *   microInjections: string[], // these are messages that are injected into the context of the inference adapter for this talk, but are not shown to the story master, they are meant to be used for micro-injections of information that the character would know but the story master doesn't need to know, such as "I see a monster in the bushes" or "I have a knife in my pocket", which can then be used by the inference adapter to generate more accurate dialogue and narration, but doesn't need to be shown to the story master
  *   microVoices: DEVoiceDescription[] // limits for the micro-injections voice
+ *   internalState: DEInternalDescriptionOfCharacter,
  * }} options
  */
 export async function talk(engine, character, options) {
@@ -60,7 +61,8 @@ export async function talk(engine, character, options) {
     /**
      * @type {string[]}
      */
-    const effects = [];
+    const narrativeEffects = [];
+
     let actions = options.injectedActions.map((action) => {
         const text = action.action;
         const narrativeAction = action.narrativeAction;
@@ -70,7 +72,7 @@ export async function talk(engine, character, options) {
 
         if (narrativeEffect) {
             // narrative effects are separate
-            effects.push(narrativeEffect);
+            narrativeEffects.push(narrativeEffect);
         }
 
         if (!trimmed && !narrativeActionTrimmed) {
@@ -117,10 +119,6 @@ export async function talk(engine, character, options) {
     }
     let voiceDominance = 0;
 
-    /**
-     * @type {string[]}
-     */
-    const narrativeEffects = [];
     let narrativeEffectsDominance = 0;
 
     /**

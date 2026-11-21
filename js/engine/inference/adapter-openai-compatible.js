@@ -8,10 +8,11 @@
 import { DEngine } from '../index.js';
 import { BaseInferenceAdapter } from './base.js';
 import { emotions } from '../util/emotions.js';
-import { generateGrammarForVoice } from '../util/grammar.js';
+import { generateGrammarForVoice, generateNarrativeGrammar } from '../util/grammar.js';
 import { parseDialogue, parseNarration } from '../util/narration-and-dialogue.js';
 import { whatIsWeatherLikeForCharacter } from '../util/character-info.js';
 import { makeTimestamp } from '../util/messages.js';
+import { getWeatherSystemForLocationAndWeather } from '../util/world.js';
 
 const DUMMY_SENTENCES = [
     "The wind carried whispers of forgotten names across the empty plaza.",
@@ -102,26 +103,29 @@ function formatVoiceTags(tags) {
 }
 
 /**
- * @param {string} characterName
+ * @param {DEObject} DE
+ * @param {DECompleteCharacterReference} character
  * @param {{type: "narration" | "dialogue" | "thought"; availableModes: string[]; availableSounds: string[]; forcedMode: string|null; forcedSounds: string[], primaryEmotion: string, emotionalRange: string[]}} options
  * @param {boolean} includeThirdPersonBeat
  * @returns {string}
  */
-function buildNextMessageInstructions(characterName, options, includeThirdPersonBeat) {
+function buildNextMessageInstructions(DE, character, options, includeThirdPersonBeat) {
     const instructions = [];
+    
+    const formattedCharacterName = DE.utils.templates.formatCharacterName(character);
 
     if (options.type === "narration") {
-        instructions.push(`Write the next passage as one paragraph of third-person narration wrapped in asterisks (*). Keep everyone, including ${characterName}, in the third person, and describe ${characterName}'s actions, feelings, and surroundings as an outside observer.`);
+        instructions.push(`Write the next passage as one paragraph of third-person narration wrapped in asterisks (*). Keep everyone, including ${formattedCharacterName}, in the third person, and describe ${formattedCharacterName}'s actions, feelings, and surroundings as an outside observer.`);
     } else if (options.type === "dialogue") {
-        instructions.push(`Write EXACTLY ONE line spoken aloud by ${characterName}, beginning with "${characterName}:". Write that single line only and then stop: never write "${characterName}:" a second time, never start another dialogue line, and never continue onto a new line.`);
+        instructions.push(`Write EXACTLY ONE line spoken aloud by ${formattedCharacterName}, beginning with "${formattedCharacterName}:". Write that single line only and then stop: never write "${formattedCharacterName}:" a second time, never start another dialogue line, and never continue onto a new line.`);
         if (includeThirdPersonBeat) {
-            instructions.push(`You may interrupt the spoken dialogue with one brief third-person action beat wrapped in asterisks, as in: ${characterName}: spoken words *${characterName} acts* more spoken words. Asterisks are used EXCLUSIVELY to wrap a complete third-person action sentence, never for emphasis, bold text, pauses, or sound effects. Short cues such as pauses or sounds are written as bracket tags (e.g. [pause]), never with asterisks. Do not narrate on a separate line or describe another character's actions, thoughts, or feelings.`);
+            instructions.push(`You may interrupt the spoken dialogue with one brief third-person action beat wrapped in asterisks, as in: ${formattedCharacterName}: spoken words *${formattedCharacterName} acts* more spoken words. Asterisks are used EXCLUSIVELY to wrap a complete third-person action sentence, never for emphasis, bold text, pauses, or sound effects. Short cues such as pauses or sounds are written as bracket tags (e.g. [pause]), never with asterisks. Do not narrate on a separate line or describe another character's actions, thoughts, or feelings.`);
         } else {
             instructions.push("Use spoken dialogue only, without action beats or asterisks. Pauses and sounds are still written as bracket tags such as [pause], never with asterisks.");
         }
         instructions.push(buildVoiceTagInstructions(options));
     } else if (options.type === "thought") {
-        instructions.push(`Write EXACTLY ONE line of ${characterName}'s internal thoughts, beginning with "${characterName} (thought):".`);
+        instructions.push(`Write EXACTLY ONE line of ${formattedCharacterName}'s internal thoughts, beginning with "${formattedCharacterName} (thought):".`);
         instructions.push("Write internal thoughts only in first person, without action beats or asterisks; the thoughts must help the character reason about their situation.");
     }
 
@@ -1376,7 +1380,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
         const model = this._modelForGear('talk');
 
         const includeThirdPersonBeat = options.type === "dialogue" && Math.random() >= 0.5;
-        const nextMessageInstructions = buildNextMessageInstructions(character.name, options, includeThirdPersonBeat);
+        const nextMessageInstructions = buildNextMessageInstructions(DE, character, options, includeThirdPersonBeat);
 
         const { system: systemPrompt, user: userPrompt } = await this.buildPrompt(DE, character, {
             characterRules: await Promise.all(Object.values(character.characterRules).map(rule => typeof rule.rule === "string" ? rule.rule : rule.rule({
@@ -1451,7 +1455,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
             // can only produce a single line and cannot begin a second
             // "<name>:" dialogue line beneath the current one. Narration is a
             // paragraph and is bounded by maxParagraphs instead.
-            stopAt: /** @type {string[]} */ (options.type === "narration" ? [] : ["\n"]),
+            stopAt: ["\n"],
             stopAfter: /** @type {string[]} */ ([]),
             grammar: grammar || undefined,
         };
@@ -1475,6 +1479,89 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
             type: "thought",
             fragments: await parseNarration(DE, contentWithoutPad, character),
         };
+    }
+
+    /**
+     * Infers the next message for a character narrative purposes
+     * 
+     * TODO this is missing information from perspective about surroundings, as well as other tools that fetch information from perspective and
+     * memory
+     * 
+     * @param {DEObject} DE
+     * @param {{
+     *   messages: Array<{message: string, author: string, storyMaster: boolean, unprocessed: boolean}>,
+     *   narrativeEffects: string[],
+     *   narrationalInjections: Array<string>,
+     *   paragraphs: number,
+     *   relevantCharacters: Array<{
+     *      character: DECompleteCharacterReference,
+     *      externalDescription: string,
+     *   }>,
+     * }} options
+     * @returns {Promise<Array<DEConversationMessageNarration>>}
+     */
+    async inferNextStoryFragmentForStoryMasterNarration(DE, options) {
+        await this.ensureInitialized();
+
+        const model = this._modelForGear('talk');
+
+        const grammarInfo = generateNarrativeGrammar(options.paragraphs);
+        const narrativeGrammar = grammarInfo;
+
+        let tokensExhaustedApprox = 512; // initial buffer
+        const contextWindowSize = this.contextWindowSize;
+
+        const { system: systemPrompt, user: userPrompt } = await this.buildNarrativePrompt(DE, {
+            messages: options.messages,
+            narrativeEffects: options.narrativeEffects,
+            narrationalInjections: options.narrationalInjections,
+            relevantCharacters: options.relevantCharacters,
+            locationId: DE.world.currentLocation,
+            lore: DE.world.lore ? typeof DE.world.lore === "string" ? DE.world.lore : await DE.world.lore({ char: null }) : "",
+            paragraphs: options.paragraphs,
+            time: DE.currentTime,
+            worldRules: await Promise.all(Object.values(DE.worldRules).map(rule => typeof rule.rule === "string" ? rule.rule : rule.rule({
+                char: null,
+            })))
+        });
+
+        // wiggle room for system prompt
+        tokensExhaustedApprox += await this.countTokens(systemPrompt, model);
+
+        if (tokensExhaustedApprox >= contextWindowSize) {
+            throw new Error("System prompt is too long for the model's context window");
+        }
+
+        tokensExhaustedApprox += await this.countTokens(userPrompt, model);
+
+        if (tokensExhaustedApprox >= contextWindowSize) {
+            throw new Error("User prompt is too long for the model's context window");
+        }
+
+        /** @type {Array<{role: "system" | "user" | "assistant", content: string, thoughts: string[], _raw?: string}>} */
+        const chatMessages = [
+            { role: "system", content: systemPrompt, thoughts: [] },
+            { role: "user", content: userPrompt, thoughts: [] },
+        ];
+
+        const deServerOptions = {
+            maxParagraphs: options.paragraphs,
+            maxCharacters: 1000,
+            maxCharactersCutOnDot: false,
+            maxSafetyCharacters: 1500,
+            stopAt: [],
+            stopAfter: [],
+            grammar: narrativeGrammar || undefined,
+        };
+
+        const result = await this.runInference(model, chatMessages, this._standardOpenAIOptions(), deServerOptions);
+        const narrationsGenerated = result.content.split(/\n+/).filter(line => line.trim().length > 0);
+        const parsed = await Promise.all(narrationsGenerated.map(paragraph => parseNarration(DE, paragraph, null)));
+
+        return parsed.map(narration => ({
+            type: "narration",
+            fragments: narration,
+        }));
     }
 
     /**
@@ -1595,6 +1682,127 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
 
     /**
      * @param {DEObject} DE
+     * @param {{
+     *   paragraphs: number,
+     *   worldRules: Array<string>,
+     *   lore: string,
+     *   relevantCharacters: Array<{
+     *      character: DECompleteCharacterReference,
+     *      externalDescription: string,
+     *   }>,
+     *   time: DETimeDescription,
+     *   locationId: string,
+     *   messages: Array<{message: string, author: string, storyMaster: boolean, unprocessed: boolean}>,
+     *   narrativeEffects: Array<string>,
+     *   narrationalInjections: Array<string>,
+     * }} options
+     * @returns {Promise<{system: string, user: string}>} the system and user prompts
+     */
+    async buildNarrativePrompt(DE, options) {
+        let system = (
+            `You are the narrator and story master of a richly detailed and immersive world.
+
+This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
+
+# Roleplay Guidelines:
+
+## Writing:
+Narration should be detailed, creative, and immersive, driving the scenario forward in an engaging way.
+
+## Avoid Repetition:
+Ensure that the narration does not repeat information.
+
+# Roleplay Rules:
+RULE: Write all narration and actions in third person, not first person.
+RULE: Spoken dialogue is done in first person, and start with the character name followed by a colon eg. \`"<id:character-name>: This is spoken dialogue.\`
+RULE: Action beats inside a dialogue line must be wrapped in asterisks and written in third person eg. \`<id:character-name>: spoken words *<id:character-name> does something* more spoken words\`
+RULE: Asterisks are used exclusively to mark narration and action beats; never use asterisks for emphasis or bold text.
+RULE: Narration messages are plain without specifying a speaker and written, and in third person eg. \`As <id:character-name> hears this...\` written on their own line.
+RULE: Thoughts are written in first person just like dialogue in the form \`<id:character-name> (thought): This is a thought.\`.${options.worldRules.length ? `
+
+# World Rules:
+${options.worldRules.map(rule => `RULE: ${rule}`).join("\n")}
+` : ""}
+
+# Narration and Dialogue Examples:
+\`\`\`
+*This is narration*
+
+<id:character-name>: This is spoken dialogue *<id:character-name> does something* this is more spoken dialogue
+
+<id:character-name> (thought): This is a thought.
+
+*This is narration*
+\`\`\`
+
+# IMPORTANT: Always use identifiers for characters, locations and objects:
+
+Identifiers are created with the format <id:name> and are used to refer to characters, locations, and objects in the story. For example, <character-john-1:John> refers to a character named John.
+
+Always use the identifiers even when referring to things using pronouns. For example, instead of saying merely "he" or "she", say "<character-john-1:He> was not feeling well, so he grabbed his <item-wallet-32:wallet> and went to the <location-hospital-5:hospital>."
+
+You can combine multiple identifiers by comma separating them, for example: "<character-john-1:He> grabbed all his <item-wallet-32,item-keys-7,item-hat-5:things> and went <location-house-32:home> to see <character-jane-1,character-mia-1:his children>.
+
+Keep in mind that characters in the story are not aware of the identifiers, they are only used for the AI to keep track of characters, locations and objects in the story.
+
+Two characters or items can have the same name, but have different identifiers.`);
+
+        if (options.relevantCharacters.length > 0) {
+            system += `\n\n# Relevant Characters:\n\n`;
+
+            for (const relevant of options.relevantCharacters) {
+                const nameFormatted = DE.utils.templates.formatCharacterName(relevant.character.name);
+                system += `\n\n## ${nameFormatted}'s description:\n\n${relevant.externalDescription}`;
+            }
+        }
+
+        if (options.lore && options.lore.trim().length > 0) {
+            system += `\n\n# Lore:\n\n${options.lore}`;
+        }
+
+        const time = makeTimestamp(DE, options.time);
+
+        system += `\n\n# Time:\n\nThe current exact time is ${time}, do not assume that the characters know this.`;
+
+        const locationId = options.locationId;
+        const loc = DE.world.locations[locationId];
+
+        const locationDescription = typeof loc.description === "function" ? await loc.description({ char: null }) : loc.description;
+        const locationName = loc.name;
+
+        system += `\n\n# Location:\n\nwe are currently narrating at <${options.locationId}:${locationName}>. ${locationDescription}`;
+
+        let user = `# Story To Continue:`;
+        for (const msg of options.messages) {
+            // author and storymaster are irrelevant
+            // this already contains all the formatting too
+            user += `\n\n${msg.message}`;
+        }
+
+        const weatherSystem = getWeatherSystemForLocationAndWeather(DE, options.locationId, null);
+        if (weatherSystem) {
+            user += `\n- The current weather at <${options.locationId}:${locationName}> is ${weatherSystem.name}.`;
+        }
+
+        if (options.narrativeEffects.length > 0 || options.narrationalInjections.length > 0) {
+            user += `\n\n# When narrating ENSURE that:\n`;
+        }
+        for (const effect of options.narrativeEffects) {
+            user += `\n- ` + effect;
+        }
+        for (const injection of options.narrationalInjections) {
+            user += `\n- ` + injection;
+        }
+
+        const nextMessageInstructions = `Write the next passage as ${options.paragraphs === 1 ? "1 paragraph" : options.paragraphs + " paragraphs"} of third-person narration wrapped in asterisks (*). Keep everyone, in the third person; and describe things as a narrator of the story.`;
+
+        user += `\n\n${nextMessageInstructions}`;
+
+        return { system, user };
+    }
+
+    /**
+     * @param {DEObject} DE
      * @param {DECompleteCharacterReference} character the character in question that is building a prompt for
      * @param {{
      *   description: string,
@@ -1652,8 +1860,8 @@ RULE: Use a movie script style format for the story, with character names follow
 RULE: Spoken dialogue is done in first person, and start with the character name followed by a colon eg. \`${nameFormatted}: This is spoken dialogue.\`
 RULE: Action beats inside a dialogue line must be wrapped in asterisks and written in third person eg. \`${nameFormatted}: spoken words *${nameFormatted} does something* more spoken words\`
 RULE: Asterisks are used exclusively to mark narration and action beats; never use asterisks for emphasis or bold text.
-RULE: Narration messages are plain without specifying a speaker and written, and in third person eg. \`As ${nameFormatted} hears this...\` written on their own line.${characterRules.length ? `
-RULE: Thoughts are written in first person just like dialogue.
+RULE: Narration messages are plain without specifying a speaker and written, and in third person eg. \`As ${nameFormatted} hears this...\` written on their own line.
+RULE: Thoughts are written in first person just like dialogue in the form \`${nameFormatted} (thought): This is a thought.\`.${characterRules.length ? `
 
 # ${nameFormatted} Rules:
 ${characterRules.map(rule => `RULE: ${rule}`).join("\n")}
@@ -1757,13 +1965,6 @@ Two characters or items can have the same name, but have different identifiers.`
             }
         }
 
-        if (narrativeEffects.length > 0) {
-            user += `\n\n# When narrating ENSURE that:\n`;
-        }
-        for (const effect of narrativeEffects) {
-            user += `\n- ` + effect;
-        }
-
         const weatherLike = await whatIsWeatherLikeForCharacter(DE, character);
         if (weatherLike) {
             user += `\n- ${weatherLike}.`;
@@ -1836,6 +2037,13 @@ Two characters or items can have the same name, but have different identifiers.`
 
         if (!hasCalendar) {
             user += `\n- ${nameFormatted} does not have any calendars visible/accessible to them, so they must rely on their own memory or perception to determine the current date.`;
+        }
+
+        if (narrativeEffects.length > 0 ) {
+            user += `\n\n# When narrating ENSURE that:\n`;
+        }
+        for (const effect of narrativeEffects) {
+            user += `\n- ` + effect;
         }
 
         // TODO we should have item interactions eg. right now clocks and calendars are native, but who knows what other items might do
